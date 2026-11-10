@@ -72,6 +72,23 @@
   .cip b { font-weight: 700; margin-left: 4px; }
   .cip.activ { background: var(--navy); border-color: var(--navy); color: #fff; }
   .mic { font-size: 12.5px; color: var(--muted); }
+  /* calendarul din tabul Incarcari */
+  .cal-zona { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+  .cal { width: 336px; max-width: 100%; }
+  .cal-sus { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .cal-sus b { flex: 1; text-align: center; color: var(--navy); }
+  .cal-sus .btn { width: 34px; font-size: 16px; line-height: 1; }
+  .cal-grila { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-cap { text-align: center; font-size: 11.5px; font-weight: 700; color: var(--muted); padding: 2px 0; }
+  .cal .zi { height: 44px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0; }
+  .cal .zi span { font-size: 13px; line-height: 1; }
+  .cal .zi i { font-style: normal; font-size: 11px; font-weight: 700; line-height: 1; color: #5c4400; background: var(--galben); border-radius: 999px; padding: 2px 6px; }
+  .cal .zi:disabled { background: #f6f7fa; color: #a3abba; cursor: default; border-color: var(--line2); }
+  .cal .zi.are:hover { border-color: var(--navy2); }
+  .cal .zi.azi span { font-weight: 800; text-decoration: underline; }
+  .cal .zi.activ { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .cal .zi.activ i { background: #fff; color: var(--navy); }
+  .cal-lateral { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; max-width: 340px; }
   label.bifa { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
 
   /* ---- tabel virtual ---- */
@@ -245,11 +262,8 @@
           <input type="search" id="incCauta" placeholder="Nr auto sau nr transport" aria-label="Caută camion">
           <label class="bifa"><input type="checkbox" id="incAzi"> Arată și camioanele deja încărcate</label>
         </div>
-        <div class="rand-form" style="margin:12px 0 6px">
-          <label class="camp"><span>Data încărcării</span><input type="date" id="incZi" aria-label="Alege data încărcării"></label>
-          <span class="mic" style="padding-bottom:9px">sau bifează una ori mai multe zile:</span>
-        </div>
-        <div class="cipuri" id="incDate"></div>
+        <div class="mic" style="margin:12px 0 6px">Data încărcării:</div>
+        <div class="cal-zona" id="incDate"></div>
       </div>
       <div class="card derulare-x"><div id="incLista"></div></div>
       <div class="card derulare-x">
