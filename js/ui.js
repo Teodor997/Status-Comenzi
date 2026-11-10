@@ -979,6 +979,8 @@
       : deInteres.filter(function (x) { return !f.areDate || incDate[x.data || FARA_DATA]; }))
       .sort(function (a, b) { return (a.data || '9') < (b.data || '9') ? -1 : ((a.data || '9') > (b.data || '9') ? 1 : a.na.localeCompare(b.na)); });
     camioaneAfisate = {};
+    var zileAlese = Object.keys(incDate).sort().map(function (d) { return d === FARA_DATA ? 'fără dată' : SC.fmtDataLunga(d); });
+    $('incTitlu').textContent = (f.q ? 'căutare „' + $('incCauta').value.trim() + '”' : (zileAlese.length ? zileAlese.join(', ') : 'toate datele')) + ' · ' + l.length + (l.length === 1 ? ' camion' : ' camioane');
     var h;
     if (!l.length) {
       h = '<div class="mic" style="padding:10px">Niciun camion pentru filtrele alese. Data încărcării vine din fișierul de transport (TMS): dacă ziua căutată lipsește, importă fișierul la zi.</div>';
@@ -997,6 +999,7 @@
       h += '</table>' + (l.length > 300 ? '<div class="mic" style="padding:8px">Afișate primele 300 din ' + l.length + ' camioane — restrânge cu filtrul de date sau cu căutarea.</div>' : '');
     }
     $('incLista').innerHTML = h;
+    $('incNrCam').textContent = l.length;
 
     /* rubrica separata: liniile din TMS care nu exista in registrul de comenzi */
     var ex = SC.extra.filter(function (x) {
@@ -1005,7 +1008,8 @@
       return !f.areDate || incDate[x.dtr || FARA_DATA];
     }).sort(function (a, b) { return (a.dtr || '9') < (b.dtr || '9') ? -1 : ((a.dtr || '9') > (b.dtr || '9') ? 1 : String(a.na).localeCompare(String(b.na))); });
     extraAfisate = ex.slice(0, 400);
-    $('incExtraNumar').textContent = ex.length + (ex.length === 1 ? ' linie' : ' linii') + (ex.length > 400 ? ' (afișate primele 400)' : '');
+    $('incNrExtra').textContent = ex.length;
+    $('incExtraNumar').textContent = '· ' + ex.length + (ex.length === 1 ? ' linie' : ' linii') + (ex.length > 400 ? ' (afișate primele 400)' : '');
     $('incExtra').innerHTML = !ex.length ? '<div class="mic" style="padding:10px">Nicio linie doar din transport pentru filtrele alese.</div>' :
       '<table class="simplu"><tr><th>Data</th><th>Nr AUTO</th><th>Nr transport</th><th>Client</th><th>Referință</th><th>Destinatar</th><th>Localitate</th><th class="nr">Paleți</th><th class="nr">Amprente</th><th class="nr">Greutate</th><th>Încărcată</th></tr>' +
       extraAfisate.map(function (x, i) {
@@ -1015,6 +1019,13 @@
       }).join('') + '</table>';
   }
   function suma(l, k) { return l.reduce(function (s, o) { return s + (SC.esteNum(o[k]) ? o[k] : 0); }, 0); }
+  /* in dreapta se vede o singura lista odata, pe toata inaltimea: camioanele sau liniile doar din transport */
+  $('incVedere').addEventListener('click', function (e) {
+    var b = e.target.closest('.cip'); if (!b) return;
+    Array.prototype.forEach.call(this.querySelectorAll('.cip'), function (x) { x.classList.toggle('activ', x === b); });
+    $('cardCam').classList.toggle('ascuns', b.dataset.v !== 'cam');
+    $('cardExtra').classList.toggle('ascuns', b.dataset.v !== 'extra');
+  });
   $('incCauta').addEventListener('input', deseneazaIncarcari);
   $('incAzi').onchange = deseneazaIncarcari;
   /* ---- filtrul de date ca un calendar lunar: fiecare zi arata cate camioane are; se pot bifa mai multe zile ---- */
@@ -1042,7 +1053,7 @@
     h += '</div></div><div class="cal-lateral"><button type="button" class="cip' + (areDate ? '' : ' activ') + '" data-d="">Toate datele<b>' + total + '</b></button>' +
       '<button type="button" class="cip" data-azi="1">Azi<b>' + (peData[azi] || 0) + '</b></button>' +
       (peData[FARA_DATA] ? '<button type="button" class="cip' + (incDate[FARA_DATA] ? ' activ' : '') + '" data-d="' + FARA_DATA + '">Fără dată<b>' + peData[FARA_DATA] + '</b></button>' : '') +
-      '<div class="mic">' + (alese.length ? 'Zile alese: ' + alese.map(SC.fmtDataLunga).join(', ') : 'Apasă pe o zi din calendar; poți alege mai multe. Cifra de sub zi = numărul de camioane.') + '</div></div>';
+      (alese.length ? '' : '<div class="mic">Apasă pe o zi; poți alege mai multe. Cifra de sub zi = câte camioane are.</div>') + '</div>';
     $('incDate').innerHTML = h;
   }
   $('incDate').addEventListener('click', function (e) {

@@ -72,23 +72,32 @@
   .cip b { font-weight: 700; margin-left: 4px; }
   .cip.activ { background: var(--navy); border-color: var(--navy); color: #fff; }
   .mic { font-size: 12.5px; color: var(--muted); }
-  /* calendarul din tabul Incarcari */
-  .cal-zona { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
-  .cal { width: 336px; max-width: 100%; }
-  .cal-sus { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .cal-sus b { flex: 1; text-align: center; color: var(--navy); }
-  .cal-sus .btn { width: 34px; font-size: 16px; line-height: 1; }
-  .cal-grila { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-  .cal-cap { text-align: center; font-size: 11.5px; font-weight: 700; color: var(--muted); padding: 2px 0; }
-  .cal .zi { height: 44px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0; }
-  .cal .zi span { font-size: 13px; line-height: 1; }
-  .cal .zi i { font-style: normal; font-size: 11px; font-weight: 700; line-height: 1; color: #5c4400; background: var(--galben); border-radius: 999px; padding: 2px 6px; }
+  /* tabul Incarcari: panou ingust in stanga (import, cautare, calendar), listele pe toata latimea ramasa */
+  .pagina.derulabila > * { flex: none; }
+  .inc-layout { display: grid; grid-template-columns: 276px minmax(0, 1fr); gap: 14px; align-items: start; }
+  .inc-lateral { position: sticky; top: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+  .inc-lateral h2 { margin: 0; }
+  .inc-lateral input[type=search] { width: 100%; }
+  .inc-principal { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  #incVedere .cip { padding: 6px 14px; font-size: 14px; font-weight: 600; }
+  .inc-sub { font-weight: 400; font-size: 13px; color: var(--muted); margin-left: 6px; }
+  .cal-sus { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .cal-sus b { flex: 1; text-align: center; color: var(--navy); font-size: 13.5px; }
+  .cal-sus .btn { width: 30px; padding: 3px 0; font-size: 15px; line-height: 1; }
+  .cal-grila { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .cal-cap { text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); }
+  .cal .zi { height: 36px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0; }
+  .cal .zi span { font-size: 12px; line-height: 1; }
+  .cal .zi i { font-style: normal; font-size: 10.5px; font-weight: 700; line-height: 1; color: #5c4400; background: var(--galben); border-radius: 999px; padding: 1px 5px; }
   .cal .zi:disabled { background: #f6f7fa; color: #a3abba; cursor: default; border-color: var(--line2); }
   .cal .zi.are:hover { border-color: var(--navy2); }
   .cal .zi.azi span { font-weight: 800; text-decoration: underline; }
   .cal .zi.activ { background: var(--navy); border-color: var(--navy); color: #fff; }
   .cal .zi.activ i { background: #fff; color: var(--navy); }
-  .cal-lateral { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; max-width: 340px; }
+  .cal-lateral { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .cal-lateral .cip { padding: 3px 9px; font-size: 12.5px; }
+  .cal-lateral .mic { width: 100%; }
+  @media (max-width: 900px) { .inc-layout { grid-template-columns: 1fr; } .inc-lateral { position: static; } }
   label.bifa { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
 
   /* ---- tabel virtual ---- */
@@ -136,6 +145,7 @@
   table.simplu th, table.simplu td { border-bottom: 1px solid var(--line2); padding: 6px 8px; text-align: left; vertical-align: middle; }
   table.simplu th { background: #eef1f7; font-size: 12px; position: sticky; top: 0; }
   table.simplu td.nr, table.simplu th.nr { text-align: right; font-variant-numeric: tabular-nums; }
+  table.simplu td b { white-space: nowrap; }
   table.simplu tr.clic { cursor: pointer; }
   table.simplu tr.clic:hover { background: #f5f7fb; }
   .rand-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
@@ -254,22 +264,30 @@
 
     <!-- INCARCARI -->
     <section class="pagina derulabila ascuns" id="pag-incarcari">
-      <div class="card">
-        <h2>Încărcarea camioanelor</h2>
-        <p>Comenzile cu Nr AUTO, grupate pe camion. Încărcarea se confirmă doar pentru comenzile cu statusul Terminata.</p>
-        <div class="rand-form">
+      <div class="inc-layout">
+        <aside class="card inc-lateral">
+          <h2>Încărcări</h2>
           <button class="btn doarEdit" id="btnTransport">Import fișier transport (TMS)</button>
-          <input type="search" id="incCauta" placeholder="Nr auto sau nr transport" aria-label="Caută camion">
+          <input type="search" id="incCauta" placeholder="Caută nr auto / nr transport" aria-label="Caută camion">
+          <div id="incDate"></div>
           <label class="bifa"><input type="checkbox" id="incAzi"> Arată și camioanele deja încărcate</label>
+        </aside>
+        <div class="inc-principal">
+          <div class="cipuri" id="incVedere" role="tablist" aria-label="Ce listă se afișează">
+            <button class="cip activ" data-v="cam" role="tab">Camioane<b id="incNrCam">0</b></button>
+            <button class="cip" data-v="extra" role="tab">Doar din transport<b id="incNrExtra">0</b></button>
+          </div>
+          <div class="card" id="cardCam">
+            <h2>Camioane <span class="inc-sub" id="incTitlu"></span></h2>
+            <p>Comenzile cu Nr AUTO, grupate pe camion. Încărcarea se confirmă doar pentru comenzile cu statusul Terminata.</p>
+            <div class="derulare-x" id="incLista"></div>
+          </div>
+          <div class="card ascuns" id="cardExtra">
+            <h2>Doar din transport <span class="inc-sub" id="incExtraNumar"></span></h2>
+            <p>Linii din fișierul TMS care nu există în registrul de comenzi. Nu apar în tabul Comenzi; apar la camionul lor și în borderou.</p>
+            <div class="derulare-x" id="incExtra"></div>
+          </div>
         </div>
-        <div class="mic" style="margin:12px 0 6px">Data încărcării:</div>
-        <div class="cal-zona" id="incDate"></div>
-      </div>
-      <div class="card derulare-x"><div id="incLista"></div></div>
-      <div class="card derulare-x">
-        <h2>Doar din transport</h2>
-        <p>Linii din fișierul TMS care nu există în registrul de comenzi. Nu apar în tabul Comenzi; apar la camionul lor și în borderou. <span id="incExtraNumar"></span></p>
-        <div id="incExtra"></div>
       </div>
     </section>
 
