@@ -557,6 +557,30 @@
       Object.keys(m).forEach(function (k) { var x = m[k]; x._zi = d.id; x._k = k; l.push(x); });
     });
     SC.extra = l;
+    /* pe acelasi document al zilei se tine si evidenta camioanelor: cand s-a tiparit borderoul = cand a inceput incarcarea */
+    var cam = {};
+    docs.forEach(function (d) { var c = d.data.c || {}; Object.keys(c).forEach(function (k) { cam[d.id + '|' + k] = c[k]; }); });
+    SC.camInfo = cam;
+  };
+  SC.camInfo = {};
+  L.cheieCamion = function (x) { return String(x.cheie || '').replace(/[.\/\[\]*`~]/g, '_') || '_'; };
+  L.infoCamion = function (x) { return SC.camInfo[(x.data || 'fara-data') + '|' + L.cheieCamion(x)] || null; };
+  /* La tiparirea borderoului: prima tiparire = inceputul incarcarii (ramane fixa), plus ultima tiparire si numarul de tipariri. */
+  L.marcheazaBorderou = function (x) {
+    var zi = x.data || 'fara-data', k = L.cheieCamion(x), user = SC.store.user ? SC.store.user.nume : '?';
+    return SC.store.tx(function (t) {
+      return t.get('extra', zi).then(function (d) {
+        d = d || { l: {} };
+        d.c = d.c || {};
+        var e = d.c[k] || {}, acum = SC.dtAcum(), prima = !e.bt;
+        if (prima) { e.bt = acum; e.bu = user; }
+        e.bl = acum; e.bn = (e.bn || 0) + 1;
+        d.c[k] = e; d.upd = Date.now();
+        t.set('extra', zi, d);
+        t.log((prima ? 'Început încărcare (borderou tipărit): ' : 'Borderou retipărit (a ' + e.bn + '-a oară): ') + x.na + (x.nt ? ' / transport ' + x.nt : ''));
+        return e;
+      });
+    });
   };
   L.cheieExtra = function (r) {
     return (SC.cheieComanda(r.ref) + '~' + (r.nt || SC.normNrAuto(r.na))).replace(/[.\/\[\]*`]/g, '_');
@@ -587,7 +611,7 @@
             if (nou[k]) return;
             if (vechi[k].inc === 'DA') nou[k] = vechi[k]; else s.scoase++;
           });
-          if (s.noi || s.actualizate || s.scoase) t.set('extra', zi, { l: nou, upd: Date.now() });
+          if (s.noi || s.actualizate || s.scoase) t.set('extra', zi, { l: nou, c: (d && d.c) || {}, upd: Date.now() });
           return s;
         });
       }).then(function (s) { stat.noi += s.noi; stat.actualizate += s.actualizate; stat.scoase += s.scoase; return pas(); });

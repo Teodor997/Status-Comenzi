@@ -1051,13 +1051,19 @@
     if (!l.length) {
       h = '<div class="mic" style="padding:10px">Niciun camion pentru filtrele alese. Data încărcării vine din fișierul de transport (TMS): dacă ziua căutată lipsește, importă fișierul la zi.</div>';
     } else {
-      h = '<table class="simplu"><tr><th>Data</th><th>Nr AUTO</th><th>Nr transport</th><th>De încărcat</th><th>În lucru</th><th>Doar transport</th><th class="nr">Paleți reali</th><th class="nr">Amprente</th><th class="nr">Greutate finală</th><th></th></tr>';
+      h = '<table class="simplu"><tr><th>Data</th><th>Nr AUTO</th><th>Nr transport</th><th>De încărcat</th><th>În lucru</th><th>Doar transport</th><th>Început încărcare</th><th>Încărcat</th><th class="nr">Paleți reali</th><th class="nr">Amprente</th><th class="nr">Greutate finală</th><th></th></tr>';
       l.slice(0, 300).forEach(function (x, i) {
         camioaneAfisate[i] = x;
         var baza = x.deIncarcat.length ? x.deIncarcat : x.incarcate;
+        var info = L.infoCamion(x), sfarsit = '';
+        x.incarcate.forEach(function (o) { if (o.di && String(o.di) > sfarsit) sfarsit = String(o.di); });
+        var durata = info && info.bt && sfarsit.length > 10 && sfarsit >= info.bt ? Math.round((SC.msDin(sfarsit.slice(0, 10), sfarsit.slice(11, 16)) - SC.msDin(info.bt.slice(0, 10), info.bt.slice(11, 16))) / 60000) : null;
+        function oraScurta(dt) { return dt ? (dt.slice(0, 10) === SC.azi() ? dt.slice(11, 16) : SC.fmtDT(dt)) : ''; }
         h += '<tr><td>' + esc(x.data ? SC.fmtDataLunga(x.data) : '—') + '</td><td><b>' + esc(x.na) + '</b></td><td>' + esc(x.nt) + '</td><td>' +
           (x.deIncarcat.length ? '<span class="eticheta asteapta">' + nCom(x.deIncarcat.length) + '</span>' : (x.incarcate.length ? '<span class="eticheta ok">încărcat (' + x.incarcate.length + ')</span>' : '—')) +
-          '</td><td>' + (x.inLucru.length || '') + '</td><td>' + (x.doarTransport.length || '') + '</td><td class="nr">' + SC.fmtNum(suma(baza, 'pr'), 'int') + '</td><td class="nr">' + SC.fmtNum(suma(baza, 'am'), 'int') +
+          '</td><td>' + (x.inLucru.length || '') + '</td><td>' + (x.doarTransport.length || '') + '</td><td' + (info && info.bt ? ' title="Borderou tipărit de ' + esc(info.bu || '') + (info.bn > 1 ? '; retipărit de ' + (info.bn - 1) + ' ori, ultima dată ' + esc(SC.fmtDT(info.bl)) : '') + '"' : '') + '>' +
+          (info && info.bt ? esc(oraScurta(info.bt)) + (info.bn > 1 ? ' <span class="mic">×' + info.bn + '</span>' : '') : '') + '</td><td>' +
+          (sfarsit ? esc(oraScurta(sfarsit)) + (durata != null ? ' <span class="mic">(' + durata + ' min)</span>' : '') : '') + '</td><td class="nr">' + SC.fmtNum(suma(baza, 'pr'), 'int') + '</td><td class="nr">' + SC.fmtNum(suma(baza, 'am'), 'int') +
           '</td><td class="nr">' + SC.fmtNum(suma(baza, 'gf'), 'num') + '</td><td style="white-space:nowrap">' +
           (edit && x.deIncarcat.length ? '<button class="btn mic pri" data-inc="' + i + '">Încarcă</button> ' : '') +
           '<button class="btn mic" data-print="' + i + '">Borderou</button></td></tr>';
@@ -1238,7 +1244,7 @@
     }
     var reg = l.filter(function (o) { return !o.extra; }), areF = reg.some(function (o) { return SC.esteNum(o.fpp); }), areP = reg.some(function (o) { return SC.esteNum(o.pk); });
     var h = '<h1>Borderou de încărcare</h1><div>Nr AUTO: <b>' + esc(x.na) + '</b>' + (x.nt ? ' · Nr transport: <b>' + esc(x.nt) + '</b>' : '') + (x.data ? ' · Data: <b>' + esc(SC.fmtDataLunga(x.data)) + '</b>' : '') +
-      (l[0] && l[0].so ? ' · Șofer: ' + esc(l[0].so) : '') + ' · Tipărit: ' + esc(stampila()) + '</div><table><tr>' +
+      (l[0] && l[0].so ? ' · Șofer: ' + esc(l[0].so) : '') + '<!--inceput--> · Tipărit: ' + esc(stampila()) + '</div><table><tr>' +
       cols.map(function (c) { return '<th' + (NUMERICE[c[0]] ? ' class="nr"' : '') + '>' + c[1] + '</th>'; }).join('') + '</tr>';
     l.forEach(function (o) {
       h += '<tr>' + cols.map(function (c) {
@@ -1253,8 +1259,17 @@
     h += '<tr><th colspan="6">TOTAL (' + l.length + (l.length === 1 ? ' linie' : ' linii') + (neterminate ? ', din care ' + neterminate + (neterminate === 1 ? ' nepregătită' : ' nepregătite') : '') + ')</th><th class="nr">' + SC.fmtNum(tot('ca'), 'int') +
       '</th><th class="nr">' + SC.fmtNum(tot('pe'), 'num') + fppPick(areF ? suma(reg, 'fpp') : null, areP ? suma(reg, 'pk') : null) + '</th><th class="nr">' + SC.fmtNum(tot('pr'), 'int') + '</th><th class="nr">' + SC.fmtNum(tot('am'), 'int') + '</th><th class="nr">' + SC.fmtNum(tot('gf'), 'num') + '</th></tr></table>' +
       '<div class="semnaturi"><div>Stare camion: ' + esc(incarcat.sc || '________') + ' · Temperatură: ' + esc(incarcat.te || '________') + '</div><div>Semnătură depozit: ' + esc(incarcat.se || '________________') + '</div><div>Semnătură șofer: ________________</div></div>';
-    $('tiparire').innerHTML = h;
-    window.print();
+    /* ora la care s-a tiparit borderoul = inceputul incarcarii; se inregistreaza automat (Administrator / Incarcari) */
+    function tipareste(info) {
+      $('tiparire').innerHTML = h.replace('<!--inceput-->', info && info.bt ? ' · Început încărcare: <b>' + esc(SC.fmtDT(info.bt).replace(/^(\d\d\.\d\d)\.(\d\d) /, '$1.20$2 ')) + '</b>' : '');
+      window.print();
+      if (stare.tab === 'incarcari') deseneazaIncarcari();
+    }
+    if (!poateIncarca()) return tipareste(L.infoCamion(x));
+    L.marcheazaBorderou(x).then(tipareste, function (e) {
+      toast('Borderoul se tipărește, dar ora de început nu a putut fi înregistrată: ' + (e && e.message ? e.message : e), 'rau');
+      tipareste(L.infoCamion(x));
+    });
   }
   $('btnTransport').onclick = function () {
     var fisier, p;
