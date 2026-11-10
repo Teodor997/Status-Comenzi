@@ -945,7 +945,8 @@
       var k = o.nt ? o.nt + '|' + na : '|' + na + '|' + (dataDin(o) || (o.inc === 'DA' ? String(o.di || '').slice(0, 10) : ''));
       (g[k] = g[k] || { cheie: k, na: o.na || '', nt: o.nt || '', toate: [] }).toate.push(o);
     }
-    SC.comenzi.forEach(function (o) { if (!o.na || o.ar || o.st === ST.ANU) return; pune(o); });
+    /* "0" in Nr AUTO vine din istoricul Excel si nu este un camion */
+    SC.comenzi.forEach(function (o) { if (!o.na || o.ar || o.st === ST.ANU || !SC.normNrAuto(o.na).replace(/0/g, '')) return; pune(o); });
     SC.extra.forEach(function (x) { if (x.na || x.nt) pune(caComanda(x)); });
     return Object.keys(g).map(function (k) {
       var x = g[k], d = '';
@@ -972,10 +973,7 @@
     deInteres.forEach(function (x) { var d = x.data || FARA_DATA; peData[d] = (peData[d] || 0) + 1; });
     Object.keys(incDate).forEach(function (d) { if (!peData[d]) peData[d] = 0; });
     var date = Object.keys(peData).sort(function (a, b) { return a === FARA_DATA ? 1 : (b === FARA_DATA ? -1 : (a < b ? 1 : -1)); });
-    $('incDate').innerHTML = '<button class="cip' + (f.areDate ? '' : ' activ') + '" data-d="">Toate datele<b>' + deInteres.length + '</b></button>' +
-      date.slice(0, 45).map(function (d) {
-        return '<button class="cip' + (incDate[d] ? ' activ' : '') + '" data-d="' + esc(d) + '">' + esc(d === FARA_DATA ? d : SC.fmtDataLunga(d)) + '<b>' + peData[d] + '</b></button>';
-      }).join('');
+    deseneazaCalendar(peData, deInteres.length, f.areDate);
 
     var l = (f.q ? toate.filter(function (x) { return SC.normNrAuto(x.na).indexOf(f.q) >= 0 || SC.normNrAuto(x.nt).indexOf(f.q) >= 0; })
       : deInteres.filter(function (x) { return !f.areDate || incDate[x.data || FARA_DATA]; }))
@@ -983,7 +981,7 @@
     camioaneAfisate = {};
     var h;
     if (!l.length) {
-      h = '<div class="mic" style="padding:10px">Niciun camion pentru filtrele alese. Nr AUTO se completează pe comandă sau prin importul fișierului de transport.</div>';
+      h = '<div class="mic" style="padding:10px">Niciun camion pentru filtrele alese. Data încărcării vine din fișierul de transport (TMS): dacă ziua căutată lipsește, importă fișierul la zi.</div>';
     } else {
       h = '<table class="simplu"><tr><th>Data</th><th>Nr AUTO</th><th>Nr transport</th><th>De încărcat</th><th>În lucru</th><th>Doar transport</th><th class="nr">Paleți reali</th><th class="nr">Amprente</th><th class="nr">Greutate finală</th><th></th></tr>';
       l.slice(0, 300).forEach(function (x, i) {
@@ -1019,10 +1017,46 @@
   function suma(l, k) { return l.reduce(function (s, o) { return s + (SC.esteNum(o[k]) ? o[k] : 0); }, 0); }
   $('incCauta').addEventListener('input', deseneazaIncarcari);
   $('incAzi').onchange = deseneazaIncarcari;
+  /* ---- filtrul de date ca un calendar lunar: fiecare zi arata cate camioane are; se pot bifa mai multe zile ---- */
+  var LUNI_CAL = ['Ianuarie', 'Februarie', 'Martie', 'Aprilie', 'Mai', 'Iunie', 'Iulie', 'August', 'Septembrie', 'Octombrie', 'Noiembrie', 'Decembrie'];
+  var incLuna = null;        // luna afisata, "YYYY-MM"
+  function deseneazaCalendar(peData, total, areDate) {
+    var azi = SC.azi();
+    if (!incLuna) {
+      /* la prima afisare: luna curenta daca are camioane, altfel luna celei mai recente zile cu camioane */
+      var zile = Object.keys(peData).filter(function (d) { return d !== FARA_DATA; }).sort();
+      incLuna = (peData[azi] || !zile.length) ? azi.slice(0, 7) : zile[zile.length - 1].slice(0, 7);
+    }
+    var an = +incLuna.slice(0, 4), luna = +incLuna.slice(5, 7);
+    var prima = new Date(an, luna - 1, 1), nrZile = new Date(an, luna, 0).getDate(), decalaj = (prima.getDay() + 6) % 7;   // luni = prima coloana
+    var h = '<div class="cal"><div class="cal-sus"><button type="button" class="btn mic" data-luna="-1" aria-label="Luna anterioară">‹</button>' +
+      '<b>' + LUNI_CAL[luna - 1] + ' ' + an + '</b><button type="button" class="btn mic" data-luna="1" aria-label="Luna următoare">›</button></div><div class="cal-grila">' +
+      ['L', 'Ma', 'Mi', 'J', 'V', 'S', 'D'].map(function (z) { return '<div class="cal-cap">' + z + '</div>'; }).join('');
+    for (var g = 0; g < decalaj; g++) h += '<div></div>';
+    for (var zi = 1; zi <= nrZile; zi++) {
+      var d = incLuna + '-' + SC.p2(zi), n = peData[d] || 0;
+      h += '<button type="button" class="zi' + (n ? ' are' : '') + (incDate[d] ? ' activ' : '') + (d === azi ? ' azi' : '') + '" data-d="' + d + '"' + (n || incDate[d] ? '' : ' disabled') +
+        ' aria-label="' + zi + ' ' + LUNI_CAL[luna - 1] + (n ? ', ' + n + ' camioane' : ', fără camioane') + '"' + (incDate[d] ? ' aria-pressed="true"' : '') + '><span>' + zi + '</span>' + (n ? '<i>' + n + '</i>' : '') + '</button>';
+    }
+    var alese = Object.keys(incDate).filter(function (x) { return x !== FARA_DATA; }).sort();
+    h += '</div></div><div class="cal-lateral"><button type="button" class="cip' + (areDate ? '' : ' activ') + '" data-d="">Toate datele<b>' + total + '</b></button>' +
+      '<button type="button" class="cip" data-azi="1">Azi<b>' + (peData[azi] || 0) + '</b></button>' +
+      (peData[FARA_DATA] ? '<button type="button" class="cip' + (incDate[FARA_DATA] ? ' activ' : '') + '" data-d="' + FARA_DATA + '">Fără dată<b>' + peData[FARA_DATA] + '</b></button>' : '') +
+      '<div class="mic">' + (alese.length ? 'Zile alese: ' + alese.map(SC.fmtDataLunga).join(', ') : 'Apasă pe o zi din calendar; poți alege mai multe. Cifra de sub zi = numărul de camioane.') + '</div></div>';
+    $('incDate').innerHTML = h;
+  }
   $('incDate').addEventListener('click', function (e) {
-    var b = e.target.closest('.cip'); if (!b) return;
-    var d = b.dataset.d;
-    if (!d) incDate = {}; else if (incDate[d]) delete incDate[d]; else incDate[d] = 1;
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.luna) {
+      var an = +incLuna.slice(0, 4), luna = +incLuna.slice(5, 7) + (+b.dataset.luna);
+      if (luna < 1) { luna = 12; an--; } else if (luna > 12) { luna = 1; an++; }
+      incLuna = an + '-' + SC.p2(luna);
+    } else if (b.dataset.azi) {
+      incDate = {}; incDate[SC.azi()] = 1; incLuna = SC.azi().slice(0, 7);
+    } else {
+      var d = b.dataset.d;
+      if (!d) incDate = {}; else if (incDate[d]) delete incDate[d]; else incDate[d] = 1;
+    }
     deseneazaIncarcari();
   });
   $('incLista').addEventListener('click', function (e) {
