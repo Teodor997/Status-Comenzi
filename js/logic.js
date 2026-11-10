@@ -178,6 +178,20 @@
   function eroare(msg) { var e = new Error(msg); e.prietenos = true; return e; }
   L.eroare = eroare;
 
+  /* Regula: la o comanda pregatita (Terminata / Self-Pick) paletii reali = FPP + Pick.
+     Amprentele urmeaza suma cat timp nu au fost modificate separat (erau egale cu paletii reali sau goale). */
+  L.sincPaleti = function (x) {
+    if (x.st !== ST.TER && x.st !== ST.SELF) return false;
+    if (!SC.esteNum(x.fpp) || !SC.esteNum(x.pk)) return false;
+    var nou = x.fpp + x.pk, vechi = x.pr;
+    if (nou === vechi) return false;
+    var urmeaza = !SC.esteNum(x.am) || x.am === vechi;
+    x.pr = nou;
+    if (urmeaza) x.am = nou;
+    if (L.greutateAuto(x)) x.gf = SC.rotunjeste(x.g + nou * SC.config.kgPalet);
+    return true;
+  };
+
   /* ---------- statusuri ---------- */
   /* Aplica un status pe comanda (in tranzactie). date = {pr, am, gf} pentru Terminata / Self-Pick. */
   L.aplicaStatus = function (o, st, date) {
