@@ -3,6 +3,7 @@
   "fieldOverrides": [
     { "collectionGroup": "comenzi", "fieldPath": "o", "indexes": [] },
     { "collectionGroup": "adrese", "fieldPath": "r", "indexes": [] },
+    { "collectionGroup": "extra", "fieldPath": "l", "indexes": [] },
     { "collectionGroup": "jurnal", "fieldPath": "e", "indexes": [] }
   ]
 }

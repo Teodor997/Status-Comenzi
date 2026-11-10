@@ -74,6 +74,16 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - Adresele transformate de Excel în dată („22 Decembrie 1989”) sunt refăcute ca text.
 - Încărcarea se confirmă în tabul *Încărcări* (camion → comenzi → stare camion, temperatură, semnătură).
 
+## Fișierul de transport (TMS)
+
+- Se importă din *Încărcări → Import fișier transport (TMS)*, de către Administrator sau Operator date.
+- Fișierul este cumulativ, așa că se procesează doar transporturile din ultimele 14 zile (și rândurile fără dată).
+- Comenzile găsite în registru primesc Nr AUTO, Nr transport, șofer, remorcă și data transportului.
+- Rândurile care **nu există în registru** nu intră în tabul Comenzi: merg în rubrica „Doar din transport” din tabul
+  Încărcări, apar la camionul lor și în borderou. Paleții și greutatea lor vin din TMS (`UnitatiTotale`, `MasaTotala`)
+  și pot fi corectate acolo; amprentele se completează manual.
+- Filtrul „Data încărcării” din tabul Încărcări folosește coloana `DataEstimataIncarcare` din fișier.
+
 ## Consum în planul gratuit Firebase (Spark)
 
 Limite: 50.000 citiri/zi, 20.000 scrieri/zi, 1 GiB stocare, 10 GiB transfer/lună.

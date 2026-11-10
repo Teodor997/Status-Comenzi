@@ -3,7 +3,7 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '1.1';
+  SC.VERSIUNE = '1.5';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
   SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
@@ -22,7 +22,7 @@
   /* Coloanele registrului, in ordinea din Excel.
      k = cheia scurta din baza de date, x = antetul din Excel, typ = tipul valorii */
   SC.COLS = [
-    { k: 'n',  x: 'Nr Crt', t: 'Nr Crt', w: 62, typ: 'int' },
+    { k: 'n',  x: 'Nr Crt', t: 'Nr Crt', w: 76, typ: 'int' },
     { k: 'cl', x: 'Client', t: 'Client', w: 104, typ: 'txt' },
     { k: 'st', x: 'Status', t: 'Status', w: 112, typ: 'txt' },
     { k: 'nc', x: 'Nr. Comanda', t: 'Nr. Comandă', w: 116, typ: 'txt' },
@@ -51,6 +51,7 @@
   ];
   /* coloane proprii incarcarii (in Excel erau doar in "Status Incarcari") */
   SC.COLS_INC = [
+    { k: 'dtr', x: 'Data Transport', t: 'Data transport', typ: 'date' },
     { k: 'sc', x: 'Stare Camion', t: 'Stare camion', typ: 'txt' },
     { k: 'te', x: 'Temperatura', t: 'Temperatură', typ: 'txt' },
     { k: 'se', x: 'Semnatura', t: 'Semnătură', typ: 'txt' },
@@ -62,7 +63,8 @@
   /* coloanele care raman mereu editabile, ca in Excel (Status se schimba doar prin lista de statusuri) */
   SC.MEREU_EDITABILE = { na: 1, ob: 1, co: 1, nt: 1 };
   /* campurile care se sterg la anulare: tot ce tine de comanda, in afara de Nr Crt, Client, Status, Nr. Comanda, Import */
-  SC.CAMPURI_ANULARE = ['cc', 'dc', 'dl', 'de', 'ad', 'or', 'ju', 'jd', 'g', 'ca', 'pe', 'gf', 'pr', 'am', 'dp', 'op',
+  SC.ZILE_EXTRA = 14;              // liniile doar din transport mai vechi de atat nu se mai preiau din fisierul TMS
+  SC.CAMPURI_ANULARE = ['dtr', 'cc', 'dc', 'dl', 'de', 'ad', 'or', 'ju', 'jd', 'g', 'ca', 'pe', 'gf', 'pr', 'am', 'dp', 'op',
     'ob', 'co', 'inc', 'di', 'na', 'nt', 'sc', 'te', 'se', 'so', 're'];
 
   /* ---------- text ---------- */

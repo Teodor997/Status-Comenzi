@@ -9,6 +9,7 @@
   SC.dupaNr = {};       // Nr Crt -> comanda
   SC.config = JSON.parse(JSON.stringify(SC.CONFIG_IMPLICIT));
   SC.adrese = [];       // [{id, cl, cod, nume, str, loc, jud, _c}]
+  SC.extra = [];        // liniile din fisierul de transport care nu exista in registru: [{ref, cl, de, na, nt, dtr, ..., _zi, _k}]
   var adrNorm = null;   // cache normalizat pentru cautari
 
   /* ---------- grupe ---------- */
@@ -17,16 +18,19 @@
     return o;
   };
   L.recalc = function (g) {
-    var act = 0, chei = {}, cmin = 0, cmax = 0, n0 = 0;
+    var act = 0, chei = {}, cmin = 0, cmax = 0, n0 = 0, timpi = [];
     Object.keys(g.o).forEach(function (n) {
       var o = g.o[n];
       if (SC.esteActiva(o)) act++;
       var k = SC.cheieComanda(o.nc); if (k) chei[k] = 1;
       var ct = o.ct || 0;
-      if (ct) { if (!cmin || ct < cmin) cmin = ct; if (ct > cmax) cmax = ct; }
+      if (ct) { timpi.push(ct); if (!cmin || ct < cmin) cmin = ct; if (ct > cmax) cmax = ct; }
       if (!n0 || +n < n0) n0 = +n;
     });
-    g.act = act; g.k = Object.keys(chei); g.cmin = cmin; g.cmax = cmax; g.n0 = n0; g.upd = Date.now();
+    /* cmed = momentul median al introducerii comenzilor din grupa: dupa el se cauta istoricul pe perioada
+       (cmax poate fi tras in sus de o singura comanda reintrodusa mai tarziu) */
+    timpi.sort(function (a, b) { return a - b; });
+    g.act = act; g.k = Object.keys(chei); g.cmin = cmin; g.cmax = cmax; g.cmed = timpi.length ? timpi[Math.floor(timpi.length / 2)] : 0; g.n0 = n0; g.upd = Date.now();
     return g;
   };
   L.aplicaGrupe = function (lista) {
@@ -45,7 +49,7 @@
 
   /* Modifica una sau mai multe comenzi existente intr-o singura tranzactie.
      modificari: [{n, fn(o)}]; fn poate arunca eroare (tranzactia se anuleaza). */
-  var FARA_JURNAL = { ut: 1, uu: 1, ct: 1, cu: 1, n: 1, _h: 1, jd: 1, tr: 1 };
+  var FARA_JURNAL = { ut: 1, uu: 1, ct: 1, cu: 1, n: 1, _h: 1, jd: 1, tr: 1, prm: 1, gfm: 1, _zi: 1, _k: 1 };
   function scurt(v) { var s = String(v); return s.length > 60 ? s.slice(0, 57) + '…' : s; }
   /* "Camp: vechi → nou; ..." pentru jurnal; '' daca nu s-a schimbat nimic */
   L.diferente = function (a, b) {
@@ -125,6 +129,28 @@
     return unPas(0);
   };
 
+  /* Sterge definitiv comenzi din registru (folosit doar la curatarea liniilor adaugate gresit din transport). */
+  L.sterge = function (numere, textJurnal) {
+    var i = 0;
+    function pas() {
+      if (i >= numere.length) return Promise.resolve();
+      var buc = numere.slice(i, i + 150), ids = {}; i += 150;
+      buc.forEach(function (n) { ids[SC.idGrupa(n)] = 1; });
+      var listaId = Object.keys(ids);
+      return SC.store.tx(function (t) {
+        return Promise.all(listaId.map(function (id) { return t.get('comenzi', id); })).then(function (docs) {
+          var g = {};
+          listaId.forEach(function (id, j) { g[id] = docs[j] || { o: {} }; });
+          buc.forEach(function (n) { delete g[SC.idGrupa(n)].o[n]; });
+          var rez = listaId.map(function (id) { L.recalc(g[id]); t.set('comenzi', id, g[id]); return { id: id, data: g[id] }; });
+          t.log(textJurnal + ' (' + buc.length + ' rânduri, Nr Crt ' + buc[0] + '–' + buc[buc.length - 1] + ')');
+          return rez;
+        });
+      }).then(function (rez) { L.aplicaGrupe(rez); return pas(); });
+    }
+    return pas();
+  };
+
   /* Cauta in toata baza de date (nu doar in ce e incarcat) comenzile cu numerele date.
      Intoarce {cheie: [comenzi]} */
   L.cautaComenzi = function (numere) {
@@ -133,8 +159,11 @@
       var k = SC.cheieComanda(nr);
       if (k && !rez[k]) { rez[k] = []; deCautat.push(k); }
     });
-    if (!deCautat.length) return Promise.resolve(rez);
-    return SC.store.cautaChei(deCautat).then(function (grupe) {
+    /* ce se gaseste deja in comenzile incarcate nu se mai cauta in baza de date (economie de citiri) */
+    var inCache = {};
+    SC.comenzi.forEach(function (o) { var k = SC.cheieComanda(o.nc); if (rez[k]) inCache[k] = 1; });
+    deCautat = deCautat.filter(function (k) { return !inCache[k]; });
+    return (deCautat.length ? SC.store.cautaChei(deCautat) : Promise.resolve([])).then(function (grupe) {
       /* grupele gasite sunt mai proaspete decat cache-ul doar daca nu sunt urmarite in timp real */
       var noi = grupe.filter(function (d) { return !SC.grupe[d.id] || (SC.grupe[d.id].upd || 0) < (d.data.upd || 0); });
       L.aplicaGrupe(noi);
@@ -494,17 +523,103 @@
       else if (k === 'numartransport' || k === 'nrtransport') h.nt = c2; else if (k === 'sofer') h.so = c2;
       else if (k === 'remorca') h.re = c2; else if (k === 'client' || k === 'numeclient') h.cl = c2;
       else if (k === 'destinatar' || k === 'beneficiar' || k === 'numedestinatar') h.de = c2;
+      else if (k === 'localitatebeneficiar') h.or = c2; else if (k === 'judetbeneficiar') h.ju = c2;
+      else if (k === 'unitatitotale') h.un = c2; else if (k === 'masatotala') h.ma = c2;
+      else if (k === 'dataestimataincarcare') h.dtr = c2;      /* ziua in care se incarca masina */
+      else if (k === 'datatransport') h.dtr2 = c2;             /* momentul crearii transportului - rezerva */
     }
+    if (h.dtr == null) { h.dtr = h.dtr2; h.dtr2 = null; }
+    var numeColData = h.dtr != null ? vText(cel(ws, rAntet, h.dtr)) : '';
+    function ziua(c) { if (c == null) return ''; var dv = vData(cel(ws, r2, c)); return /^\d{4}-\d{2}-\d{2}$/.test(dv) && dv >= '2020-01-01' ? dv : ''; }
     if (h.na == null) throw eroare('Nu găsesc coloana „Masina” în foaia „' + nume + '”.');
     var randuri = [];
-    for (var r2 = rAntet + 1; r2 <= z.e.r; r2++) {
+    var r2;
+    for (r2 = rAntet + 1; r2 <= z.e.r; r2++) {
       var ref = vText(cel(ws, r2, h.ref));
       if (!ref) continue;
       var x = { ref: ref, na: vText(cel(ws, r2, h.na)).toUpperCase() };
-      ['nt', 'so', 're', 'cl', 'de'].forEach(function (kk) { if (h[kk] != null) x[kk] = vText(cel(ws, r2, h[kk])); });
+      ['nt', 'so', 're', 'cl', 'de', 'or', 'ju'].forEach(function (kk) { if (h[kk] != null) x[kk] = vText(cel(ws, r2, h[kk])); });
+      ['un', 'ma'].forEach(function (kk) { if (h[kk] != null) { var nv = vNum(cel(ws, r2, h[kk])); if (SC.esteNum(nv)) x[kk] = SC.rotunjeste(nv, 2); } });
+      x.dtr = ziua(h.dtr) || ziua(h.dtr2);
       if (x.na || x.nt) randuri.push(x);
     }
-    return { foaie: nume, randuri: randuri, areClient: h.cl != null };
+    return { foaie: nume, randuri: randuri, areClient: h.cl != null, colData: numeColData };
+  };
+
+  /* ---------- linii doar din transport (nu sunt in registrul de comenzi) ----------
+     Colectia "extra": un document pe zi de transport (sau "fara-data"), cu liniile intr-o harta. */
+  L.seteazaExtra = function (docs) {
+    var l = [];
+    docs.forEach(function (d) {
+      var m = d.data.l || {};
+      Object.keys(m).forEach(function (k) { var x = m[k]; x._zi = d.id; x._k = k; l.push(x); });
+    });
+    SC.extra = l;
+  };
+  L.cheieExtra = function (r) {
+    return (SC.cheieComanda(r.ref) + '~' + (r.nt || SC.normNrAuto(r.na))).replace(/[.\/\[\]*`]/g, '_');
+  };
+  L.ziExtra = function (r) { return r.dtr || 'fara-data'; };
+  /* perZi: {zi: [linii din fisier care nu exista in registru]}. Liniile deja incarcate nu se ating;
+     cele care au disparut din fisier (sau au aparut intre timp in registru) se scot, daca nu sunt incarcate. */
+  L.importaExtra = function (perZi, numeFisier) {
+    var zile = Object.keys(perZi).sort(), stat = { noi: 0, actualizate: 0, scoase: 0 }, i = 0;
+    function pas() {
+      if (i >= zile.length) return Promise.resolve();
+      var zi = zile[i++];
+      return SC.store.tx(function (t) {
+        return t.get('extra', zi).then(function (d) {
+          var vechi = (d && d.l) || {}, nou = {}, s = { noi: 0, actualizate: 0, scoase: 0 };
+          perZi[zi].forEach(function (r) {
+            var k = L.cheieExtra(r), v = vechi[k];
+            if (v && v.inc === 'DA') { nou[k] = v; return; }
+            var x = v ? JSON.parse(JSON.stringify(v)) : {};
+            ['ref', 'cl', 'de', 'or', 'ju', 'na', 'nt', 'so', 're', 'dtr', 'un', 'ma'].forEach(function (f) { if (r[f] != null && r[f] !== '') x[f] = r[f]; });
+            /* paletii si greutatea vin din TMS (UnitatiTotale, MasaTotala), cat timp nu au fost corectate de mana (prm / gfm) */
+            if (!x.prm && x.un != null) x.pr = x.un;
+            if (!x.gfm && x.ma != null) x.gf = x.ma;
+            if (!v) s.noi++; else if (JSON.stringify(v) !== JSON.stringify(x)) s.actualizate++;
+            nou[k] = x;
+          });
+          Object.keys(vechi).forEach(function (k) {
+            if (nou[k]) return;
+            if (vechi[k].inc === 'DA') nou[k] = vechi[k]; else s.scoase++;
+          });
+          if (s.noi || s.actualizate || s.scoase) t.set('extra', zi, { l: nou, upd: Date.now() });
+          return s;
+        });
+      }).then(function (s) { stat.noi += s.noi; stat.actualizate += s.actualizate; stat.scoase += s.scoase; return pas(); });
+    }
+    return pas().then(function () {
+      if (!(stat.noi || stat.actualizate || stat.scoase)) return stat;
+      return SC.store.tx(function (t) {
+        t.log('Import transport ' + numeFisier + ': linii doar din transport — ' + stat.noi + ' noi, ' + stat.actualizate + ' actualizate, ' + stat.scoase + ' scoase');
+      }).then(function () { return stat; });
+    });
+  };
+  /* modificari pe linii doar din transport: [{zi, k, fn(linie)}] */
+  L.modificaExtra = function (modificari, textJurnal) {
+    var ids = {}, user = SC.store.user ? SC.store.user.nume : '?';
+    modificari.forEach(function (m) { ids[m.zi] = 1; });
+    var listaId = Object.keys(ids);
+    return SC.store.tx(function (t) {
+      return Promise.all(listaId.map(function (id) { return t.get('extra', id); })).then(function (docs) {
+        var g = {}, linii = [];
+        listaId.forEach(function (id, i) { g[id] = docs[i]; });
+        modificari.forEach(function (m) {
+          var x = g[m.zi] && g[m.zi].l && g[m.zi].l[m.k];
+          if (!x) throw eroare('Linia de transport nu mai există (fișierul TMS a fost reimportat între timp). Reîncarcă lista.');
+          var inainte = JSON.parse(JSON.stringify(x));
+          m.fn(x);
+          L.curata(x);
+          var d = L.diferente(inainte, x);
+          if (d) { x.ut = Date.now(); x.uu = user; linii.push('Doar transport ' + ((x.cl || '') + ' ' + (x.ref || '')).trim() + ' (' + (x.na || x.nt || '') + ') — ' + d); }
+        });
+        listaId.forEach(function (id) { g[id].upd = Date.now(); t.set('extra', id, g[id]); });
+        if (textJurnal && modificari.length > 1) t.log(textJurnal);
+        linii.forEach(function (x) { t.log(x); });
+      });
+    });
   };
 
   /* ---------- export ---------- */

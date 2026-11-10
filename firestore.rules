@@ -43,6 +43,14 @@ service cloud.firestore {
       allow delete: if eAdmin();
     }
 
+    // liniile din fisierul de transport care nu exista in registrul de comenzi (un document pe zi)
+    match /extra/{zi} {
+      allow read: if activ();
+      allow create: if poateScrie();
+      allow update: if atingeComenzi();
+      allow delete: if eAdmin();
+    }
+
     match /adrese/{id} {
       allow read: if activ();
       allow create, update: if poateScrie();

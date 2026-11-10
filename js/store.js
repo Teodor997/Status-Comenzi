@@ -57,7 +57,7 @@
       if (a.tip === 'doc') {
         if (peCol[a.col].indexOf(a.col + '/' + a.id) >= 0) a.cb(clona(self.docs[a.col + '/' + a.id]) || null);
       } else if (a.tip === 'col') {
-        a.cb(self._colectie(a.col));
+        a.cb(self._colectie(a.col).filter(function (d) { return !a.idMin || d.id >= a.idMin; }));
       } else if (a.tip === 'comenzi') {
         a.cb(peCol[a.col].filter(function (k) { return self.docs[k]; }).map(function (k) {
           return { id: k.split('/')[1], data: clona(self.docs[k]) };
@@ -149,7 +149,7 @@
       var chei = Object.keys(scrieri);
       chei.forEach(function (k) { if (scrieri[k] === undefined) delete self.docs[k]; else self.docs[k] = scrieri[k]; });
       if (jurnal.length) {
-        var kj = 'jurnal/' + SC.idJurnal(), dj = self.docs[kj] || { e: [] };
+        var kj = 'jurnal/' + SC.idJurnal() + (jurnal.length > 40 ? '_' + SC.idScurt() : ''), dj = self.docs[kj] || { e: [] };
         jurnal.forEach(function (x) { dj.e.push(Date.now() + '|' + (self.user ? self.user.nume : '?') + '|' + x); });
         self.docs[kj] = dj; chei.push(kj);
       }
@@ -182,6 +182,14 @@
     this.ascultatori.push(a); cb(this._colectie(col));
     return function () { self.ascultatori = self.ascultatori.filter(function (x) { return x !== a; }); };
   };
+  StoreDemo.prototype.urmaresteDela = function (col, idMin, cb) {
+    var a = { tip: 'col', col: col, cb: cb, idMin: idMin }, self = this;
+    this.ascultatori.push(a); cb(this._colectie(col).filter(function (d) { return d.id >= idMin; }));
+    return function () { self.ascultatori = self.ascultatori.filter(function (x) { return x !== a; }); };
+  };
+  StoreDemo.prototype.citesteInterval = function (col, a, b) {
+    return Promise.resolve(this._colectie(col).filter(function (d) { return d.id >= a && d.id <= b; }));
+  };
   StoreDemo.prototype.urmaresteComenzi = function (pragRecent, cb) {
     var a = { tip: 'comenzi', col: 'comenzi', cb: cb }, self = this;
     this.ascultatori.push(a);
@@ -189,7 +197,7 @@
     return function () { self.ascultatori = self.ascultatori.filter(function (x) { return x !== a; }); };
   };
   StoreDemo.prototype.cautaGrupe = function (dela, panala) {
-    return Promise.resolve(this._colectie('comenzi').filter(function (d) { return d.data.cmax >= dela && d.data.cmax <= panala; }));
+    return Promise.resolve(this._colectie('comenzi').filter(function (d) { return d.data.cmed >= dela && d.data.cmed <= panala; }));
   };
   StoreDemo.prototype.cautaChei = function (chei) {
     var set = {}; chei.forEach(function (k) { set[k] = 1; });
@@ -309,7 +317,9 @@
         if (jurnal.length) {
           var acum = Date.now(), nume = self.user ? self.user.nume : '?';
           var linii = jurnal.map(function (x, i) { return (acum + i) + '|' + nume + '|' + x; });
-          tr.set(self._ref('jurnal', SC.idJurnal()), { e: self.F.arrayUnion.apply(null, linii) }, { merge: true });
+          /* operatiile in masa isi scriu jurnalul intr-un document propriu, ca documentul orei sa nu ajunga la limita de 1 MB */
+          var idJ = SC.idJurnal() + (linii.length > 40 ? '_' + SC.idScurt() : '');
+          tr.set(self._ref('jurnal', idJ), { e: self.F.arrayUnion.apply(null, linii) }, { merge: true });
         }
         return rez;
       });
@@ -352,6 +362,18 @@
       cb(l);
     }, raporteaza);
   };
+  StoreFirebase.prototype.urmaresteDela = function (col, idMin, cb) {
+    var F = this.F;
+    return F.onSnapshot(F.query(F.collection(this.db, col), F.where(F.documentId(), '>=', idMin)), function (qs) {
+      var l = []; qs.forEach(function (d) { l.push({ id: d.id, data: d.data() }); });
+      cb(l);
+    }, raporteaza);
+  };
+  StoreFirebase.prototype.citesteInterval = function (col, a, b) {
+    var F = this.F;
+    return F.getDocs(F.query(F.collection(this.db, col), F.where(F.documentId(), '>=', a), F.where(F.documentId(), '<=', b)))
+      .then(function (qs) { var l = []; qs.forEach(function (d) { l.push({ id: d.id, data: d.data() }); }); return l; });
+  };
   /* doua interogari in timp real: grupele cu comenzi active + grupele create recent.
      Cand o grupa iese dintr-o interogare (nu mai are comenzi active) o recitim o data, ca sa nu ramana veche. */
   StoreFirebase.prototype.urmaresteComenzi = function (pragRecent, cb) {
@@ -380,7 +402,7 @@
   };
   StoreFirebase.prototype.cautaGrupe = function (dela, panala) {
     var F = this.F;
-    return F.getDocs(F.query(F.collection(this.db, 'comenzi'), F.where('cmax', '>=', dela), F.where('cmax', '<=', panala)))
+    return F.getDocs(F.query(F.collection(this.db, 'comenzi'), F.where('cmed', '>=', dela), F.where('cmed', '<=', panala)))
       .then(function (qs) { var l = []; qs.forEach(function (d) { l.push({ id: d.id, data: d.data() }); }); return l; });
   };
   StoreFirebase.prototype.cautaChei = function (chei) {

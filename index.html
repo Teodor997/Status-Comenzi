@@ -78,7 +78,19 @@
   #tabel { flex: 1; min-height: 0; overflow: auto; background: #fff; position: relative; }
   .rand, .cap { display: grid; grid-template-columns: var(--cols); width: var(--latime); }
   .cap { position: sticky; top: 0; z-index: 3; background: #e9edf5; border-bottom: 1px solid var(--line); height: 34px; }
-  .cap > div { padding: 0 6px; font-size: 12px; font-weight: 700; display: flex; align-items: center; border-right: 1px solid var(--line); cursor: pointer; user-select: none; overflow: hidden; line-height: 1.15; }
+  .cap > div { padding: 0 2px 0 6px; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 2px; border-right: 1px solid var(--line); cursor: pointer; user-select: none; overflow: hidden; line-height: 1.15; }
+  .cap .et { flex: 1; min-width: 0; overflow: hidden; }
+  .cap .fb { flex: none; width: 20px; height: 22px; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; font-size: 11px; padding: 0; color: #49546a; }
+  .cap .fb:hover { background: #fff; border-color: var(--line); }
+  .cap .fb.activ { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .popfiltru { position: fixed; z-index: 40; width: 290px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.22); padding: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+  .popfiltru .pf-titlu { font-weight: 700; color: var(--navy); }
+  .popfiltru .pf-sort { display: flex; gap: 6px; }
+  .popfiltru .pf-sort .btn { flex: 1; }
+  .popfiltru .pf-lista { flex: 1; min-height: 90px; max-height: 300px; overflow: auto; border: 1px solid var(--line2); border-radius: 6px; padding: 4px 6px; display: flex; flex-direction: column; }
+  .popfiltru .pf-lista label { padding: 2px 0; }
+  .popfiltru .pf-v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .popfiltru .pf-jos { display: flex; gap: 6px; align-items: center; }
   .cap > div:hover { background: #dde3ee; }
   #corp { position: relative; width: var(--latime); }
   .rand { position: absolute; left: 0; height: 30px; border-bottom: 1px solid var(--line2); font-size: 12.5px; cursor: pointer; background: #fff; }
@@ -231,10 +243,17 @@
         <div class="rand-form">
           <button class="btn doarEdit" id="btnTransport">Import fișier transport (TMS)</button>
           <input type="search" id="incCauta" placeholder="Nr auto sau nr transport" aria-label="Caută camion">
-          <label class="bifa"><input type="checkbox" id="incAzi"> Arată și camioanele încărcate azi</label>
+          <label class="bifa"><input type="checkbox" id="incAzi"> Arată și camioanele deja încărcate</label>
         </div>
+        <div class="mic" style="margin:10px 0 4px">Data încărcării (poți bifa una sau mai multe):</div>
+        <div class="cipuri" id="incDate"></div>
       </div>
       <div class="card derulare-x"><div id="incLista"></div></div>
+      <div class="card derulare-x">
+        <h2>Doar din transport</h2>
+        <p>Linii din fișierul TMS care nu există în registrul de comenzi. Nu apar în tabul Comenzi; apar la camionul lor și în borderou. <span id="incExtraNumar"></span></p>
+        <div id="incExtra"></div>
+      </div>
     </section>
 
     <!-- ADRESE -->
