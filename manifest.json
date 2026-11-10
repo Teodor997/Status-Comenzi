@@ -1,0 +1,8 @@
+{
+  "name": "Status Comenzi",
+  "short_name": "Status Comenzi",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f2f4f8",
+  "theme_color": "#002664"
+}

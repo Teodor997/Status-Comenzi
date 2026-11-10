@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status Comenzi</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%23002664%27/%3E%3Cpath d=%27M8 16l5 5 11-11%27 stroke=%27%23fff%27 stroke-width=%273.5%27 fill=%27none%27/%3E%3C/svg%3E">
+<meta name="theme-color" content="#002664">
+<style>
+  :root {
+    --navy: #002664; --navy2: #0a3a8c; --bg: #f2f4f8; --card: #fff; --line: #d5dae3; --line2: #e8ebf1;
+    --text: #1a2233; --muted: #5d6779; --ok: #1d7a3d; --bad: #b3261e; --warn: #9a5b00;
+    --galben: #ffeb9c; --verde: #c6efce; --rosu: #ffa0a0; --albastru: #99ccff; --roz: #ffc7ce;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: var(--text); background: var(--bg); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .ascuns { display: none !important; }
+
+  /* ---- butoane / campuri ---- */
+  .btn { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 7px 12px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: #f5f7fb; }
+  .btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--navy2); outline-offset: 1px; }
+  .btn.pri { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .btn.pri:hover { background: var(--navy2); }
+  .btn.rosu { color: var(--bad); border-color: #e3b4b0; }
+  .btn.mic { padding: 4px 9px; font-size: 13px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  input[type=text], input[type=password], input[type=date], input[type=number], input[type=search], select, textarea {
+    border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; background: #fff; min-width: 0;
+  }
+  input[readonly], textarea[readonly], select:disabled { background: #f0f2f6; color: #4a5263; }
+  label.camp { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+  label.camp > span { font-weight: 600; }
+  label.camp input, label.camp select, label.camp textarea { font-size: 14px; color: var(--text); }
+
+  /* ---- autentificare ---- */
+  #ecranLogin { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .cutieLogin { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 28px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; }
+  .cutieLogin h1 { margin: 0; font-size: 22px; color: var(--navy); }
+  .cutieLogin p { margin: 0; color: var(--muted); font-size: 13px; }
+  .eroare { color: var(--bad); font-size: 13px; min-height: 18px; }
+
+  /* ---- cadru ---- */
+  #aplicatie { height: 100%; display: flex; flex-direction: column; }
+  header.bara { background: var(--navy); color: #fff; display: flex; align-items: center; gap: 6px; padding: 0 12px; min-height: 46px; flex-wrap: wrap; }
+  header.bara .titlu { font-weight: 700; font-size: 16px; margin-right: 14px; }
+  .taburi { display: flex; gap: 2px; align-self: stretch; }
+  .tab { background: none; border: 0; color: #c9d4ea; padding: 0 14px; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 600; min-height: 46px; }
+  .tab:hover { color: #fff; }
+  .tab.activ { color: #fff; border-bottom-color: #fff; }
+  .dreapta { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .dreapta .btn { background: transparent; color: #fff; border-color: #6f86b8; }
+  .dreapta .btn:hover { background: rgba(255,255,255,.12); }
+  #sync { display: flex; align-items: center; gap: 5px; color: #c9d4ea; }
+  #sync i { width: 8px; height: 8px; border-radius: 50%; background: #58d68d; display: inline-block; }
+  #sync.rau i { background: #ff7b72; }
+  #banda { background: #fff3cd; color: #6b4a00; padding: 6px 12px; font-size: 13px; border-bottom: 1px solid #e6d28a; }
+  #banda.rau { background: #fde2e0; color: #7a1b15; border-color: #efb1ac; }
+  main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .pagina { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .pagina.derulabila { overflow: auto; padding: 14px; gap: 14px; }
+
+  /* ---- bara de unelte / filtre ---- */
+  .unelte { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .unelte .sep { flex: 1; }
+  .unelte input[type=search] { width: 230px; }
+  .cipuri { display: flex; gap: 5px; flex-wrap: wrap; }
+  .cip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+  .cip b { font-weight: 700; margin-left: 4px; }
+  .cip.activ { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .mic { font-size: 12.5px; color: var(--muted); }
+  label.bifa { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
+
+  /* ---- tabel virtual ---- */
+  #tabel { flex: 1; min-height: 0; overflow: auto; background: #fff; position: relative; }
+  .rand, .cap { display: grid; grid-template-columns: var(--cols); width: var(--latime); }
+  .cap { position: sticky; top: 0; z-index: 3; background: #e9edf5; border-bottom: 1px solid var(--line); height: 34px; }
+  .cap > div { padding: 0 6px; font-size: 12px; font-weight: 700; display: flex; align-items: center; border-right: 1px solid var(--line); cursor: pointer; user-select: none; overflow: hidden; line-height: 1.15; }
+  .cap > div:hover { background: #dde3ee; }
+  #corp { position: relative; width: var(--latime); }
+  .rand { position: absolute; left: 0; height: 30px; border-bottom: 1px solid var(--line2); font-size: 12.5px; cursor: pointer; background: #fff; }
+  .rand:hover { filter: brightness(.965); }
+  .rand > div { padding: 0 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 29px; border-right: 1px solid var(--line2); }
+  .rand > div.nr { text-align: right; font-variant-numeric: tabular-nums; }
+  .rand.edi { color: #0000c8; }
+  .rand.anulata { background: var(--rosu); color: var(--text); }
+  .rand.selfpick { background: var(--albastru); color: var(--text); }
+  .rand .imp-edi { background: var(--roz); color: #9c0006; }
+  .rand.anulata .imp-edi, .rand.selfpick .imp-edi { background: transparent; color: inherit; }
+  .rand .jd { color: #c00000; }
+  .rand .st-lucru { background: var(--galben); }
+  .rand .st-term { background: var(--verde); }
+  .rand select.stSel { width: 100%; border: 0; background: transparent; padding: 0; height: 28px; font-size: 12.5px; cursor: pointer; color: var(--text); }
+  .rand .da { color: var(--ok); font-weight: 700; }
+  .rand .ed { box-shadow: inset 0 -2px 0 var(--navy2); background: #f3f7ff; cursor: text; }
+  .rand .ed:empty::before { content: 'adaugă…'; color: #8a94a6; }
+  #gol { padding: 40px 20px; text-align: center; color: var(--muted); }
+
+  /* ---- carduri / tabele simple ---- */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card h2 { margin: 0 0 4px; font-size: 16px; color: var(--navy); }
+  .card > p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+  table.simplu { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.simplu th, table.simplu td { border-bottom: 1px solid var(--line2); padding: 6px 8px; text-align: left; vertical-align: middle; }
+  table.simplu th { background: #eef1f7; font-size: 12px; position: sticky; top: 0; }
+  table.simplu td.nr, table.simplu th.nr { text-align: right; font-variant-numeric: tabular-nums; }
+  table.simplu tr.clic { cursor: pointer; }
+  table.simplu tr.clic:hover { background: #f5f7fb; }
+  .rand-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+  .eticheta { display: inline-block; border-radius: 4px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+  .eticheta.ok { background: var(--verde); color: #14532d; }
+  .eticheta.asteapta { background: var(--galben); color: #5c4400; }
+  .derulare-x { overflow-x: auto; }
+
+  /* ---- ferestre ---- */
+  .fundal { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: flex-start; justify-content: center; padding: 4vh 12px; z-index: 50; overflow: auto; }
+  .fereastra { background: #fff; border-radius: 12px; width: 100%; max-width: 520px; box-shadow: 0 10px 40px rgba(0,0,0,.25); display: flex; flex-direction: column; }
+  .fereastra.lata { max-width: 900px; }
+  .fereastra > .sus { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .fereastra > .sus h3 { margin: 0; font-size: 16px; flex: 1; color: var(--navy); }
+  .fereastra > .sus .x { border: 0; background: none; font-size: 22px; cursor: pointer; line-height: 1; padding: 2px 8px; color: var(--muted); }
+  .fereastra > .mijloc { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .fereastra > .jos { padding: 12px 16px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .grila { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  .grila .lat2 { grid-column: span 2; }
+  .nota { background: #eef3fb; border-radius: 8px; padding: 9px 11px; font-size: 13px; }
+  .nota.atentie { background: #fff3cd; color: #5c4400; }
+  .lista-mica { max-height: 220px; overflow: auto; border: 1px solid var(--line2); border-radius: 8px; }
+  pre.msg { white-space: pre-wrap; font: inherit; margin: 0; }
+  #toasturi { position: fixed; right: 14px; top: 56px; display: flex; flex-direction: column; gap: 8px; z-index: 90; max-width: min(420px, 92vw); }
+  .toast { background: #1f2937; color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 13.5px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+  .toast.rau { background: var(--bad); }
+  .toast.bun { background: var(--ok); }
+
+  /* ---- tiparire ---- */
+  #tiparire { display: none; }
+  @media print {
+    #aplicatie, #ecranLogin, #toasturi, .fundal { display: none !important; }
+    #tiparire { display: block; padding: 0; font-size: 12px; }
+    #tiparire h1 { font-size: 18px; margin: 0 0 4px; }
+    #tiparire table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    #tiparire th, #tiparire td { border: 1px solid #444; padding: 4px 6px; text-align: left; }
+    #tiparire td.nr, #tiparire th.nr { text-align: right; }
+    #tiparire .semnaturi { display: flex; justify-content: space-between; margin-top: 34px; }
+  }
+  @media (max-width: 700px) {
+    .unelte input[type=search] { width: 100%; }
+    header.bara .titlu { width: 100%; padding-top: 8px; margin: 0; }
+    .taburi { width: 100%; overflow-x: auto; }
+    .tab { min-height: 40px; padding: 0 10px; }
+    .dreapta { width: 100%; margin: 0; padding: 4px 0 8px; justify-content: space-between; flex-wrap: wrap; }
+    .grila .lat2 { grid-column: span 1; }
+  }
+  @media (prefers-reduced-motion: no-preference) { .toast { animation: apare .18s ease-out; } }
+  @keyframes apare { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div id="ecranLogin" class="ascuns">
+  <form class="cutieLogin" id="formLogin" autocomplete="off">
+    <h1>Status Comenzi</h1>
+    <p id="loginText">Se încarcă…</p>
+    <label class="camp" id="campNumeSel"><span>Nume</span><select id="loginNume"></select></label>
+    <label class="camp ascuns" id="campNumeNou"><span>Numele tău (administrator)</span><input type="text" id="loginNumeNou" maxlength="40"></label>
+    <label class="camp"><span>PIN (6 cifre)</span><input type="password" id="loginPin" inputmode="numeric" maxlength="6" autocomplete="off"></label>
+    <div class="eroare" id="loginEroare" role="alert"></div>
+    <button class="btn pri" type="submit" id="loginBtn">Intră</button>
+  </form>
+</div>
+
+<div id="aplicatie" class="ascuns">
+  <header class="bara">
+    <div class="titlu">Status Comenzi</div>
+    <nav class="taburi" id="taburi">
+      <button class="tab activ" data-tab="comenzi">Comenzi</button>
+      <button class="tab" data-tab="incarcari">Încărcări</button>
+      <button class="tab" data-tab="adrese">Adrese</button>
+      <button class="tab" data-tab="admin" id="tabAdmin">Administrare</button>
+    </nav>
+    <div class="dreapta">
+      <span id="sync"><i></i><span id="syncText">conectare…</span></span>
+      <span id="cine"></span>
+      <button class="btn mic" id="btnPin">Schimbă PIN</button>
+      <button class="btn mic" id="btnIesire">Ieșire</button>
+    </div>
+  </header>
+  <div id="banda" class="ascuns"></div>
+  <main>
+    <!-- COMENZI -->
+    <section class="pagina" id="pag-comenzi">
+      <div class="unelte" id="unelteActiuni">
+        <button class="btn pri doarEdit" id="btnNoua">+ Comandă nouă</button>
+        <button class="btn doarEdit" id="btnBorderou">Import borderou Kandia</button>
+        <button class="btn doarEdit" id="btnImportExcel">Import din Excel</button>
+        <button class="btn" id="btnExport">Export Excel</button>
+        <span class="sep"></span>
+        <select id="fScop" aria-label="Ce comenzi se afișează">
+          <option value="activ">Active și recente (timp real)</option>
+          <option value="istoric">Istoric pe perioadă…</option>
+        </select>
+        <span id="zonaIstoric" class="ascuns rand-form">
+          <input type="date" id="iDela" aria-label="Istoric de la"><input type="date" id="iPanala" aria-label="Istoric până la">
+          <button class="btn mic" id="btnIstoric">Încarcă</button>
+        </span>
+      </div>
+      <div class="unelte">
+        <input type="search" id="fCauta" placeholder="Caută comandă, destinatar, nr auto…" aria-label="Caută">
+        <select id="fClient" aria-label="Client"><option value="">Toți clienții</option></select>
+        <div class="cipuri" id="fStatus"></div>
+        <label class="bifa"><input type="checkbox" id="fNeinc"> Terminate neîncărcate</label>
+        <select id="fColData" aria-label="Coloana de dată pentru filtru">
+          <option value="dl">Livrare solicitată</option><option value="dc">Data comandă</option><option value="dp">Data pregătire</option>
+        </select>
+        <input type="date" id="fDela" aria-label="De la"><input type="date" id="fPanala" aria-label="Până la">
+        <button class="btn mic" id="btnReset">Șterge filtrele</button>
+        <span class="sep"></span>
+        <span class="mic" id="numarare"></span>
+      </div>
+      <div id="tabel"><div class="cap" id="cap"></div><div id="corp"></div><div id="gol" class="ascuns"></div></div>
+    </section>
+
+    <!-- INCARCARI -->
+    <section class="pagina derulabila ascuns" id="pag-incarcari">
+      <div class="card">
+        <h2>Încărcarea camioanelor</h2>
+        <p>Comenzile cu Nr AUTO, grupate pe camion. Încărcarea se confirmă doar pentru comenzile cu statusul Terminata.</p>
+        <div class="rand-form">
+          <button class="btn doarEdit" id="btnTransport">Import fișier transport (TMS)</button>
+          <input type="search" id="incCauta" placeholder="Nr auto sau nr transport" aria-label="Caută camion">
+          <label class="bifa"><input type="checkbox" id="incAzi"> Arată și camioanele încărcate azi</label>
+        </div>
+      </div>
+      <div class="card derulare-x"><div id="incLista"></div></div>
+    </section>
+
+    <!-- ADRESE -->
+    <section class="pagina derulabila ascuns" id="pag-adrese">
+      <div class="card">
+        <h2>Adrese (nomenclator de destinatari)</h2>
+        <p>Folosit la completarea automată după Cod Client și la stabilirea județului la importul de borderou.</p>
+        <div class="rand-form">
+          <button class="btn pri doarEdit" id="btnAdresaNoua">+ Adresă</button>
+          <input type="search" id="adrCauta" placeholder="Caută nume, cod, localitate…" aria-label="Caută adresă">
+          <select id="adrClient" aria-label="Client"><option value="">Toți clienții</option></select>
+          <span class="mic" id="adrNumar"></span>
+        </div>
+      </div>
+      <div class="card derulare-x"><div id="adrLista"></div></div>
+    </section>
+
+    <!-- ADMIN -->
+    <section class="pagina derulabila ascuns" id="pag-admin"></section>
+  </main>
+</div>
+
+<div id="toasturi" aria-live="polite"></div>
+<div id="tiparire"></div>
+<input type="file" id="fisier" class="ascuns" accept=".xlsx,.xlsm,.xls">
+
+<script src="config.js"></script>
+<script src="js/xlsx.full.min.js"></script>
+<script src="js/util.js"></script>
+<script src="js/store.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

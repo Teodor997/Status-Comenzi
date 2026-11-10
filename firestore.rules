@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logat() { return request.auth != null; }
+    function caleProfil() { return /databases/$(database)/documents/utilizatori/$(request.auth.uid); }
+    function activ() { return logat() && exists(caleProfil()) && get(caleProfil()).data.activ == true; }
+    function eAdmin() { return activ() && get(caleProfil()).data.rol == 'admin'; }
+    function poateScrie() { return activ() && get(caleProfil()).data.rol in ['admin', 'operator']; }
+    // Incarcari si Transport modifica doar comenzi existente (ce camp anume: limiteaza aplicatia)
+    function atingeComenzi() { return activ() && get(caleProfil()).data.rol in ['admin', 'operator', 'incarcari', 'transport']; }
+    // adevarat doar pana la crearea primului administrator
+    function neconfigurat() { return !exists(/databases/$(database)/documents/meta/setup); }
+
+    // lista de nume pentru ecranul de autentificare (doar nume, fara alte date)
+    match /public/{doc} {
+      allow read: if true;
+      allow write: if eAdmin() || (logat() && neconfigurat());
+    }
+
+    match /utilizatori/{uid} {
+      allow read: if logat() && (request.auth.uid == uid || eAdmin());
+      allow create: if eAdmin() || (logat() && request.auth.uid == uid && neconfigurat());
+      allow update, delete: if eAdmin();
+    }
+
+    // meta/setup (marcajul de configurare), meta/config (clienti, reguli), meta/contor (Nr Crt), meta/importuri
+    match /meta/{doc} {
+      allow read: if activ();
+      allow create: if (doc == 'setup' && logat() && neconfigurat())
+                    || (doc == 'config' && eAdmin())
+                    || (doc != 'setup' && doc != 'config' && poateScrie());
+      allow update: if (doc == 'config' && eAdmin())
+                    || (doc != 'setup' && doc != 'config' && poateScrie());
+      allow delete: if false;
+    }
+
+    // comenzile, in grupe de cate 25
+    match /comenzi/{id} {
+      allow read: if activ();
+      allow create: if poateScrie();
+      allow update: if atingeComenzi();
+      allow delete: if eAdmin();
+    }
+
+    match /adrese/{id} {
+      allow read: if activ();
+      allow create, update: if poateScrie();
+      allow delete: if eAdmin();
+    }
+
+    // jurnalul de modificari (un document pe ora): scriu toti cei care modifica, citeste doar administratorul
+    match /jurnal/{ora} {
+      allow read: if eAdmin();
+      allow create, update: if atingeComenzi();
+      allow delete: if false;
+    }
+  }
+}
