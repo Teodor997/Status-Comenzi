@@ -3,7 +3,7 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '1.8';
+  SC.VERSIUNE = '2.1';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
   SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
@@ -36,6 +36,8 @@
     { k: 'g',  x: 'Greutate', t: 'Greutate', w: 84, typ: 'num' },
     { k: 'ca', x: 'Cartoane', t: 'Cartoane', w: 72, typ: 'int' },
     { k: 'pe', x: 'Nr.Paleti Estimati', t: 'Paleți estimați', w: 76, typ: 'num' },
+    { k: 'fpp', x: 'FPP', t: 'FPP', w: 58, typ: 'int' },      /* paleti full (intregi) ai comenzii */
+    { k: 'pk', x: 'Pick', t: 'Pick', w: 58, typ: 'int' },      /* paleti care se fac din picking */
     { k: 'gf', x: 'Greutate finala', t: 'Greutate finală', w: 88, typ: 'num' },
     { k: 'pr', x: 'Numarul de paleti reali', t: 'Paleți reali', w: 66, typ: 'int' },
     { k: 'am', x: 'Amprente Paleti', t: 'Amprente', w: 72, typ: 'int' },
@@ -64,7 +66,7 @@
   SC.MEREU_EDITABILE = { na: 1, ob: 1, co: 1, nt: 1 };
   /* campurile care se sterg la anulare: tot ce tine de comanda, in afara de Nr Crt, Client, Status, Nr. Comanda, Import */
   SC.ZILE_EXTRA = 14;              // liniile doar din transport mai vechi de atat nu se mai preiau din fisierul TMS
-  SC.CAMPURI_ANULARE = ['dtr', 'cc', 'dc', 'dl', 'de', 'ad', 'or', 'ju', 'jd', 'g', 'ca', 'pe', 'gf', 'pr', 'am', 'dp', 'op',
+  SC.CAMPURI_ANULARE = ['fpp', 'pk', 'dtr', 'cc', 'dc', 'dl', 'de', 'ad', 'or', 'ju', 'jd', 'g', 'ca', 'pe', 'gf', 'pr', 'am', 'dp', 'op',
     'ob', 'co', 'inc', 'di', 'na', 'nt', 'sc', 'te', 'se', 'so', 're'];
 
   /* ---------- text ---------- */
@@ -207,6 +209,13 @@
   };
   /* jurnalul de modificari: un document pe ora */
   SC.idJurnal = function () { return SC.azi() + '_' + p2(new Date().getHours()); };
+  /* Paletii de pick propusi: pana la terminare = estimarea rotunjita in sus - FPP;
+     dupa terminare (exista paleti reali) = paleti reali - FPP. null daca nu se poate calcula. */
+  SC.pickPropus = function (fpp, estimare, paletiReali) {
+    if (!SC.esteNum(fpp)) return null;
+    var baza = SC.esteNum(paletiReali) ? paletiReali : (SC.esteNum(estimare) ? Math.ceil(estimare) : null);
+    return baza == null ? null : Math.max(0, Math.round(baza - fpp));
+  };
   SC.idScurt = function () { return Math.random().toString(36).slice(2, 10); };
   SC.slug = function (s) {
     return SC.normText(s).replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') || 'user';

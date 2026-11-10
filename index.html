@@ -133,6 +133,7 @@
   .rand .st-term { background: var(--verde); }
   .rand select.stSel { width: 100%; border: 0; background: transparent; padding: 0; height: 28px; font-size: 12.5px; cursor: pointer; color: var(--text); }
   .rand .da { color: var(--ok); font-weight: 700; }
+  .rand > div[data-k=fpp], .rand > div[data-k=pk] { cursor: cell; }
   .rand .ed { box-shadow: inset 0 -2px 0 var(--navy2); background: #f3f7ff; cursor: text; }
   .rand .ed:empty::before { content: 'adaugă…'; color: #8a94a6; }
   #gol { padding: 40px 20px; text-align: center; color: var(--muted); }
@@ -183,6 +184,7 @@
     #tiparire table { border-collapse: collapse; width: 100%; margin-top: 10px; }
     #tiparire th, #tiparire td { border: 1px solid #444; padding: 4px 6px; text-align: left; }
     #tiparire td.nr, #tiparire th.nr { text-align: right; }
+    #tiparire .fp { font-size: 11px; font-weight: 600; white-space: nowrap; margin-top: 2px; }
     #tiparire .semnaturi { display: flex; justify-content: space-between; margin-top: 34px; }
   }
   @media (max-width: 700px) {

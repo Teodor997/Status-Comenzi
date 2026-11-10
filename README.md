@@ -59,6 +59,8 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - Statusuri: Initiata, In lucru, Terminata, Self-Pick, Anulata, cu aceleași întrebări și culori.
 - Terminata / Self-Pick: paleți reali, amprente, greutate finală; KANDIA = greutate + paleți × 20 kg, ceilalți manual
   (cu avertisment la peste 5× greutatea comenzii); toleranță ±1 palet față de estimare.
+- FPP și Pick (paleți full / paleți din picking): la completarea FPP, Pick se propune singur (estimarea rotunjită în sus − FPP;
+  după terminare, paleți reali − FPP). La Terminata / Self-Pick ambele se confirmă obligatoriu și rămân modificabile după.
 - Anulata: se șterg datele comenzii, rămân Nr Crt, client, număr comandă și eticheta de import.
 - Comandă manuală: „MANUAL: data ora”, verificare de dublură pe același client, completare din Adrese după Cod Client.
 - Import borderou: „Document” = comenzi (EDI), „Nr. aviz” = materiale (EDI MAT); comenzile existente sunt sărite;

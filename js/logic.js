@@ -187,6 +187,8 @@
     } else if (st === ST.TER || st === ST.SELF) {
       var auto = SC.normText(o.cl) === SC.normText(cfg.clientGreutateAuto) && SC.esteNum(o.g);
       o.pr = date.pr; o.am = date.am;
+      if (date.fpp != null) o.fpp = date.fpp;
+      if (date.pk != null) o.pk = date.pk;
       if (auto) {
         o.gf = SC.rotunjeste(o.g + date.pr * cfg.kgPalet);
       } else {
@@ -433,7 +435,7 @@
       toate.forEach(function (col) { if (SC.normAntet(col.x) === h && harta[col.k] == null) harta[col.k] = c; });
     }
     if (harta.nc == null) throw eroare('Fișierul nu are coloana „Nr. Comanda” pe rândul 1 al foii „' + numeFoaie + '”.');
-    SC.COLS.forEach(function (col) { if (harta[col.k] == null && col.k !== 'nt') lipsa.push(col.x); });
+    SC.COLS.forEach(function (col) { if (harta[col.k] == null && col.k !== 'nt' && col.k !== 'fpp' && col.k !== 'pk') lipsa.push(col.x); });
     var comenzi = [];
     for (var r = 1; r <= z.e.r; r++) {
       var nc = vText(cel(ws, r, harta.nc));
