@@ -1818,7 +1818,7 @@
       if (!ok) return;
       opresteUrmarireaComenzilor();
       toast('Migrare în curs… nu închide pagina.');
-      return SC.store.stergeColectie('comenzi').then(function () {
+      return SC.store.stergeColectie('comenzi', function (a) { $('syncText').textContent = 'ștergere date vechi ' + a; }).then(function () {
         return SC.store.setMulte('comenzi', m.docs, function (a, b) { $('syncText').textContent = 'migrare ' + a + '/' + b; });
       }).then(function () {
         if (!p.adrese.length) return;

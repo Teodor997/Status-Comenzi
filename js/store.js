@@ -325,29 +325,49 @@
       });
     }).catch(function (e) { throw traduce(e); });
   };
-  StoreFirebase.prototype.setMulte = function (col, lista, progres) {
-    var self = this, i = 0, PAS = 20;
-    function pas() {
-      if (i >= lista.length) return Promise.resolve();
-      var b = self.F.writeBatch(self.db);
-      lista.slice(i, i + PAS).forEach(function (d) { b.set(self._ref(col, d.id), d.data); });
-      i += PAS;
-      return b.commit().then(function () { if (progres) progres(Math.min(i, lista.length), lista.length); return pas(); });
-    }
-    return pas().catch(function (e) { throw traduce(e); });
-  };
-  StoreFirebase.prototype.stergeColectie = function (col) {
-    var self = this, total = 0;
-    function pas() {
-      return self.F.getDocs(self.F.query(self.F.collection(self.db, col), self.F.limit(200))).then(function (qs) {
-        if (qs.empty) return total;
-        var b = self.F.writeBatch(self.db);
-        qs.forEach(function (d) { b.delete(d.ref); });
-        total += qs.size;
-        return b.commit().then(pas);
+  /* Firestore limiteaza marimea unei scrieri in bloc (documente + intrarile lor de index, si la stergere).
+     Lucram in transe mici; daca o transa este totusi refuzata ca prea mare, o injumatatim si reluam de unde am ramas. */
+  function preaMare(e) {
+    return /too big|too large|exceeds the maximum|maximum allowed/i.test(String((e && e.message) || ''));
+  }
+  StoreFirebase.prototype._inTranse = function (elemente, pune, pasInitial, progres) {
+    var self = this, i = 0, pas = pasInitial;
+    function urm() {
+      if (i >= elemente.length) return Promise.resolve();
+      var b = self.F.writeBatch(self.db), bucata = elemente.slice(i, i + pas);
+      bucata.forEach(function (x) { pune(b, x); });
+      return b.commit().then(function () {
+        i += bucata.length;
+        if (progres) progres(i, elemente.length);
+        return urm();
+      }, function (e) {
+        if (!preaMare(e)) throw e;
+        if (pas > 1) { pas = Math.max(1, Math.floor(pas / 2)); return urm(); }
+        var n = eroare('Firebase refuză operația ca fiind prea mare chiar și pentru un singur document. Verifică excepțiile de indexare ' +
+          '(Firestore → Indexes → Single field → Exemptions: colecția „comenzi”, câmpul „o”), apoi încearcă din nou.');
+        n.code = e.code; throw n;
       });
     }
-    return pas();
+    return urm();
+  };
+  StoreFirebase.prototype.setMulte = function (col, lista, progres) {
+    var self = this;
+    return this._inTranse(lista, function (b, d) { b.set(self._ref(col, d.id), d.data); }, 10, progres).catch(function (e) { throw traduce(e); });
+  };
+  StoreFirebase.prototype.stergeColectie = function (col, progres) {
+    var self = this, total = 0;
+    function pas() {
+      return self.F.getDocs(self.F.query(self.F.collection(self.db, col), self.F.limit(100))).then(function (qs) {
+        if (qs.empty) return total;
+        var refs = [];
+        qs.forEach(function (d) { refs.push(d.ref); });
+        return self._inTranse(refs, function (b, r) { b.delete(r); }, 10, function (a) { if (progres) progres(total + a); }).then(function () {
+          total += refs.length;
+          return pas();
+        });
+      });
+    }
+    return pas().catch(function (e) { throw traduce(e); });
   };
   StoreFirebase.prototype.citesteDoc = function (col, id) {
     return this.F.getDoc(this._ref(col, id)).then(function (s) { return s.exists() ? s.data() : null; });
@@ -437,6 +457,7 @@
     var cfg = window.FIREBASE_CONFIG;
     var areCfg = cfg && cfg.apiKey && cfg.projectId && !/^(PUNE|YOUR)/i.test(cfg.apiKey);
     var demoFortat = /[?&]demo=1/.test(location.search);
+    SC._StoreFirebase = StoreFirebase;
     SC.store = (areCfg && !demoFortat) ? new StoreFirebase(cfg) : new StoreDemo();
     return SC.store;
   };
