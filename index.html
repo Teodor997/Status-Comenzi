@@ -125,6 +125,12 @@
   .cap > div:hover { background: #dde3ee; }
   #corp { position: relative; width: var(--latime); }
   .rand { position: absolute; left: 0; height: 30px; border-bottom: 1px solid var(--line2); font-size: 12.5px; cursor: pointer; background: #fff; }
+  .selc { display: flex !important; align-items: center; justify-content: center; padding: 0 !important; cursor: pointer; }
+  .selc input { width: 16px; height: 16px; cursor: pointer; margin: 0; }
+  .rand.bifat { background: #dfe9ff; }
+  .rand .naInline { width: 100%; height: 24px; box-sizing: border-box; font: inherit; padding: 0 4px; border: 2px solid var(--navy); border-radius: 3px; text-transform: uppercase; }
+  .bara-sel { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: center; padding: 8px 12px; margin: 0 0 8px; background: #eaf0ff; border: 1px solid #b9c8ef; border-radius: 8px; font-size: 13.5px; }
+  .bara-sel b { font-size: 16px; color: var(--navy); font-variant-numeric: tabular-nums; }
   .ob-rand { display: flex; gap: 6px; }
   .ob-rand input { flex: 1; min-width: 0; }
   .ob-rand select { flex: none; width: 190px; }
@@ -273,6 +279,7 @@
         <button class="btn pri doarEdit" id="btnNoua">+ Comandă nouă</button>
         <button class="btn doarEdit" id="btnBorderou">Import borderou Kandia</button>
         <button class="btn doarEdit" id="btnImportExcel">Import din Excel</button>
+        <button class="btn doarTransport" id="btnTransport2">Import fișier transport (TMS)</button>
         <button class="btn" id="btnExport">Export Excel</button>
         <span class="sep"></span>
         <select id="fScop" aria-label="Ce comenzi se afișează">
@@ -297,6 +304,7 @@
         <span class="sep"></span>
         <span class="mic" id="numarare"></span>
       </div>
+      <div id="baraSel" class="bara-sel ascuns" role="status"></div>
       <div id="tabel"><div class="cap" id="cap"></div><div id="corp"></div><div id="gol" class="ascuns"></div></div>
     </section>
 
@@ -305,7 +313,7 @@
       <div class="inc-layout">
         <aside class="card inc-lateral">
           <h2>Încărcări</h2>
-          <button class="btn doarEdit" id="btnTransport">Import fișier transport (TMS)</button>
+          <button class="btn doarTms" id="btnTransport">Import fișier transport (TMS)</button>
           <input type="search" id="incCauta" placeholder="Caută nr auto / nr transport" aria-label="Caută camion">
           <div id="incDate"></div>
           <label class="bifa"><input type="checkbox" id="incAzi"> Arată și camioanele deja încărcate</label>

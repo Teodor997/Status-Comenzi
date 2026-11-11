@@ -81,6 +81,10 @@
   /* Administrator + Operator date: tot ce tine de comenzi, adrese, importuri (poate()).
      Incarcari: doar confirmarea incarcarii.  Transport: doar Nr AUTO. */
   function poateIncarca() { return rol() === 'admin' || rol() === 'incarcari'; }
+  function poateTms() { return poate() || rol() === 'transport'; }
+  /* bifarea mai multor comenzi, cu totaluri (Transport; si Administratorul, ca sa poata verifica) */
+  function cuSelectie() { return rol() === 'transport' || rol() === 'admin'; }
+  function editareInLinie() { var a = document.activeElement; return !!(a && a.classList && (a.classList.contains('stSel') || a.classList.contains('naInline'))); }
   function nCom(n) { return n === 1 ? '1 comandă' : n + ' comenzi'; }
   function stampila() { var d = new Date(); return SC.p2(d.getDate()) + '.' + SC.p2(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + SC.oraAcum(); }
 
@@ -170,6 +174,9 @@
     document.querySelector('.tab[data-tab=comenzi]').classList.toggle('ascuns', doarInc);
     document.querySelector('.tab[data-tab=adrese]').classList.toggle('ascuns', doarInc);
     Array.prototype.forEach.call(document.querySelectorAll('.doarEdit'), function (el) { el.classList.toggle('ascuns', !poate()); });
+    $('btnTransport').classList.toggle('ascuns', !poateTms());
+    $('btnTransport2').classList.toggle('ascuns', u.rol !== 'transport');
+    stare.sel = {};
     var b = $('banda');
     if (SC.store.mod === 'demo') { b.className = ''; b.textContent = 'Mod demonstrație: datele se păstrează doar în acest browser. Pentru lucrul în echipă completează config.js cu proiectul Firebase.'; }
     else b.className = 'ascuns';
@@ -284,14 +291,15 @@
     stare.lista = l;
   }
   function deseneazaCap() {
-    var cols = SC.COLS, latime = 0;
-    $('cap').innerHTML = cols.map(function (c) {
+    var cols = SC.COLS, latime = 0, sel = cuSelectie();
+    if (sel) latime += 30;
+    $('cap').innerHTML = (sel ? '<div class="selc" title="Bifează / debifează toate comenzile din listă"><input type="checkbox" id="selTot" aria-label="Bifează toate comenzile din listă"></div>' : '') + cols.map(function (c) {
       latime += c.w;
       var s = stare.sort.k === c.k ? (stare.sort.dir === 1 ? ' ▲' : ' ▼') : '';
       return '<div data-k="' + c.k + '"><span class="et" title="Sortează după ' + esc(c.t) + '">' + esc(c.t) + s + '</span>' +
         '<button type="button" class="fb' + (stare.fc[c.k] ? ' activ' : '') + '" data-f="' + c.k + '" aria-label="Filtru pe coloana ' + esc(c.t) + '" title="Filtrează ' + esc(c.t) + '">▾</button></div>';
     }).join('');
-    $('tabel').style.setProperty('--cols', cols.map(function (c) { return c.w + 'px'; }).join(' '));
+    $('tabel').style.setProperty('--cols', (sel ? '30px ' : '') + cols.map(function (c) { return c.w + 'px'; }).join(' '));
     $('tabel').style.setProperty('--latime', latime + 'px');
   }
   function deseneazaCipuri() {
@@ -310,7 +318,10 @@
     if (stare.evid && stare.evid[o.n]) cls += ' nou';
     if (o.st === ST.ANU) cls += ' anulata'; else if (o.st === ST.SELF) cls += ' selfpick';
     else if (SC.esteEDI(o) && SC.esteDeschisa(o)) cls += ' edi';
+    var bifat = stare.sel && stare.sel[o.n];
+    if (bifat) cls += ' bifat';
     var h = '<div class="' + cls + '" data-n="' + o.n + '" style="top:' + (i * RH) + 'px">';
+    if (cuSelectie()) h += '<div class="selc"><input type="checkbox" class="selR" aria-label="Bifează comanda ' + esc(o.nc) + '"' + (bifat ? ' checked' : '') + '></div>';
     for (var j = 0; j < SC.COLS.length; j++) {
       var c = SC.COLS[j], v = SC.fmtCelula(o, c), cc = '';
       if (c.typ === 'num' || c.typ === 'int') cc = 'nr';
@@ -404,7 +415,7 @@
     if (stare.tab === 'kpi') { deseneazaKpi(); }
     if (stare.tab !== 'comenzi') return;
     var a = document.activeElement;
-    if (a && a.classList && a.classList.contains('stSel')) { stare.murdar = true; return; }
+    if (editareInLinie()) { stare.murdar = true; return; }
     stare.murdar = false;
     var semn = semnaturaFiltre(), anc = stare.semn === semn ? iaAncora() : null;
     stare.semn = semn;
@@ -412,6 +423,7 @@
     if (anc) refaAncora(anc);
     aplicaTinta();
     deseneazaRanduri();
+    deseneazaBaraSel();
     var tot = SC.comenzi.length;
     var nf = Object.keys(stare.fc).length;
     $('numarare').textContent = (stare.lista.length === tot ? tot + ' comenzi' : stare.lista.length + ' din ' + tot + ' comenzi încărcate') +
@@ -423,15 +435,28 @@
     rafCerut = true;
     requestAnimationFrame(function () {
       rafCerut = false;
-      var a = document.activeElement;
-      if (a && a.classList && a.classList.contains('stSel')) return;
+      if (editareInLinie()) return;
       deseneazaRanduri();
     });
   });
+  /* derulare cu rotita / bara in timp ce se scrie un Nr AUTO in celula: se salveaza ce s-a scris, apoi lista se deruleaza normal */
+  function inchideNaInLinie(e) {
+    var act = document.activeElement;
+    if (act && act.classList && act.classList.contains('naInline') && (e.type !== 'pointerdown' || e.target === $('tabel'))) act.blur();
+  }
+  $('tabel').addEventListener('wheel', inchideNaInLinie, { passive: true });
+  $('tabel').addEventListener('touchmove', inchideNaInLinie, { passive: true });
+  $('tabel').addEventListener('pointerdown', inchideNaInLinie);
   window.addEventListener('resize', function () { if (stare.pornit && stare.tab === 'comenzi') deseneazaRanduri(); });
   $('cap').addEventListener('click', function (e) {
     var fb = e.target.closest('.fb');
     if (fb) { deschideFiltru(fb.dataset.f, fb); return; }
+    if (e.target.closest('.selc')) {
+      var tot = $('selTot'), pune = e.target === tot ? tot.checked : !tot.checked;
+      stare.lista.forEach(function (o) { if (pune) stare.sel[o.n] = 1; else delete stare.sel[o.n]; });
+      deseneazaRanduri(); deseneazaBaraSel();
+      return;
+    }
     var d = e.target.closest('[data-k]'); if (!d) return;
     if (stare.sort.k === d.dataset.k) stare.sort.dir = -stare.sort.dir; else stare.sort = { k: d.dataset.k, dir: 1 };
     deseneazaCap(); redeseneaza();
@@ -445,12 +470,20 @@
   });
   $('corp').addEventListener('focusout', function () { setTimeout(function () { if (stare.murdar) redeseneaza(); }, 0); });
   $('corp').addEventListener('click', function (e) {
-    if (e.target.closest('.stSel')) return;
+    if (e.target.closest('.stSel') || e.target.closest('.naInline')) return;
     var r = e.target.closest('.rand'); if (!r) return;
     var o = SC.dupaNr[+r.dataset.n]; if (!o) return;
     stare.atins = { n: o.n, t: Date.now() };
-    if (rol() === 'transport' && e.target.closest('[data-k=na]')) editeazaNrAuto(o);
-    else if (poate() && o.st !== ST.ANU && e.target.closest('[data-k=fpp],[data-k=pk]')) editeazaFppPick(o);
+    if (e.target.closest('.selc')) {
+      var cb = r.querySelector('.selR'), pus = e.target === cb ? cb.checked : !cb.checked;
+      if (pus) stare.sel[o.n] = 1; else delete stare.sel[o.n];
+      cb.checked = pus; r.classList.toggle('bifat', pus);
+      deseneazaBaraSel();
+      return;
+    }
+    /* Transport: comanda nu se deschide; Nr AUTO se scrie direct in celula */
+    if (rol() === 'transport') { var cel = e.target.closest('[data-k=na]'); if (cel) editeazaNaInLinie(o, cel); return; }
+    if (poate() && o.st !== ST.ANU && e.target.closest('[data-k=fpp],[data-k=pk]')) editeazaFppPick(o);
     else if (poate() && (o.st === ST.TER || o.st === ST.SELF) && e.target.closest('[data-k=am]')) editeazaAmprente(o);
     else deschideComanda(o);
   });
@@ -957,6 +990,79 @@
     });
   }
   /* rolul Transport: singura modificare permisa este Nr AUTO, direct din lista */
+  /* ---- comenzi bifate: totaluri + Nr AUTO pentru toate ---- */
+  function comenziBifate() { return Object.keys(stare.sel || {}).map(function (n) { return SC.dupaNr[+n]; }).filter(Boolean); }
+  function deseneazaBaraSel() {
+    var b = $('baraSel');
+    if (!cuSelectie()) { b.classList.add('ascuns'); return; }
+    var l = comenziBifate(), tot = $('selTot');
+    if (tot) {
+      var inLista = stare.lista.filter(function (o) { return stare.sel[o.n]; }).length;
+      tot.checked = stare.lista.length > 0 && inLista === stare.lista.length; tot.indeterminate = inLista > 0 && inLista < stare.lista.length;
+    }
+    b.classList.toggle('ascuns', !l.length);
+    if (!l.length) return;
+    var ascunse = l.length - stare.lista.filter(function (o) { return stare.sel[o.n]; }).length;
+    b.innerHTML = '<span>Bifate: <b>' + nCom(l.length) + '</b></span><span>Greutate: <b>' + SC.fmtNum(SC.rotunjeste(suma(l, 'g')), 'num') + ' kg</b></span>' +
+      '<span>Paleți estimați: <b>' + SC.fmtNum(SC.rotunjeste(suma(l, 'pe')), 'num') + '</b></span>' +
+      (ascunse ? '<span class="mic">' + ascunse + (ascunse === 1 ? ' bifată nu se vede' : ' bifate nu se văd') + ' cu filtrele de acum</span>' : '') +
+      '<span style="flex:1"></span><button type="button" class="btn mic" id="selNa">Nr AUTO pentru cele bifate…</button><button type="button" class="btn mic" id="selGol">Debifează tot</button>';
+  }
+  $('baraSel').addEventListener('click', function (e) {
+    if (e.target.id === 'selGol') { stare.sel = {}; deseneazaRanduri(); deseneazaBaraSel(); }
+    else if (e.target.id === 'selNa') nrAutoPentruBifate();
+  });
+  function nrAutoPentruBifate() {
+    var l = comenziBifate(), libere = l.filter(function (o) { return o.inc !== 'DA'; }), inc = l.length - libere.length;
+    if (!libere.length) { toast('Toate comenzile bifate sunt deja încărcate; numărul auto nu mai poate fi schimbat.', 'rau'); return; }
+    var cuAlt = libere.filter(function (o) { return o.na; }).length;
+    modal({
+      titlu: 'Nr AUTO pentru ' + nCom(libere.length),
+      html: '<div class="nota">Greutate <b>' + SC.fmtNum(SC.rotunjeste(suma(libere, 'g')), 'num') + ' kg</b> · paleți estimați <b>' + SC.fmtNum(SC.rotunjeste(suma(libere, 'pe')), 'num') + '</b>' +
+        (cuAlt ? '<br>' + cuAlt + (cuAlt === 1 ? ' comandă are' : ' comenzi au') + ' deja un Nr AUTO, care va fi înlocuit.' : '') +
+        (inc ? '<br>' + inc + (inc === 1 ? ' comandă bifată este deja încărcată și rămâne neschimbată.' : ' comenzi bifate sunt deja încărcate și rămân neschimbate.') : '') + '</div>' +
+        '<label class="camp"><span>Nr AUTO (gol = șterge numărul)</span><input type="text" id="naMulte" maxlength="20" style="text-transform:uppercase"></label>',
+      butoane: [{ t: 'Renunță', v: null }, {
+        t: 'Salvează', cls: 'pri', fn: function (rad) {
+          var v = rad.querySelector('#naMulte').value.trim().toUpperCase();
+          return L.modifica(libere.map(function (o) {
+            return { n: o.n, fn: function (x) { if (x.inc === 'DA') return; if (v) x.na = v; else delete x.na; } };
+          })).then(function () { toast('Nr AUTO ' + (v || '(gol)') + ' salvat pe ' + nCom(libere.length) + '.', 'bun'); redeseneaza(); });
+        }
+      }]
+    });
+  }
+  /* Transport: Nr AUTO se scrie direct in celula. Enter salveaza si coboara la comanda urmatoare, Esc renunta. */
+  function editeazaNaInLinie(o, cel) {
+    if (o.inc === 'DA') { toast('Comanda ' + o.nc + ' este deja încărcată; numărul auto nu mai poate fi schimbat.', 'rau'); return; }
+    if (cel.querySelector('.naInline')) return;
+    var vechi = String(o.na || ''), gata = false, n = o.n;
+    cel.innerHTML = '<input type="text" class="naInline" maxlength="20" aria-label="Nr AUTO pentru comanda ' + esc(o.nc) + '" value="' + esc(vechi) + '">';
+    var inp = cel.firstChild; inp.focus(); inp.select();
+    function termina(salveaza, coboara) {
+      if (gata) return; gata = true;
+      var v = inp.value.trim().toUpperCase(), urm = coboara ? cel.parentNode.nextElementSibling : null;
+      cel.textContent = salveaza ? v : vechi;
+      if (salveaza && v !== vechi) {
+        L.modifica([{
+          n: n, fn: function (x) {
+            if (x.inc === 'DA') throw L.eroare('Comanda ' + x.nc + ' a fost încărcată între timp; numărul auto nu mai poate fi schimbat.');
+            if (v) x.na = v; else delete x.na;
+          }
+        }]).then(function () { toast('Nr AUTO ' + (v || '(gol)') + ' salvat pentru comanda ' + o.nc + '.', 'bun'); }, arataEroare).then(function () { redeseneaza(); });
+      }
+      if (urm) {
+        var o2 = SC.dupaNr[+urm.dataset.n], c2 = urm.querySelector('[data-k=na]');
+        if (o2 && c2 && o2.inc !== 'DA') { stare.atins = { n: o2.n, t: Date.now() }; editeazaNaInLinie(o2, c2); return; }
+      }
+      setTimeout(function () { if (stare.murdar) redeseneaza(); }, 0);
+    }
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); termina(true, true); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); termina(false, false); }
+    });
+    inp.addEventListener('blur', function () { termina(true, false); });
+  }
   function editeazaNrAuto(o) {
     if (o.inc === 'DA') { toast('Comanda ' + o.nc + ' este deja încărcată; numărul auto nu mai poate fi schimbat.', 'rau'); return; }
     var n = o.n;
@@ -1473,6 +1579,7 @@
       tipareste(L.infoCamion(x));
     });
   }
+  $('btnTransport2').onclick = function () { $('btnTransport').onclick(); };
   $('btnTransport').onclick = function () {
     var fisier, p;
     alegeFisier().then(function (f) { fisier = f; toast('Se citește fișierul…'); return new Promise(function (ok) { setTimeout(ok, 50); }).then(function () { return citesteFisier(f); }); }).then(function (wb) {

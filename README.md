@@ -45,7 +45,7 @@ Datele rămân doar în acel browser, deci este bun pentru probă, nu pentru luc
 | **Administrator** | Tot: utilizatori, migrare, arhivare, jurnal, plus tot ce pot celelalte roluri. |
 | **Operator date** | Toată partea de comenzi: adaugă manual, modifică orice câmp al comenzii, schimbă statusuri, importă borderoul Kandia, fișiere Excel și fișierul de transport din TMS; editează Adrese. Nu confirmă încărcări. |
 | **Încărcări** | Taburile *Încărcări* și *KPI's*: confirmă camioanele (stare camion, temperatură, semnătură) și tipărește borderoul. |
-| **Transport** | Vede comenzile și încărcările; poate modifica doar **Nr AUTO**, direct din lista de comenzi, cât timp comanda nu e încărcată. |
+| **Transport** | Vede comenzile și încărcările; modifică doar **Nr AUTO**, direct în celulă (sau pe mai multe comenzi bifate), cât timp comanda nu e încărcată. Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
 
 **Jurnal.** Fiecare modificare rămâne în *Administrare → Jurnal de modificări*: cine, când, comanda, câmpul,
 valoarea veche → valoarea nouă. Jurnalul nu poate fi șters sau citit decât de administrator.
