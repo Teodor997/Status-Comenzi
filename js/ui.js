@@ -1311,7 +1311,8 @@
       x.retururi = x.toate.filter(function (o) { return o.retur; });
       x.toate = x.toate.filter(function (o) { return !o.retur; });
       x.deIncarcat = x.toate.filter(function (o) { return o.st === ST.TER && o.inc !== 'DA'; });
-      x.inLucru = x.toate.filter(function (o) { return !o.extra && SC.esteDeschisa(o); });
+      /* o comanda deja confirmata ca incarcata nu mai este „in lucru” pentru incarcari, chiar daca statusul ei a ramas deschis */
+      x.inLucru = x.toate.filter(function (o) { return !o.extra && SC.esteDeschisa(o) && o.inc !== 'DA'; });
       x.incarcate = x.toate.filter(function (o) { return o.inc === 'DA'; });
       x.doarTransport = x.toate.filter(function (o) { return o.extra; });
       var nrPeZi = {};
@@ -1586,29 +1587,58 @@
     if (!eAdmin()) return;
     var atinse = SC.comenzi.filter(function (o) { return o.inc !== 'DA' && (o.nt || o.dtr || o.so || o.re); });
     var nrCam = Object.keys(SC.camInfo || {}).length;
+    /* camioanele „Fără dată”: comenzi neincarcate (terminate sau in lucru) care au Nr AUTO, dar nu au data de transport */
+    /* exact camioanele pe care lista le arata la „Fără dată”: fara data de transport si cu ceva de incarcat / in lucru */
+    var camFara = toateCamioanele().filter(function (x) { return !x.data && (x.deIncarcat.length || x.inLucru.length); });
+    var faraData = [];
+    camFara.forEach(function (x) { x.deIncarcat.concat(x.inLucru).forEach(function (o) { if (!o.extra && faraData.indexOf(SC.dupaNr[o.n]) < 0 && SC.dupaNr[o.n]) faraData.push(SC.dupaNr[o.n]); }); });
+    var extraFara = SC.extra.filter(function (x) { return !x.dtr; });
+    var nCamFara = camFara.length;
     modal({
-      titlu: 'Golește încărcările',
-      html: '<div class="nota atentie">Se șterge tot ce a venit până acum din fișierele de transport (TMS). După aceea imporți din nou fișierul la zi.</div>' +
-        listaHtml([
-          'Liniile „doar din transport” (cu tot cu retururi): ' + SC.extra.length + ' — se șterg',
-          'Orele de început de încărcare / tipăririle de borderou: ' + nrCam + (nrCam === 1 ? ' camion' : ' camioane') + ' — se șterg',
-          'Nr transport, Data transport, Șofer și Remorcă de pe comenzile neîncărcate: ' + nCom(atinse.length) + ' — se golesc'
-        ]) +
-        '<div class="mic">Rămân neatinse: Nr AUTO de pe comenzi, comenzile deja confirmate ca încărcate și tot restul registrului. Operația apare în jurnal și nu poate fi anulată.</div>',
+      titlu: 'Golește încărcările', lat: true,
+      html: '<div class="nota atentie">Alege ce se șterge. Operația apare în jurnal și nu poate fi anulată.</div>' +
+        '<label class="bifa" style="align-items:flex-start;margin-top:10px"><input type="checkbox" id="gTms"' + (SC.extra.length || nrCam || atinse.length ? '' : ' disabled') + '> <span><b>Tot ce a venit din fișierele de transport (TMS)</b>, ca următorul import să pornească de la zero:<br>' +
+        '<span class="mic">liniile „doar din transport”, cu tot cu retururi: ' + SC.extra.length + ' · orele de început de încărcare: ' + nrCam + (nrCam === 1 ? ' camion' : ' camioane') +
+        ' · Nr transport, Data transport, Șofer și Remorcă de pe ' + nCom(atinse.length) + ' neîncărcate. Nr AUTO rămâne.</span></span></label>' +
+        '<label class="bifa" style="align-items:flex-start;margin-top:10px"><input type="checkbox" id="gFara"' + (faraData.length || extraFara.length ? '' : ' disabled') + '> <span><b>Camioanele „Fără dată”</b>: ' + nCamFara + (nCamFara === 1 ? ' camion' : ' camioane') + '<br>' +
+        '<span class="mic">se șterge Nr AUTO de pe comenzile neîncărcate din aceste camioane (' + nCom(faraData.length) + ')' + (extraFara.length ? ' și se șterg ' + extraFara.length + ' linii „doar din transport” fără dată' : '') +
+        '. Comenzile rămân în registru, doar fără număr auto; valoarea veche a fiecăreia se păstrează în jurnal.</span></span></label>' +
+        '<div class="mic" style="margin-top:10px">Rămân neatinse comenzile deja confirmate ca încărcate, cele arhivate și tot restul registrului. Dacă le bifezi pe amândouă, a doua se aplică doar camioanelor care sunt „Fără dată” în acest moment.</div>',
       butoane: [{ t: 'Renunță', v: null }, {
-        t: 'Șterge', cls: 'pri', fn: function () {
-          var i = 0;
-          function parte() {
-            if (i >= atinse.length) return Promise.resolve();
-            var buc = atinse.slice(i, i + 100); i += 100;
-            $('syncText').textContent = 'golire ' + Math.min(i, atinse.length) + '/' + atinse.length;
-            return L.modifica(buc.map(function (o) {
-              return { n: o.n, fn: function (x) { if (x.inc === 'DA') return; delete x.nt; delete x.dtr; delete x.so; delete x.re; } };
-            }), 'Golire încărcări: date de transport scoase de pe ' + buc.length + ' comenzi', { faraDetalii: true }).then(parte);
+        t: 'Șterge', cls: 'pri', fn: function (rad) {
+          var tms = rad.querySelector('#gTms').checked, fara = rad.querySelector('#gFara').checked;
+          if (!tms && !fara) { toast('Bifează ce vrei să ștergi.', 'rau'); return false; }
+          function inBucati(lista, eticheta, fn, text, opt) {
+            var i = 0;
+            function parte() {
+              if (i >= lista.length) return Promise.resolve();
+              var buc = lista.slice(i, i + 100); i += 100;
+              $('syncText').textContent = eticheta + ' ' + Math.min(i, lista.length) + '/' + lista.length;
+              return L.modifica(buc.map(function (o) { return { n: o.n, fn: fn }; }), text(buc.length), opt).then(parte);
+            }
+            return parte();
           }
-          return SC.store.stergeColectie('extra').then(parte).then(function () {
+          var pas = Promise.resolve();
+          if (tms) pas = pas.then(function () { return SC.store.stergeColectie('extra'); }).then(function () {
+            return inBucati(atinse, 'golire', function (x) { if (x.inc === 'DA') return; delete x.nt; delete x.dtr; delete x.so; delete x.re; },
+              function (n) { return 'Golire încărcări: date de transport scoase de pe ' + n + ' comenzi'; }, { faraDetalii: true });
+          });
+          if (fara) pas = pas.then(function () {
+            return inBucati(faraData, 'fără dată', function (x) { if (x.inc === 'DA') return; delete x.na; },
+              function (n) { return 'Golire încărcări: Nr AUTO șters de pe ' + n + ' comenzi fără dată de transport'; });
+          }).then(function () {
+            if (tms || !extraFara.length) return;
+            return SC.store.tx(function (t) {
+              return t.get('extra', 'fara-data').then(function (d) {
+                if (!d) return;
+                d.l = {}; d.upd = Date.now(); t.set('extra', 'fara-data', d);
+                t.log('Golire încărcări: ' + extraFara.length + ' linii doar din transport fără dată, șterse');
+              });
+            });
+          });
+          return pas.then(function () {
             marcheazaSync();
-            toast('Încărcările au fost golite. Importă acum fișierul de transport.', 'bun');
+            toast((tms ? 'Datele din fișierele de transport au fost șterse. ' : '') + (fara ? 'Camioanele „Fără dată” au fost șterse (' + nCom(faraData.length) + '). ' : '') + (tms ? 'Importă acum fișierul de transport.' : ''), 'bun');
             redeseneaza();
           });
         }

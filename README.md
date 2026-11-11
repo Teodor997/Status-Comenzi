@@ -92,6 +92,8 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - *Golește încărcările…* (Administrator, tabul Încărcări) șterge tot ce a venit din fișierele de transport — liniile „doar din
   transport”, orele de început de încărcare, Nr transport / Data transport / Șofer / Remorcă de pe comenzile neîncărcate —
   ca următorul import să pornească de la zero. Nr AUTO și comenzile deja încărcate rămân.
+  A doua opțiune a aceleiași ferestre șterge camioanele „Fără dată”: Nr AUTO de pe comenzile neîncărcate care nu au dată de
+  transport (valoarea veche rămâne în jurnal).
 
 ## Tabul KPI's
 - Vizibil pentru toate rolurile, doar pentru citire. Pe ziua de încărcare aleasă arată: paleții de încărcat (reali la comenzile
