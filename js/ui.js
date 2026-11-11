@@ -176,6 +176,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('.doarEdit'), function (el) { el.classList.toggle('ascuns', !poate()); });
     $('btnTransport').classList.toggle('ascuns', !poateTms());
     $('btnTransport2').classList.toggle('ascuns', u.rol !== 'transport');
+    $('btnGolesteInc').classList.toggle('ascuns', !eAdmin());
     stare.sel = {};
     var b = $('banda');
     if (SC.store.mod === 'demo') { b.className = ''; b.textContent = 'Mod demonstrație: datele se păstrează doar în acest browser. Pentru lucrul în echipă completează config.js cu proiectul Firebase.'; }
@@ -1580,6 +1581,40 @@
     });
   }
   $('btnTransport2').onclick = function () { $('btnTransport').onclick(); };
+  /* Administrator: sterge tot ce a venit pana acum din fisierele de transport, ca urmatorul import sa porneasca de la zero */
+  $('btnGolesteInc').onclick = function () {
+    if (!eAdmin()) return;
+    var atinse = SC.comenzi.filter(function (o) { return o.inc !== 'DA' && (o.nt || o.dtr || o.so || o.re); });
+    var nrCam = Object.keys(SC.camInfo || {}).length;
+    modal({
+      titlu: 'Golește încărcările',
+      html: '<div class="nota atentie">Se șterge tot ce a venit până acum din fișierele de transport (TMS). După aceea imporți din nou fișierul la zi.</div>' +
+        listaHtml([
+          'Liniile „doar din transport” (cu tot cu retururi): ' + SC.extra.length + ' — se șterg',
+          'Orele de început de încărcare / tipăririle de borderou: ' + nrCam + (nrCam === 1 ? ' camion' : ' camioane') + ' — se șterg',
+          'Nr transport, Data transport, Șofer și Remorcă de pe comenzile neîncărcate: ' + nCom(atinse.length) + ' — se golesc'
+        ]) +
+        '<div class="mic">Rămân neatinse: Nr AUTO de pe comenzi, comenzile deja confirmate ca încărcate și tot restul registrului. Operația apare în jurnal și nu poate fi anulată.</div>',
+      butoane: [{ t: 'Renunță', v: null }, {
+        t: 'Șterge', cls: 'pri', fn: function () {
+          var i = 0;
+          function parte() {
+            if (i >= atinse.length) return Promise.resolve();
+            var buc = atinse.slice(i, i + 100); i += 100;
+            $('syncText').textContent = 'golire ' + Math.min(i, atinse.length) + '/' + atinse.length;
+            return L.modifica(buc.map(function (o) {
+              return { n: o.n, fn: function (x) { if (x.inc === 'DA') return; delete x.nt; delete x.dtr; delete x.so; delete x.re; } };
+            }), 'Golire încărcări: date de transport scoase de pe ' + buc.length + ' comenzi', { faraDetalii: true }).then(parte);
+          }
+          return SC.store.stergeColectie('extra').then(parte).then(function () {
+            marcheazaSync();
+            toast('Încărcările au fost golite. Importă acum fișierul de transport.', 'bun');
+            redeseneaza();
+          });
+        }
+      }]
+    });
+  };
   $('btnTransport').onclick = function () {
     var fisier, p;
     alegeFisier().then(function (f) { fisier = f; toast('Se citește fișierul…'); return new Promise(function (ok) { setTimeout(ok, 50); }).then(function () { return citesteFisier(f); }); }).then(function (wb) {

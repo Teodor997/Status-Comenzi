@@ -88,7 +88,10 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
   intră în niciun total (Încărcări, borderou, KPI's). Rămân vizibile, marcate „Retur”.
 - Ora de început a încărcării se înregistrează automat la prima tipărire a borderoului (Administrator sau Încărcări);
   ora de sfârșit este confirmarea încărcării. Lista de camioane arată ambele și durata.
-- Filtrul „Data încărcării” din tabul Încărcări folosește coloana `DataEstimataIncarcare` din fișier.
+- Data de încărcare a camionului este ziua din coloana `DataTransport` (dacă lipsește, `DataEstimataIncarcare`).
+- *Golește încărcările…* (Administrator, tabul Încărcări) șterge tot ce a venit din fișierele de transport — liniile „doar din
+  transport”, orele de început de încărcare, Nr transport / Data transport / Șofer / Remorcă de pe comenzile neîncărcate —
+  ca următorul import să pornească de la zero. Nr AUTO și comenzile deja încărcate rămân.
 
 ## Tabul KPI's
 - Vizibil pentru toate rolurile, doar pentru citire. Pe ziua de încărcare aleasă arată: paleții de încărcat (reali la comenzile

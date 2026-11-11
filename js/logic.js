@@ -541,8 +541,8 @@
       else if (k === 'destinatar' || k === 'beneficiar' || k === 'numedestinatar') h.de = c2;
       else if (k === 'localitatebeneficiar') h.or = c2; else if (k === 'judetbeneficiar') h.ju = c2;
       else if (k === 'unitatitotale') h.un = c2; else if (k === 'masatotala') h.ma = c2;
-      else if (k === 'dataestimataincarcare') h.dtr = c2;      /* ziua in care se incarca masina */
-      else if (k === 'datatransport') h.dtr2 = c2;             /* momentul crearii transportului - rezerva */
+      else if (k === 'datatransport') h.dtr = c2;              /* ziua in care se incarca masina */
+      else if (k === 'dataestimataincarcare') h.dtr2 = c2;     /* rezerva, daca lipseste DataTransport */
     }
     if (h.dtr == null) { h.dtr = h.dtr2; h.dtr2 = null; }
     var numeColData = h.dtr != null ? vText(cel(ws, rAntet, h.dtr)) : '';

@@ -168,7 +168,7 @@
   StoreDemo.prototype.stergeColectie = function (col) {
     var self = this, pre = col + '/', chei = Object.keys(this.docs).filter(function (k) { return k.indexOf(pre) === 0; });
     chei.forEach(function (k) { delete self.docs[k]; });
-    this._scrie(chei);
+    this._scrie(chei); this._anunta(chei);
     return Promise.resolve(chei.length);
   };
   StoreDemo.prototype.citesteDoc = function (col, id) { return Promise.resolve(clona(this.docs[col + '/' + id]) || null); };
