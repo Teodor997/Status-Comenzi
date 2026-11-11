@@ -197,6 +197,31 @@
   }
   @media (prefers-reduced-motion: no-preference) { .toast { animation: apare .18s ease-out; } }
   @keyframes apare { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+    /* ---- KPI ---- */
+    .kpi-sus { display: flex; flex-direction: column; gap: 10px; }
+    .kpi-rand { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .kpi-rand h2 { margin: 0 10px 0 0; }
+    #kpiCorp { display: flex; flex-direction: column; gap: 14px; }
+    .kpi-grila { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 12px; }
+    .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+    .kpi .t { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+    .kpi .v { font-size: 30px; font-weight: 700; color: var(--navy); line-height: 1.15; font-variant-numeric: tabular-nums; }
+    .kpi .v small { font-size: 14px; font-weight: 600; color: var(--muted); }
+    .kpi .s { font-size: 12.5px; color: var(--muted); }
+    .kpi .s b { color: var(--text); }
+    .kpi.accent { border-color: var(--navy); border-width: 2px; }
+    .bara-p { display: flex; height: 12px; background: var(--line2); border-radius: 6px; overflow: hidden; min-width: 60px; }
+    .bara-p i { display: block; height: 100%; }
+    .bara-p .c-fpp { background: var(--navy); } .bara-p .c-pick { background: #e08a00; } .bara-p .c-fara { background: #9aa3b5; } .bara-p .c-extra { background: #7b61c9; }
+    .bara-p .c-ok { background: var(--ok); } .bara-p .c-est { background: repeating-linear-gradient(45deg, #9db4e0, #9db4e0 4px, #c6d4f0 4px, #c6d4f0 8px); }
+    .legenda { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+    .legenda span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; background: var(--c); }
+    .legenda b { color: var(--text); }
+    .progres { display: grid; grid-template-columns: 150px minmax(0, 1fr) 150px; gap: 8px 12px; align-items: center; font-size: 13px; }
+    .progres .dr { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+    .kpi-doua { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+    @media (max-width: 1100px) { .kpi-doua { grid-template-columns: 1fr; } }
+    .eticheta.lucru { background: var(--albastru); color: #0b3a75; } .eticheta.gri { background: var(--line2); color: #4a5263; }
     .rand > div.nepotrivit { background: #fde2e2; color: #a40000; font-weight: 600; }
   </style>
 </head>
@@ -220,6 +245,7 @@
     <nav class="taburi" id="taburi">
       <button class="tab activ" data-tab="comenzi">Comenzi</button>
       <button class="tab" data-tab="incarcari">Încărcări</button>
+      <button class="tab" data-tab="kpi">KPI's</button>
       <button class="tab" data-tab="adrese">Adrese</button>
       <button class="tab" data-tab="admin" id="tabAdmin">Administrare</button>
     </nav>
@@ -292,6 +318,22 @@
           </div>
         </div>
       </div>
+    </section>
+
+    <!-- KPI -->
+    <section class="pagina derulabila ascuns" id="pag-kpi">
+      <div class="card kpi-sus">
+        <div class="kpi-rand">
+          <h2>KPI's încărcări</h2>
+          <button class="btn mic" id="kpiPrev" aria-label="Ziua anterioară">‹</button>
+          <input type="date" id="kpiData" aria-label="Ziua de încărcare">
+          <button class="btn mic" id="kpiNext" aria-label="Ziua următoare">›</button>
+          <select id="kpiClient" aria-label="Client"><option value="">Toți clienții</option></select>
+          <span class="mic" id="kpiOra"></span>
+        </div>
+        <div class="cipuri" id="kpiZile"></div>
+      </div>
+      <div id="kpiCorp"></div>
     </section>
 
     <!-- ADRESE -->

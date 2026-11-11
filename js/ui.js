@@ -186,6 +186,7 @@
     stare.opriri.push(SC.store.urmaresteDela('extra', SC.ziPlus(SC.azi(), -(SC.ZILE_EXTRA + 7)), function (docs) {
       L.seteazaExtra(docs);
       if (stare.tab === 'incarcari') deseneazaIncarcari();
+      if (stare.tab === 'kpi') deseneazaKpi();
     }));
     if (eAdmin()) {
       stare.opriri.push(SC.store.urmaresteColectie('utilizatori', function (docs) {
@@ -210,9 +211,10 @@
   function arataTab(t) {
     stare.tab = t;
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) { b.classList.toggle('activ', b.dataset.tab === t); });
-    ['comenzi', 'incarcari', 'adrese', 'admin'].forEach(function (x) { $('pag-' + x).classList.toggle('ascuns', x !== t); });
+    ['comenzi', 'incarcari', 'kpi', 'adrese', 'admin'].forEach(function (x) { $('pag-' + x).classList.toggle('ascuns', x !== t); });
     if (t === 'comenzi') { redeseneaza(); mergiLaFinal(); }
     else if (t === 'incarcari') deseneazaIncarcari();
+    else if (t === 'kpi') deseneazaKpi();
     else if (t === 'adrese') deseneazaAdrese();
     else if (t === 'admin') deseneazaAdmin();
   }
@@ -346,6 +348,7 @@
   }
   function redeseneaza() {
     if (stare.tab === 'incarcari') { deseneazaIncarcari(); }
+    if (stare.tab === 'kpi') { deseneazaKpi(); }
     if (stare.tab !== 'comenzi') return;
     var a = document.activeElement;
     if (a && a.classList && a.classList.contains('stSel')) { stare.murdar = true; return; }
@@ -1404,6 +1407,177 @@
       });
     }).catch(arataEroare);
   };
+
+  /* ================= KPI ================= */
+  /* Totul se calculeaza din ce este deja in memorie (comenzile active si recente + liniile din TMS):
+     tabul nu face nicio citire in plus din baza de date. */
+  var kpiZi = null;          // 'YYYY-MM-DD' = ziua de incarcare; '' = tot ce este neincarcat, indiferent de zi
+  var kpiCamioane = [];
+  function kGata(o) { return !!o.extra || o.st === ST.TER || o.st === ST.SELF; }
+  /* paletii unei comenzi: reali daca e pregatita, altfel estimarea rotunjita in sus */
+  function kPal(o) { return kGata(o) ? (SC.esteNum(o.pr) ? o.pr : 0) : (SC.esteNum(o.pe) ? Math.ceil(o.pe) : 0); }
+  function kPick(o) {
+    if (SC.esteNum(o.pk)) return o.pk;
+    return !kGata(o) && SC.esteNum(o.fpp) ? SC.pickPropus(o.fpp, o.pe, null) : null;
+  }
+  function kGreu(o) { var v = kGata(o) && SC.esteNum(o.gf) ? o.gf : o.g; return SC.esteNum(v) ? v : 0; }
+  function kAduna(l) {
+    var s = { n: 0, gata: 0, deschise: 0, inc: 0, pal: 0, palReali: 0, palEst: 0, palInc: 0, palDeInc: 0, palRam: 0, fppRam: 0, pkRam: 0, faraRam: 0, extraRam: 0,
+      fpp: 0, pk: 0, pkFacut: 0, pkDeFacut: 0, nExtra: 0, am: 0, kg: 0, kgRam: 0, st: {}, estSum: 0, realSum: 0, nEst: 0 };
+    l.forEach(function (o) {
+      var g = kGata(o), p = kPal(o), inc = o.inc === 'DA', f = SC.esteNum(o.fpp) ? o.fpp : null, k = kPick(o);
+      s.n++; s.pal += p; s.kg += kGreu(o);
+      if (g) { s.gata++; s.palReali += p; if (SC.esteNum(o.am)) s.am += o.am; } else { s.deschise++; s.palEst += p; }
+      if (o.extra) s.nExtra++; else {
+        s.st[o.st] = (s.st[o.st] || 0) + 1;
+        if (f != null) s.fpp += f;
+        if (k != null) { s.pk += k; if (g) s.pkFacut += k; else s.pkDeFacut += k; }
+        if (g && SC.esteNum(o.pe) && SC.esteNum(o.pr)) { s.estSum += o.pe; s.realSum += o.pr; s.nEst++; }
+      }
+      if (inc) { s.inc++; s.palInc += p; return; }
+      s.palRam += p; s.kgRam += kGreu(o);
+      if (g && o.st !== ST.SELF) s.palDeInc += p;
+      if (o.extra) s.extraRam += p;
+      else if (f == null && k == null) s.faraRam += p;
+      else { s.fppRam += f || 0; s.pkRam += k || 0; }
+    });
+    return s;
+  }
+  function kStare(x) {
+    var info = L.infoCamion(x), total = x.toate.length, inc = x.incarcate.length, gata = x.toate.filter(kGata).length;
+    if (total && inc === total) return ['Încărcat', 'ok', 4];
+    if (inc || (info && info.bt)) return ['În încărcare', 'lucru', 3];
+    if (gata === total) return ['Gata de încărcat', 'asteapta', 2];
+    if (gata || x.toate.some(function (o) { return o.st === ST.LUC; })) return ['În pregătire', 'gri', 1];
+    return ['În așteptare', 'gri', 0];
+  }
+  function nr(v) { return SC.fmtNum(v, 'int') || '0'; }
+  function proc(a, b) { return b ? Math.round(a * 100 / b) : 0; }
+  function deseneazaKpi() {
+    var azi = SC.azi(), client = $('kpiClient').value;
+    var opt = '<option value="">Toți clienții</option>' + SC.config.clienti.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('');
+    if ($('kpiClient').dataset.opt !== opt) { $('kpiClient').innerHTML = opt; $('kpiClient').dataset.opt = opt; $('kpiClient').value = client; }
+    var toate = toateCamioanele();
+    if (client) {
+      toate = toate.map(function (x) {
+        var c = Object.assign({}, x);
+        ['toate', 'deIncarcat', 'inLucru', 'incarcate', 'doarTransport'].forEach(function (k) { c[k] = x[k].filter(function (o) { return o.cl === client; }); });
+        return c;
+      }).filter(function (x) { return x.toate.length; });
+    }
+    var peZi = {}, neinc = 0;
+    toate.forEach(function (x) {
+      if (x.data) peZi[x.data] = (peZi[x.data] || 0) + 1;
+      if (x.deIncarcat.length || x.inLucru.length) neinc++;
+    });
+    if (kpiZi == null) {
+      /* la prima deschidere: azi daca are camioane, altfel prima zi viitoare cu camioane, altfel azi */
+      var viitoare = Object.keys(peZi).filter(function (d) { return d >= azi; }).sort();
+      kpiZi = peZi[azi] ? azi : (viitoare[0] || azi);
+    }
+    $('kpiData').value = kpiZi;
+    $('kpiOra').textContent = 'actualizat ' + SC.oraAcum() + ' · se reface singur la fiecare modificare';
+    var zile = Object.keys(peZi).filter(function (d) { return d >= SC.ziPlus(azi, -2); }).sort().slice(0, 9);
+    if (kpiZi && zile.indexOf(kpiZi) < 0) { zile.push(kpiZi); zile.sort(); }
+    $('kpiZile').innerHTML = zile.map(function (d) {
+      return '<button type="button" class="cip' + (d === kpiZi ? ' activ' : '') + '" data-d="' + d + '">' + (d === azi ? 'Azi' : (d === SC.ziPlus(azi, 1) ? 'Mâine' : esc(SC.fmtDataLunga(d)))) + '<b>' + (peZi[d] || 0) + '</b></button>';
+    }).join('') + '<button type="button" class="cip' + (kpiZi === '' ? ' activ' : '') + '" data-d="">Tot ce e neîncărcat<b>' + neinc + '</b></button>';
+
+    var cam = kpiZi === '' ? toate.filter(function (x) { return x.deIncarcat.length || x.inLucru.length; }) : toate.filter(function (x) { return x.data === kpiZi; });
+    var comenzi = [];
+    cam.forEach(function (x) { x.k = kAduna(x.toate); x.stare = kStare(x); comenzi = comenzi.concat(x.toate); });
+    var s = kAduna(comenzi), h = '';
+    /* comenzile active care nu au inca un camion */
+    var fara = SC.comenzi.filter(function (o) {
+      return !o.ar && SC.esteActiva(o) && (!o.na || !SC.normNrAuto(o.na).replace(/0/g, '')) && (!client || o.cl === client);
+    }), sf = kAduna(fara);
+    var faraPanaLa = kpiZi ? fara.filter(function (o) { return o.dl && String(o.dl).slice(0, 10) <= kpiZi; }) : fara;
+
+    if (!cam.length) {
+      h += '<div class="card"><div class="mic">Niciun camion ' + (kpiZi ? 'cu data de încărcare ' + esc(SC.fmtDataLunga(kpiZi)) : 'neîncărcat') + (client ? ' pentru ' + esc(client) : '') +
+        '. Data de încărcare vine din fișierul de transport (TMS): dacă ziua lipsește, importă fișierul la zi din tabul Încărcări.</div></div>';
+    } else {
+      var st = [0, 0, 0, 0, 0];
+      cam.forEach(function (x) { st[x.stare[2]]++; });
+      var durate = [];
+      cam.forEach(function (x) {
+        var info = L.infoCamion(x), sf2 = '';
+        x.incarcate.forEach(function (o) { if (o.di && String(o.di) > sf2) sf2 = String(o.di); });
+        x.inceput = info && info.bt ? info.bt : ''; x.sfarsit = x.stare[2] === 4 ? sf2 : '';
+        x.durata = x.inceput && x.sfarsit.length > 10 && x.sfarsit >= x.inceput ? Math.round((SC.msDin(x.sfarsit.slice(0, 10), x.sfarsit.slice(11, 16)) - SC.msDin(x.inceput.slice(0, 10), x.inceput.slice(11, 16))) / 60000) : null;
+        if (x.durata != null) durate.push(x.durata);
+      });
+      var medie = durate.length ? Math.round(durate.reduce(function (a, b) { return a + b; }, 0) / durate.length) : null;
+      var abatere = s.estSum ? Math.round((s.realSum - s.estSum) * 1000 / s.estSum) / 10 : null;
+      function tile(t, v, sub, accent) { return '<div class="kpi' + (accent ? ' accent' : '') + '"><div class="t">' + t + '</div><div class="v">' + v + '</div><div class="s">' + sub + '</div></div>'; }
+      h += '<div class="kpi-grila">' +
+        tile('Paleți de încărcat', nr(s.palRam), '<b>' + nr(s.palDeInc) + '</b> reali, gata de încărcat · <b>~' + nr(s.palEst) + '</b> estimați, în pregătire<br>deja încărcați: <b>' + nr(s.palInc) + '</b> din ' + nr(s.pal), true) +
+        tile('FPP (paleți full)', nr(s.fppRam), 'de încărcat · total pe zi: <b>' + nr(s.fpp) + '</b>') +
+        tile('Pick (paleți din picking)', nr(s.pkRam), 'de încărcat · făcuți: <b>' + nr(s.pkFacut) + '</b> · de făcut: <b>' + nr(s.pkDeFacut) + '</b>') +
+        tile('Camioane', cam.length, 'încărcate <b>' + st[4] + '</b> · în încărcare <b>' + st[3] + '</b> · gata <b>' + st[2] + '</b><br>în pregătire <b>' + st[1] + '</b> · în așteptare <b>' + st[0] + '</b>') +
+        tile('Comenzi', s.n, [ST.INI, ST.LUC, ST.TER, ST.SELF].filter(function (k) { return s.st[k]; }).map(function (k) { return esc(k) + ' <b>' + s.st[k] + '</b>'; }).join(' · ') +
+          (s.nExtra ? '<br>doar din transport <b>' + s.nExtra + '</b>' : '')) +
+        tile('Greutate de încărcat', SC.fmtNum(Math.round(s.kgRam), 'int') + ' <small>kg</small>', 'total pe zi: <b>' + SC.fmtNum(Math.round(s.kg), 'int') + ' kg</b> · amprente (pregătite): <b>' + nr(s.am) + '</b>') +
+        tile('Durată medie de încărcare', medie == null ? '—' : medie + ' <small>min</small>', durate.length ? 'pe ' + durate.length + (durate.length === 1 ? ' camion încărcat' : ' camioane încărcate') + ' · de la tipărirea borderoului la confirmare' : 'apare după primul camion încărcat cu borderou tipărit') +
+        tile('Estimare față de real', abatere == null ? '—' : (abatere > 0 ? '+' : '') + String(abatere).replace('.', ',') + ' <small>%</small>', s.nEst ? 'estimat <b>' + SC.fmtNum(s.estSum, 'num') + '</b> · real <b>' + nr(s.realSum) + '</b> paleți, pe ' + s.nEst + ' comenzi pregătite' : 'apare după prima comandă pregătită') +
+        '</div>';
+      /* din ce sunt facuti paletii ramasi + cat s-a pregatit / incarcat */
+      var totRam = s.fppRam + s.pkRam + s.faraRam + s.extraRam || 1;
+      function seg(cls, v) { return v ? '<i class="' + cls + '" style="width:' + (v * 100 / totRam) + '%"></i>' : ''; }
+      function linie(nume, a, b, cls) { return '<div>' + nume + '</div><div class="bara-p" role="img" aria-label="' + nume + ': ' + proc(a, b) + '%"><i class="' + cls + '" style="width:' + proc(a, b) + '%"></i></div><div class="dr"><b>' + proc(a, b) + '%</b> · ' + nr(a) + ' / ' + nr(b) + '</div>'; }
+      h += '<div class="kpi-doua"><div class="card"><h2>Paleții de încărcat, pe tipuri</h2>' +
+        '<div class="bara-p" style="height:18px" role="img" aria-label="FPP ' + s.fppRam + ', Pick ' + s.pkRam + ', fără FPP/Pick ' + s.faraRam + ', doar din transport ' + s.extraRam + '">' + seg('c-fpp', s.fppRam) + seg('c-pick', s.pkRam) + seg('c-fara', s.faraRam) + seg('c-extra', s.extraRam) + '</div>' +
+        '<div class="legenda"><span style="--c:var(--navy)">FPP <b>' + nr(s.fppRam) + '</b></span><span style="--c:#e08a00">Pick <b>' + nr(s.pkRam) + '</b></span>' +
+        '<span style="--c:#9aa3b5">fără FPP / Pick completat <b>' + nr(s.faraRam) + '</b></span><span style="--c:#7b61c9">doar din transport <b>' + nr(s.extraRam) + '</b></span></div>' +
+        '<div class="progres" style="margin-top:14px">' + linie('Pregătire (paleți)', s.palReali, s.pal, 'c-ok') + linie('Picking (paleți)', s.pkFacut, s.pk, 'c-pick') + linie('Încărcare (paleți)', s.palInc, s.pal, 'c-fpp') + linie('Camioane încărcate', st[4], cam.length, 'c-fpp') + '</div></div>';
+      /* pe clienti */
+      var peCl = {};
+      comenzi.forEach(function (o) { (peCl[o.cl || '—'] = peCl[o.cl || '—'] || []).push(o); });
+      h += '<div class="card"><h2>Pe clienți</h2><div class="derulare-x"><table class="simplu"><tr><th>Client</th><th class="nr">Comenzi</th><th class="nr">Paleți</th><th class="nr">FPP</th><th class="nr">Pick</th><th class="nr">Încărcați</th></tr>' +
+        Object.keys(peCl).sort(function (a, b) { return kAduna(peCl[b]).pal - kAduna(peCl[a]).pal; }).map(function (c) {
+          var k = kAduna(peCl[c]);
+          return '<tr><td><b>' + esc(c) + '</b></td><td class="nr">' + k.n + '</td><td class="nr">' + nr(k.pal) + '</td><td class="nr">' + nr(k.fpp) + '</td><td class="nr">' + nr(k.pk) + '</td><td class="nr">' + nr(k.palInc) + '</td></tr>';
+        }).join('') + '</table></div></div></div>';
+      /* fiecare camion */
+      var maxPal = Math.max.apply(null, cam.map(function (x) { return x.k.pal; }).concat([1]));
+      cam.sort(function (a, b) { return a.stare[2] - b.stare[2] || (a.data || '9').localeCompare(b.data || '9') || b.k.pal - a.k.pal; });
+      kpiCamioane = cam;
+      function ora(dt) { return dt ? (dt.slice(0, 10) === azi ? dt.slice(11, 16) : SC.fmtDT(dt)) : ''; }
+      h += '<div class="card"><h2>Camioane <span class="inc-sub">' + cam.length + (cam.length === 1 ? ' camion' : ' camioane') + ' · ' + nr(s.pal) + ' paleți</span></h2>' +
+        '<p>Paleții sunt reali la comenzile pregătite și estimați (rotunjiți în sus, porțiunea hașurată) la cele nepregătite. Apasă pe un camion ca să îl deschizi în Încărcări.</p>' +
+        '<div class="derulare-x"><table class="simplu"><tr>' + (kpiZi === '' ? '<th>Data</th>' : '') + '<th>Nr AUTO</th><th>Nr transport</th><th>Stare</th><th class="nr">Comenzi gata</th><th class="nr">Paleți</th><th style="width:16%"></th>' +
+        '<th class="nr">FPP</th><th class="nr">Pick</th><th class="nr">Amprente</th><th class="nr">Greutate</th><th>Început încărcare</th><th>Încărcat</th></tr>' +
+        cam.map(function (x, i) {
+          var k = x.k;
+          return '<tr class="clic" data-cam="' + i + '">' + (kpiZi === '' ? '<td>' + esc(x.data ? SC.fmtDataLunga(x.data) : '—') + '</td>' : '') + '<td><b>' + esc(x.na || '—') + '</b></td><td>' + esc(x.nt) + '</td><td><span class="eticheta ' + x.stare[1] + '">' + x.stare[0] + '</span></td>' +
+            '<td class="nr">' + k.gata + ' / ' + k.n + '</td><td class="nr"><b>' + nr(k.pal) + '</b>' + (k.palEst ? ' <span class="mic">(~' + nr(k.palEst) + ' est.)</span>' : '') + '</td>' +
+            '<td><div class="bara-p" role="img" aria-label="' + k.palReali + ' reali, ' + k.palEst + ' estimați"><i class="c-fpp" style="width:' + (k.palReali * 100 / maxPal) + '%"></i><i class="c-est" style="width:' + (k.palEst * 100 / maxPal) + '%"></i></div></td>' +
+            '<td class="nr">' + nr(k.fpp) + '</td><td class="nr">' + nr(k.pk) + '</td><td class="nr">' + (k.am ? nr(k.am) : '') + '</td><td class="nr">' + SC.fmtNum(Math.round(k.kg), 'int') + '</td>' +
+            '<td>' + esc(ora(x.inceput)) + '</td><td>' + (x.sfarsit ? esc(ora(x.sfarsit)) + (x.durata != null ? ' <span class="mic">(' + x.durata + ' min)</span>' : '') : '') + '</td></tr>';
+        }).join('') +
+        '<tr><th colspan="' + (kpiZi === '' ? 4 : 3) + '">Total</th><th class="nr">' + s.gata + ' / ' + s.n + '</th><th class="nr">' + nr(s.pal) + '</th><th></th><th class="nr">' + nr(s.fpp) + '</th><th class="nr">' + nr(s.pk) + '</th><th class="nr">' + nr(s.am) + '</th><th class="nr">' + SC.fmtNum(Math.round(s.kg), 'int') + '</th><th colspan="2"></th></tr></table></div></div>';
+    }
+    h += '<div class="card"><h2>Comenzi active fără camion alocat</h2><p>Comenzi deschise sau terminate și neîncărcate care nu au încă Nr AUTO, deci nu apar la niciun camion.</p>' +
+      (fara.length ? '<div class="kpi-grila">' +
+        '<div class="kpi"><div class="t">Comenzi</div><div class="v">' + sf.n + '</div><div class="s">' + [ST.INI, ST.LUC, ST.TER].filter(function (k) { return sf.st[k]; }).map(function (k) { return esc(k) + ' <b>' + sf.st[k] + '</b>'; }).join(' · ') + '</div></div>' +
+        '<div class="kpi"><div class="t">Paleți</div><div class="v">' + nr(sf.pal) + '</div><div class="s">reali <b>' + nr(sf.palReali) + '</b> · estimați <b>~' + nr(sf.palEst) + '</b></div></div>' +
+        '<div class="kpi"><div class="t">FPP / Pick</div><div class="v">' + nr(sf.fpp) + ' <small>/</small> ' + nr(sf.pk) + '</div><div class="s">picking de făcut: <b>' + nr(sf.pkDeFacut) + '</b></div></div>' +
+        (kpiZi ? '<div class="kpi"><div class="t">Cu livrare până la ' + esc(SC.fmtData(kpiZi)) + '</div><div class="v">' + faraPanaLa.length + '</div><div class="s"><b>' + nr(kAduna(faraPanaLa).pal) + '</b> paleți · au nevoie de camion</div></div>' : '') +
+        '</div>' : '<div class="mic">Toate comenzile active au camion alocat.</div>') + '</div>' +
+      '<div class="mic">Cifrele se calculează din comenzile active și din cele recente aflate deja în aplicație; pentru zile mai vechi de câteva zile, camioanele deja încărcate pot lipsi.</div>';
+    $('kpiCorp').innerHTML = h;
+  }
+  function kpiMuta(zile) { kpiZi = SC.ziPlus(kpiZi || SC.azi(), zile); deseneazaKpi(); }
+  $('kpiPrev').onclick = function () { kpiMuta(-1); };
+  $('kpiNext').onclick = function () { kpiMuta(1); };
+  $('kpiData').onchange = function () { if (this.value) { kpiZi = this.value; deseneazaKpi(); } };
+  $('kpiClient').onchange = deseneazaKpi;
+  $('kpiZile').addEventListener('click', function (e) { var b = e.target.closest('.cip'); if (!b) return; kpiZi = b.dataset.d; deseneazaKpi(); });
+  $('kpiCorp').addEventListener('click', function (e) {
+    var r = e.target.closest('[data-cam]'); if (!r) return;
+    var x = kpiCamioane[+r.dataset.cam]; if (!x) return;
+    $('incCauta').value = x.nt || x.na; arataTab('incarcari');
+  });
 
   /* ================= ADRESE ================= */
   var adreseAfisate = [];

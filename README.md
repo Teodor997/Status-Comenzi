@@ -44,7 +44,7 @@ Datele rămân doar în acel browser, deci este bun pentru probă, nu pentru luc
 |---|---|
 | **Administrator** | Tot: utilizatori, migrare, arhivare, jurnal, plus tot ce pot celelalte roluri. |
 | **Operator date** | Toată partea de comenzi: adaugă manual, modifică orice câmp al comenzii, schimbă statusuri, importă borderoul Kandia, fișiere Excel și fișierul de transport din TMS; editează Adrese. Nu confirmă încărcări. |
-| **Încărcări** | Doar tabul *Încărcări*: confirmă camioanele (stare camion, temperatură, semnătură) și tipărește borderoul. |
+| **Încărcări** | Taburile *Încărcări* și *KPI's*: confirmă camioanele (stare camion, temperatură, semnătură) și tipărește borderoul. |
 | **Transport** | Vede comenzile și încărcările; poate modifica doar **Nr AUTO**, direct din lista de comenzi, cât timp comanda nu e încărcată. |
 
 **Jurnal.** Fiecare modificare rămâne în *Administrare → Jurnal de modificări*: cine, când, comanda, câmpul,
@@ -87,6 +87,13 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - Ora de început a încărcării se înregistrează automat la prima tipărire a borderoului (Administrator sau Încărcări);
   ora de sfârșit este confirmarea încărcării. Lista de camioane arată ambele și durata.
 - Filtrul „Data încărcării” din tabul Încărcări folosește coloana `DataEstimataIncarcare` din fișier.
+
+## Tabul KPI's
+- Vizibil pentru toate rolurile, doar pentru citire. Pe ziua de încărcare aleasă arată: paleții de încărcat (reali la comenzile
+  pregătite, estimați la celelalte), împărțirea FPP / Pick, camioanele pe stări și paleții fiecăruia, comenzile pe statusuri,
+  greutatea, durata medie de încărcare, abaterea estimării față de real și comenzile active fără camion alocat.
+- Se calculează din datele aflate deja în aplicație: nu face citiri suplimentare din Firebase.
+- Paleți reali = FPP + Pick la comenzile pregătite; amprentele pornesc de la aceeași sumă și pot fi corectate.
 
 ## Consum în planul gratuit Firebase (Spark)
 
