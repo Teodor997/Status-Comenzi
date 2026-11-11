@@ -3,7 +3,7 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '2.4';
+  SC.VERSIUNE = '2.5';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
   SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
@@ -83,6 +83,13 @@
   /* + fara diacritice (NormalizeazaText) */
   SC.normText = function (v) {
     return SC.normAntet(v).normalize('NFD').replace(/[̀-ͯ]/g, '');
+  };
+  /* Liniile din TMS a caror referinta contine aceste cuvinte sunt retururi (marfa care se ridica de la client):
+     paletii lor nu se incarca si nu intra in niciun calcul. */
+  SC.CUVINTE_RETUR = ['ridicar', 'preluar'];   /* prinde si „ridicări”, „preluări”, „ridicarea” */
+  SC.esteRetur = function (ref) {
+    var t = ' ' + SC.normText(ref).toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ';
+    return SC.CUVINTE_RETUR.some(function (c) { return t.indexOf(' ' + c) >= 0; });
   };
   /* localitate comparabila (NormalizeazaLocalitate) */
   SC.normLoc = function (v) {

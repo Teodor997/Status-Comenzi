@@ -568,7 +568,7 @@
     var l = [];
     docs.forEach(function (d) {
       var m = d.data.l || {};
-      Object.keys(m).forEach(function (k) { var x = m[k]; x._zi = d.id; x._k = k; l.push(x); });
+      Object.keys(m).forEach(function (k) { var x = m[k]; x._zi = d.id; x._k = k; x.retur = SC.esteRetur(x.ref); l.push(x); });
     });
     SC.extra = l;
     /* pe acelasi document al zilei se tine si evidenta camioanelor: cand s-a tiparit borderoul = cand a inceput incarcarea */

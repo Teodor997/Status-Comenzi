@@ -84,6 +84,8 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - Rândurile care **nu există în registru** nu intră în tabul Comenzi: merg în rubrica „Doar din transport” din tabul
   Încărcări, apar la camionul lor și în borderou. Paleții și greutatea lor vin din TMS (`UnitatiTotale`, `MasaTotala`)
   și pot fi corectate acolo; amprentele se completează manual.
+- Liniile din TMS cu „Ridicare” sau „Preluare” în referință sunt retururi: nu se încarcă, iar paleții și greutatea lor nu
+  intră în niciun total (Încărcări, borderou, KPI's). Rămân vizibile, marcate „Retur”.
 - Ora de început a încărcării se înregistrează automat la prima tipărire a borderoului (Administrator sau Încărcări);
   ora de sfârșit este confirmarea încărcării. Lista de camioane arată ambele și durata.
 - Filtrul „Data încărcării” din tabul Încărcări folosește coloana `DataEstimataIncarcare` din fișier.

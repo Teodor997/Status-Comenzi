@@ -1037,7 +1037,7 @@
   function poateExtra() { return poate() || poateIncarca(); }
   /* o linie doar din transport, in forma unei comenzi (pentru liste, incarcare si borderou) */
   function caComanda(x) {
-    return { extra: true, _zi: x._zi, _k: x._k, n: '', cl: x.cl || '', nc: x.ref, de: x.de || '', or: x.or || '', ju: x.ju || '', na: x.na || '', nt: x.nt || '', dtr: x.dtr || '',
+    return { extra: true, retur: !!x.retur, _zi: x._zi, _k: x._k, n: '', cl: x.cl || '', nc: x.ref, de: x.de || '', or: x.or || '', ju: x.ju || '', na: x.na || '', nt: x.nt || '', dtr: x.dtr || '',
       so: x.so, re: x.re, pr: x.pr, am: x.am, gf: x.gf, ca: x.ca, ob: x.ob, inc: x.inc, di: x.di, sc: x.sc, te: x.te, se: x.se, st: ST.TER };
   }
   function dataDin(o) { return o.dtr ? String(o.dtr).slice(0, 10) : ''; }
@@ -1056,6 +1056,9 @@
     SC.extra.forEach(function (x) { if (x.na || x.nt) pune(caComanda(x)); });
     return Object.keys(g).map(function (k) {
       var x = g[k], d = '';
+      /* retururile (ridicari / preluari) raman la camion doar ca informatie: nu se incarca si nu se aduna nicaieri */
+      x.retururi = x.toate.filter(function (o) { return o.retur; });
+      x.toate = x.toate.filter(function (o) { return !o.retur; });
       x.deIncarcat = x.toate.filter(function (o) { return o.st === ST.TER && o.inc !== 'DA'; });
       x.inLucru = x.toate.filter(function (o) { return !o.extra && SC.esteDeschisa(o); });
       x.incarcate = x.toate.filter(function (o) { return o.inc === 'DA'; });
@@ -1066,7 +1069,7 @@
       if (!d && !x.deIncarcat.length && !x.inLucru.length) x.incarcate.forEach(function (o) { var z = String(o.di || '').slice(0, 10); if (z > d) d = z; });
       x.data = d;
       return x;
-    });
+    }).filter(function (x) { return x.toate.length; });   /* un camion doar cu retururi nu are nimic de incarcat */
   }
   function incFiltre() {
     return { q: SC.normNrAuto($('incCauta').value), siInc: $('incAzi').checked, areDate: Object.keys(incDate).length > 0 };
@@ -1103,7 +1106,7 @@
         function oraScurta(dt) { return dt ? (dt.slice(0, 10) === SC.azi() ? dt.slice(11, 16) : SC.fmtDT(dt)) : ''; }
         h += '<tr><td>' + esc(x.data ? SC.fmtDataLunga(x.data) : '—') + '</td><td><b>' + esc(x.na) + '</b></td><td>' + esc(x.nt) + '</td><td>' +
           (x.deIncarcat.length ? '<span class="eticheta asteapta">' + nCom(x.deIncarcat.length) + '</span>' : (x.incarcate.length ? '<span class="eticheta ok">încărcat (' + x.incarcate.length + ')</span>' : '—')) +
-          '</td><td>' + (x.inLucru.length || '') + '</td><td>' + (x.doarTransport.length || '') + '</td><td' + (info && info.bt ? ' title="Borderou tipărit de ' + esc(info.bu || '') + (info.bn > 1 ? '; retipărit de ' + (info.bn - 1) + ' ori, ultima dată ' + esc(SC.fmtDT(info.bl)) : '') + '"' : '') + '>' +
+          '</td><td>' + (x.inLucru.length || '') + '</td><td>' + (x.doarTransport.length || '') + (x.retururi.length ? ' <span class="mic" title="Ridicări / preluări: nu se încarcă și nu se adună">+' + x.retururi.length + ' retur</span>' : '') + '</td><td' + (info && info.bt ? ' title="Borderou tipărit de ' + esc(info.bu || '') + (info.bn > 1 ? '; retipărit de ' + (info.bn - 1) + ' ori, ultima dată ' + esc(SC.fmtDT(info.bl)) : '') + '"' : '') + '>' +
           (info && info.bt ? esc(oraScurta(info.bt)) + (info.bn > 1 ? ' <span class="mic">×' + info.bn + '</span>' : '') : '') + '</td><td>' +
           (sfarsit ? esc(oraScurta(sfarsit)) + (durata != null ? ' <span class="mic">(' + durata + ' min)</span>' : '') : '') + '</td><td class="nr">' + SC.fmtNum(suma(baza, 'pr'), 'int') + '</td><td class="nr">' + SC.fmtNum(suma(baza, 'am'), 'int') +
           '</td><td class="nr">' + SC.fmtNum(suma(baza, 'gf'), 'num') + '</td><td style="white-space:nowrap">' +
@@ -1128,8 +1131,10 @@
       '<table class="simplu"><tr><th>Data</th><th>Nr AUTO</th><th>Nr transport</th><th>Client</th><th>Referință</th><th>Destinatar</th><th>Localitate</th><th class="nr">Paleți</th><th class="nr">Amprente</th><th class="nr">Greutate</th><th>Încărcată</th></tr>' +
       extraAfisate.map(function (x, i) {
         return '<tr' + (poateExtra() ? ' class="clic"' : '') + ' data-x="' + i + '"><td>' + esc(x.dtr ? SC.fmtDataLunga(x.dtr) : '—') + '</td><td><b>' + esc(x.na || '') + '</b></td><td>' + esc(x.nt || '') + '</td><td>' + esc(x.cl || '') +
-          '</td><td>' + esc(x.ref) + '</td><td>' + esc(x.de || '') + '</td><td>' + esc(x.or || '') + '</td><td class="nr"' + (x.prm ? ' title="Corectat manual (în TMS: ' + esc(SC.fmtNum(x.un, 'int')) + ')"' : '') + '>' + SC.fmtNum(x.pr, 'int') + (x.prm ? ' ✎' : '') + '</td><td class="nr">' + SC.fmtNum(x.am, 'int') + '</td><td class="nr">' + SC.fmtNum(x.gf, 'num') +
-          '</td><td>' + (x.inc === 'DA' ? '<span class="eticheta ok">DA ' + esc(SC.fmtDT(x.di)) + '</span>' : '') + '</td></tr>';
+          '</td><td>' + esc(x.ref) + '</td><td>' + esc(x.de || '') + '</td><td>' + esc(x.or || '') + '</td>' +
+          (x.retur ? '<td class="nr mic" colspan="3" title="În TMS: ' + esc(SC.fmtNum(x.pr, 'int')) + ' paleți, ' + esc(SC.fmtNum(x.gf, 'num')) + ' kg">nu se ia în calcul</td><td><span class="eticheta gri">Retur</span></td></tr>' : '') +
+          (x.retur ? '' : '<td class="nr"' + (x.prm ? ' title="Corectat manual (în TMS: ' + esc(SC.fmtNum(x.un, 'int')) + ')"' : '') + '>' + SC.fmtNum(x.pr, 'int') + (x.prm ? ' ✎' : '') + '</td><td class="nr">' + SC.fmtNum(x.am, 'int') + '</td><td class="nr">' + SC.fmtNum(x.gf, 'num') +
+          '</td><td>' + (x.inc === 'DA' ? '<span class="eticheta ok">DA ' + esc(SC.fmtDT(x.di)) + '</span>' : '') + '</td></tr>');
       }).join('') + '</table>';
   }
   function suma(l, k) { return l.reduce(function (s, o) { return s + (SC.esteNum(o[k]) ? o[k] : 0); }, 0); }
@@ -1277,9 +1282,11 @@
   /* Borderoul camionului: toate comenzile lui, indiferent de status. La cele neterminate
      paletii reali, amprentele si greutatea finala raman goale (se vad doar paletii estimati). */
   function tiparesteCamion(x) {
-    var l = x.toate.slice().sort(function (a, b) { return (a.extra ? 1 : 0) - (b.extra ? 1 : 0) || (a.n || 0) - (b.n || 0); });
+    var l = x.toate.slice().sort(function (a, b) { return (a.extra ? 1 : 0) - (b.extra ? 1 : 0) || (a.n || 0) - (b.n || 0); }).concat(x.retururi || []);
+    var nrRetur = (x.retururi || []).length;
     function gata(o) { return o.extra || o.st === ST.TER || o.st === ST.SELF; }
     function val(o, k) {
+      if (o.retur && NUMERICE[k]) return '';                              /* retur: fara paleti, amprente, greutate */
       if (k === 'pe') return o.extra ? o.pr : o.pe;                       /* la liniile doar din transport estimarea = unitatile din TMS */
       if ((k === 'pr' || k === 'am' || k === 'gf') && !gata(o)) return '';
       return o[k];
@@ -1302,11 +1309,12 @@
         var text = esc(SC.fmtCelula(tmp, col));
         /* in coloana de paleti estimati apar si FPP / Pick, pe al doilea rand */
         if (c[0] === 'pe' && !o.extra) text += fppPick(o.fpp, o.pk);
+        if (c[0] === 'nc' && o.retur) text += '<div class="fp">RETUR — nu se încarcă</div>';
         return '<td' + (NUMERICE[c[0]] ? ' class="nr"' : '') + '>' + text + '</td>';
       }).join('') + '</tr>';
     });
-    var incarcat = l.filter(function (o) { return o.inc === 'DA'; })[0] || {};
-    h += '<tr><th colspan="6">TOTAL (' + l.length + (l.length === 1 ? ' linie' : ' linii') + (neterminate ? ', din care ' + neterminate + (neterminate === 1 ? ' nepregătită' : ' nepregătite') : '') + ')</th><th class="nr">' + SC.fmtNum(tot('ca'), 'int') +
+    var incarcat = l.filter(function (o) { return o.inc === 'DA' && !o.retur; })[0] || {};
+    h += '<tr><th colspan="6">TOTAL (' + (l.length - nrRetur) + (l.length - nrRetur === 1 ? ' linie' : ' linii') + (neterminate ? ', din care ' + neterminate + (neterminate === 1 ? ' nepregătită' : ' nepregătite') : '') + (nrRetur ? '; ' + nrRetur + (nrRetur === 1 ? ' retur neinclus' : ' retururi neincluse') : '') + ')</th><th class="nr">' + SC.fmtNum(tot('ca'), 'int') +
       '</th><th class="nr">' + SC.fmtNum(tot('pe'), 'num') + fppPick(areF ? suma(reg, 'fpp') : null, areP ? suma(reg, 'pk') : null) + '</th><th class="nr">' + SC.fmtNum(tot('pr'), 'int') + '</th><th class="nr">' + SC.fmtNum(tot('am'), 'int') + '</th><th class="nr">' + SC.fmtNum(tot('gf'), 'num') + '</th></tr></table>' +
       '<div class="semnaturi"><div>Stare camion: ' + esc(incarcat.sc || '________') + ' · Temperatură: ' + esc(incarcat.te || '________') + '</div><div>Semnătură depozit: ' + esc(incarcat.se || '________________') + '</div><div>Semnătură șofer: ________________</div></div>';
     /* ora la care s-a tiparit borderoul = inceputul incarcarii; se inregistreaza automat (Administrator / Incarcari) */
@@ -1461,7 +1469,7 @@
     if (client) {
       toate = toate.map(function (x) {
         var c = Object.assign({}, x);
-        ['toate', 'deIncarcat', 'inLucru', 'incarcate', 'doarTransport'].forEach(function (k) { c[k] = x[k].filter(function (o) { return o.cl === client; }); });
+        ['toate', 'deIncarcat', 'inLucru', 'incarcate', 'doarTransport', 'retururi'].forEach(function (k) { c[k] = x[k].filter(function (o) { return o.cl === client; }); });
         return c;
       }).filter(function (x) { return x.toate.length; });
     }
@@ -1564,6 +1572,14 @@
         '<div class="kpi"><div class="t">FPP / Pick</div><div class="v">' + nr(sf.fpp) + ' <small>/</small> ' + nr(sf.pk) + '</div><div class="s">picking de făcut: <b>' + nr(sf.pkDeFacut) + '</b></div></div>' +
         (kpiZi ? '<div class="kpi"><div class="t">Cu livrare până la ' + esc(SC.fmtData(kpiZi)) + '</div><div class="v">' + faraPanaLa.length + '</div><div class="s"><b>' + nr(kAduna(faraPanaLa).pal) + '</b> paleți · au nevoie de camion</div></div>' : '') +
         '</div>' : '<div class="mic">Toate comenzile active au camion alocat.</div>') + '</div>' +
+      (function () {
+        var r = SC.extra.filter(function (x) { return x.retur && (kpiZi === '' ? x.inc !== 'DA' : String(x.dtr || '').slice(0, 10) === kpiZi) && (!client || x.cl === client); });
+        return r.length ? '<div class="card"><h2>Retururi <span class="inc-sub">' + r.length + (r.length === 1 ? ' linie' : ' linii') + ' · ' + nr(suma(r, 'pr')) + ' paleți în TMS</span></h2>' +
+          '<p>Linii din TMS cu „Ridicare” sau „Preluare” în referință: marfă care se ridică de la client. Nu se încarcă și nu intră în niciuna dintre cifrele de mai sus.</p>' +
+          '<div class="derulare-x"><table class="simplu"><tr><th>Nr AUTO</th><th>Nr transport</th><th>Client</th><th>Referință</th><th>Localitate</th><th class="nr">Paleți în TMS</th></tr>' +
+          r.map(function (x) { return '<tr><td><b>' + esc(x.na || '') + '</b></td><td>' + esc(x.nt || '') + '</td><td>' + esc(x.cl || '') + '</td><td>' + esc(x.ref) + '</td><td>' + esc(x.or || '') + '</td><td class="nr">' + SC.fmtNum(x.pr, 'int') + '</td></tr>'; }).join('') +
+          '</table></div></div>' : '';
+      })() +
       '<div class="mic">Cifrele se calculează din comenzile active și din cele recente aflate deja în aplicație; pentru zile mai vechi de câteva zile, camioanele deja încărcate pot lipsi.</div>';
     $('kpiCorp').innerHTML = h;
   }
