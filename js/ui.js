@@ -307,6 +307,7 @@
   }
   function randHtml(o, i) {
     var cls = 'rand', edit = poate();
+    if (stare.evid && stare.evid[o.n]) cls += ' nou';
     if (o.st === ST.ANU) cls += ' anulata'; else if (o.st === ST.SELF) cls += ' selfpick';
     else if (SC.esteEDI(o) && SC.esteDeschisa(o)) cls += ' edi';
     var h = '<div class="' + cls + '" data-n="' + o.n + '" style="top:' + (i * RH) + 'px">';
@@ -346,6 +347,58 @@
         'Nu există comenzi încărcate. Adaugă o comandă, importă un borderou sau (administrator) fă migrarea din Excel.';
     }
   }
+  /* ---- pozitia listei ----
+     Cand lista se reface din cauza unei modificari (a ta sau a unui coleg), ramane pe loc comanda la care lucrezi
+     (ultima pe care ai apasat) sau, daca nu e cazul, primul rand vizibil. Lista sare doar cand schimbi tu filtrele sau sortarea. */
+  var tEvid = null;
+  function indexComanda(n) { var l = stare.lista; for (var i = 0; i < l.length; i++) if (l[i].n === n) return i; return -1; }
+  function semnaturaFiltre() {
+    return JSON.stringify([stare.f, stare.sort, Object.keys(stare.fc).sort().map(function (k) { return k + '=' + Array.from(stare.fc[k]).join('\u0001'); })]);
+  }
+  function iaAncora() {
+    var t = $('tabel'), l = stare.lista, sus = t.scrollTop, i = -1, a = stare.atins;
+    if (!l.length) return null;
+    if (sus > 0 && sus + t.clientHeight >= t.scrollHeight - RH) return { coada: true };   /* erai la capatul listei: ramai la capat, ca sa vezi ce se adauga */
+    if (a && Date.now() - a.t < 180000) {
+      i = indexComanda(a.n);
+      if (i >= 0 && (i * RH < sus - RH || i * RH > sus + t.clientHeight)) i = -1;      /* nu mai e pe ecran: nu tragem lista inapoi la ea */
+    }
+    if (i < 0) i = Math.min(l.length - 1, Math.floor(sus / RH));
+    return { n: l[i].n, off: i * RH - sus };
+  }
+  function refaAncora(anc) {
+    var t = $('tabel');
+    $('corp').style.height = (stare.lista.length * RH) + 'px';
+    if (anc.coada) { t.scrollTop = t.scrollHeight; return; }
+    var j = indexComanda(anc.n); if (j < 0) return;
+    var y = Math.max(0, j * RH - anc.off);
+    if (Math.abs(y - t.scrollTop) > 1) t.scrollTop = y;
+  }
+  /* dupa adaugare / import: lista merge la comanda noua si o evidentiaza cateva secunde */
+  function arataComenzi(numere) {
+    if (!numere || !numere.length) return redeseneaza();
+    stare.tinta = { n: numere[0], toate: numere, t: Date.now() };
+    redeseneaza();
+  }
+  function aplicaTinta() {
+    var x = stare.tinta; if (!x) return;
+    var i = indexComanda(x.n);
+    if (i < 0) {
+      if (SC.dupaNr[x.n]) {
+        stare.tinta = null;
+        toast((x.toate.length > 1 ? 'Comenzile noi nu se văd' : 'Comanda nouă (Nr Crt ' + x.n + ') nu se vede') + ' în listă din cauza filtrelor active. Lista a rămas pe loc.');
+      } else if (Date.now() - x.t > 20000) stare.tinta = null;
+      return;
+    }
+    stare.tinta = null;
+    stare.evid = {}; x.toate.forEach(function (n) { stare.evid[n] = 1; });
+    stare.atins = { n: x.n, t: Date.now() };
+    clearTimeout(tEvid);
+    tEvid = setTimeout(function () { stare.evid = null; if (stare.tab === 'comenzi') deseneazaRanduri(); }, 12000);
+    var t = $('tabel'), y = i * RH, sus = t.scrollTop, h = t.clientHeight - CAP;
+    $('corp').style.height = (stare.lista.length * RH) + 'px';
+    if (y < sus || y + RH > sus + h) t.scrollTop = Math.max(0, x.toate.length > 1 ? y - 2 * RH : y - Math.floor(h / 2));
+  }
   function redeseneaza() {
     if (stare.tab === 'incarcari') { deseneazaIncarcari(); }
     if (stare.tab === 'kpi') { deseneazaKpi(); }
@@ -353,7 +406,12 @@
     var a = document.activeElement;
     if (a && a.classList && a.classList.contains('stSel')) { stare.murdar = true; return; }
     stare.murdar = false;
-    calculeazaLista(); deseneazaCipuri(); deseneazaRanduri();
+    var semn = semnaturaFiltre(), anc = stare.semn === semn ? iaAncora() : null;
+    stare.semn = semn;
+    calculeazaLista(); deseneazaCipuri();
+    if (anc) refaAncora(anc);
+    aplicaTinta();
+    deseneazaRanduri();
     var tot = SC.comenzi.length;
     var nf = Object.keys(stare.fc).length;
     $('numarare').textContent = (stare.lista.length === tot ? tot + ' comenzi' : stare.lista.length + ' din ' + tot + ' comenzi încărcate') +
@@ -381,6 +439,7 @@
   $('corp').addEventListener('change', function (e) {
     var s = e.target.closest('.stSel'); if (!s) return;
     var o = SC.dupaNr[+s.closest('.rand').dataset.n];
+    if (o) stare.atins = { n: o.n, t: Date.now() };
     s.blur();
     if (o) schimbaStatus(o, s.value).catch(arataEroare).then(function () { stare.murdar = false; redeseneaza(); });
   });
@@ -389,6 +448,7 @@
     if (e.target.closest('.stSel')) return;
     var r = e.target.closest('.rand'); if (!r) return;
     var o = SC.dupaNr[+r.dataset.n]; if (!o) return;
+    stare.atins = { n: o.n, t: Date.now() };
     if (rol() === 'transport' && e.target.closest('[data-k=na]')) editeazaNrAuto(o);
     else if (poate() && o.st !== ST.ANU && e.target.closest('[data-k=fpp],[data-k=pk]')) editeazaFppPick(o);
     else if (poate() && (o.st === ST.TER || o.st === ST.SELF) && e.target.closest('[data-k=am]')) editeazaAmprente(o);
@@ -410,13 +470,13 @@
     inchideFiltru();
     if (eraAcelasi) return;
     var c = SC.COL[k], cuvSus = SC.normText(stare.f.q).split(' ').filter(Boolean), areSt = Object.keys(stare.f.st).length > 0;
-    var numeric = c.typ === 'num' || c.typ === 'int', cuOrdine = numeric || c.typ === 'date' || c.typ === 'dt';
+    var numeric = c.typ === 'num' || c.typ === 'int', eData = c.typ === 'date' || c.typ === 'dt', cuOrdine = numeric || eData;
     /* valorile distincte, tinand cont de toate celelalte filtre (ca in Excel) */
     var harta = new Map();
     SC.comenzi.forEach(function (o) {
       if (!treceSus(o, cuvSus) || !treceColoane(o, k) || (areSt && k !== 'st' && !stare.f.st[o.st])) return;
       var d = valAfisata(o, c), x = harta.get(d);
-      if (x) x.n++; else harta.set(d, { d: d, r: o[k], n: 1, h: SC.normText(d) });
+      if (x) x.n++; else harta.set(d, { d: d, r: o[k], n: 1, h: SC.normText(d), zi: eData && /^\d{4}-\d{2}-\d{2}/.test(String(o[k])) ? String(o[k]).slice(0, 10) : '' });
     });
     var vals = Array.from(harta.values()).sort(function (a, b) {
       if (a.d === GOALE) return 1; if (b.d === GOALE) return -1;
@@ -426,6 +486,53 @@
     var activ = stare.fc[k], sel = new Set();
     vals.forEach(function (v) { if (!activ || activ.has(v.d)) sel.add(v.d); });
     var MAX = 400, cautare = '';
+    /* coloanele cu date: valorile se grupeaza pe ani > luni > zile, ca in Excel */
+    var LUNI = ['Ianuarie', 'Februarie', 'Martie', 'Aprilie', 'Mai', 'Iunie', 'Iulie', 'August', 'Septembrie', 'Octombrie', 'Noiembrie', 'Decembrie'];
+    var deschise = {};
+    function subNod(cheie) { return vals.filter(function (v) { return v.zi && v.zi.indexOf(cheie) === 0; }); }
+    function stareNod(cheie) { var l = subNod(cheie), b = l.filter(function (v) { return sel.has(v.d); }).length; return b === 0 ? 0 : (b === l.length ? 2 : 1); }
+    if (eData) {
+      var aniExistenti = {};
+      vals.forEach(function (v) { if (v.zi) aniExistenti[v.zi.slice(0, 4)] = 1; });
+      if (Object.keys(aniExistenti).length === 1) deschise[Object.keys(aniExistenti)[0]] = true;
+      /* daca filtrul e deja pus, se deschid ramurile bifate partial, ca sa se vada ce e ales */
+      if (activ) vals.forEach(function (v) {
+        if (!v.zi) return;
+        if (stareNod(v.zi.slice(0, 4)) === 1) deschise[v.zi.slice(0, 4)] = true;
+        if (stareNod(v.zi.slice(0, 7)) === 1) deschise[v.zi.slice(0, 7)] = true;
+      });
+    }
+    function htmlArbore(m) {
+      var ani = {}, rest = [], h = '';
+      m.forEach(function (v) {
+        if (!v.zi) { rest.push(v); return; }
+        var a = v.zi.slice(0, 4), l = v.zi.slice(0, 7);
+        var A = ani[a] || (ani[a] = { n: 0, luni: {} }), U = A.luni[l] || (A.luni[l] = { n: 0, zile: {} });
+        A.n += v.n; U.n += v.n; U.zile[v.zi] = (U.zile[v.zi] || 0) + v.n;
+      });
+      function nod(cheie, text, n, nivel, cls) {
+        var exp = cheie.length < 10;
+        return '<div class="pf-nod ' + cls + '" style="padding-left:' + (nivel * 18) + 'px">' +
+          (exp ? '<button type="button" class="pf-exp" data-e="' + cheie + '" aria-expanded="' + (deschise[cheie] ? 'true' : 'false') + '" aria-label="' + (deschise[cheie] ? 'Restrânge ' : 'Desfășoară ') + esc(text) + '">' + (deschise[cheie] ? '▾' : '▸') + '</button>' : '<span class="pf-exp"></span>') +
+          '<label class="bifa"><input type="checkbox" data-g="' + cheie + '"> <span class="pf-v">' + esc(text) + '</span><span class="mic">' + n + '</span></label></div>';
+      }
+      Object.keys(ani).sort().reverse().forEach(function (a) {
+        h += nod(a, a, ani[a].n, 0, 'pf-an');
+        if (!deschise[a]) return;
+        Object.keys(ani[a].luni).sort().reverse().forEach(function (l) {
+          h += nod(l, LUNI[+l.slice(5, 7) - 1], ani[a].luni[l].n, 1, 'pf-luna');
+          if (!deschise[l]) return;
+          Object.keys(ani[a].luni[l].zile).sort().reverse().forEach(function (z) { h += nod(z, SC.fmtDataLunga(z), ani[a].luni[l].zile[z], 2, 'pf-zi'); });
+        });
+      });
+      rest.forEach(function (v) {
+        h += '<div class="pf-nod"><span class="pf-exp"></span><label class="bifa"><input type="checkbox" data-v="' + esc(v.d) + '"' + (sel.has(v.d) ? ' checked' : '') + '> <span class="pf-v">' + esc(v.d) + '</span><span class="mic">' + v.n + '</span></label></div>';
+      });
+      return h;
+    }
+    function bifeArbore() {
+      Array.prototype.forEach.call(lista.querySelectorAll('[data-g]'), function (cb) { var s = stareNod(cb.dataset.g); cb.checked = s === 2; cb.indeterminate = s === 1; });
+    }
 
     var p = document.createElement('div');
     p.className = 'popfiltru'; p.dataset.k = k;
@@ -444,16 +551,24 @@
       return cuv.length ? vals.filter(function (v) { return cuv.every(function (w) { return v.h.indexOf(w) >= 0; }); }) : vals;
     }
     function deseneaza() {
-      var m = potrivite(), h = '';
-      m.slice(0, MAX).forEach(function (v) {
+      var m = potrivite(), h = '', arbore = eData && !cautare, poz = lista.scrollTop;
+      if (arbore) h = htmlArbore(m);
+      else m.slice(0, MAX).forEach(function (v) {
         h += '<label class="bifa"><input type="checkbox" data-v="' + esc(v.d) + '"' + (sel.has(v.d) ? ' checked' : '') + '> <span class="pf-v">' + esc(v.d) + '</span><span class="mic">' + v.n + '</span></label>';
       });
       lista.innerHTML = h || '<div class="mic" style="padding:8px">Nicio valoare nu corespunde căutării.</div>';
+      if (arbore) { bifeArbore(); lista.scrollTop = poz; }
       var bifate = m.filter(function (v) { return sel.has(v.d); }).length;
       tot.checked = m.length > 0 && bifate === m.length; tot.indeterminate = bifate > 0 && bifate < m.length;
       p.querySelector('.pf-tot span').textContent = cautare ? '(Selectează toate rezultatele căutării)' : '(Selectează tot)';
-      nota.textContent = m.length + (m.length === 1 ? ' valoare' : ' valori') + (m.length > MAX ? ' — afișate primele ' + MAX + '; folosește căutarea' : '');
+      nota.textContent = arbore ? m.length + (m.length === 1 ? ' valoare' : ' valori') + ' · apasă ▸ pentru luni și zile' :
+        m.length + (m.length === 1 ? ' valoare' : ' valori') + (m.length > MAX ? ' — afișate primele ' + MAX + '; folosește căutarea' : '');
     }
+    lista.addEventListener('click', function (e) {
+      var b = e.target.closest('button.pf-exp'); if (!b) return;
+      deschise[b.dataset.e] = !deschise[b.dataset.e]; deseneaza();
+      var nou = lista.querySelector('button.pf-exp[data-e="' + b.dataset.e + '"]'); if (nou) nou.focus();
+    });
     inp.addEventListener('input', function () {
       var inainte = cautare; cautare = inp.value;
       /* ca in Excel: la prima tastare raman bifate doar rezultatele cautarii */
@@ -468,6 +583,13 @@
       deseneaza();
     });
     lista.addEventListener('change', function (e) {
+      var g = e.target.closest('[data-g]');
+      if (g) {   /* an / luna / zi: bifeaza sau debifeaza tot ce are dedesubt */
+        subNod(g.dataset.g).forEach(function (v) { if (g.checked) sel.add(v.d); else sel.delete(v.d); });
+        deseneaza();
+        var la = lista.querySelector('[data-g="' + g.dataset.g + '"]'); if (la) la.focus();
+        return;
+      }
       var cb = e.target.closest('[data-v]'); if (!cb) return;
       if (cb.checked) sel.add(cb.dataset.v); else sel.delete(cb.dataset.v);
       var m = potrivite(), bifate = m.filter(function (v) { return sel.has(v.d); }).length;
@@ -903,7 +1025,7 @@
             val.st = ST.INI; val.im = 'MANUAL: ' + stampila();
             return L.creeaza([val], 'Comandă nouă ' + val.cl + ' ' + val.nc).then(function (nr) {
               toast('Comanda ' + val.nc + ' a fost adăugată cu Nr Crt ' + nr[0] + '.', 'bun');
-              redeseneaza(); $('tabel').scrollTop = $('tabel').scrollHeight;
+              arataComenzi(nr);
             });
           });
         }
@@ -981,7 +1103,7 @@
                 });
               }).then(function () {
                 toast('Importate ' + noi.length + ' comenzi (Nr Crt ' + nr[0] + '–' + nr[nr.length - 1] + ').', 'bun');
-                redeseneaza(); $('tabel').scrollTop = $('tabel').scrollHeight;
+                arataComenzi(nr);
               });
             });
           }
@@ -1022,8 +1144,8 @@
         titlu: 'Import din Excel', html: html,
         butoane: [{ t: 'Renunță', v: null }, {
           t: 'Importă ' + nCom(noi.length), cls: 'pri', fn: function () {
-            return L.creeaza(noi, 'Import Excel ' + fisier.name + ': ' + noi.length + ' comenzi').then(function () {
-              toast('Importate ' + noi.length + ' comenzi.', 'bun'); redeseneaza(); $('tabel').scrollTop = $('tabel').scrollHeight;
+            return L.creeaza(noi, 'Import Excel ' + fisier.name + ': ' + noi.length + ' comenzi').then(function (nr) {
+              toast('Importate ' + noi.length + ' comenzi.', 'bun'); arataComenzi(nr);
             });
           }
         }]

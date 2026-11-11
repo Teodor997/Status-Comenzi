@@ -116,11 +116,17 @@
   .popfiltru .pf-lista { flex: 1; min-height: 90px; max-height: 300px; overflow: auto; border: 1px solid var(--line2); border-radius: 6px; padding: 4px 6px; display: flex; flex-direction: column; }
   .popfiltru .pf-lista label { padding: 2px 0; }
   .popfiltru .pf-v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .popfiltru .pf-nod { display: flex; align-items: center; gap: 2px; }
+  .popfiltru .pf-nod label { flex: 1; min-width: 0; }
+  .popfiltru .pf-exp { flex: none; width: 22px; height: 22px; border: 0; border-radius: 4px; background: none; color: var(--muted); font-size: 12px; line-height: 1; padding: 0; cursor: pointer; }
+  .popfiltru button.pf-exp:hover { background: var(--line2); color: var(--text); }
+  .popfiltru .pf-an .pf-v { font-weight: 700; }
   .popfiltru .pf-jos { display: flex; gap: 6px; align-items: center; }
   .cap > div:hover { background: #dde3ee; }
   #corp { position: relative; width: var(--latime); }
   .rand { position: absolute; left: 0; height: 30px; border-bottom: 1px solid var(--line2); font-size: 12.5px; cursor: pointer; background: #fff; }
   .rand:hover { filter: brightness(.965); }
+  .rand.nou { background: #fff3c4; box-shadow: inset 4px 0 0 var(--navy); }
   .rand > div { padding: 0 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 29px; border-right: 1px solid var(--line2); }
   .rand > div.nr { text-align: right; font-variant-numeric: tabular-nums; }
   .rand.edi { color: #0000c8; }
