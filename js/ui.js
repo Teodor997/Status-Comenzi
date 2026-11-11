@@ -819,6 +819,9 @@
       inp = '<select data-k="inc"' + (editabil ? '' : ' disabled') + '>' + ['', 'DA', 'NU'].map(function (x) {
         return '<option' + (x === v ? ' selected' : '') + '>' + x + '</option>';
       }).join('') + '</select>';
+    } else if (k === 'ob' && editabil) {
+      /* text liber + lista cu textele uzuale: alegerea din lista adauga textul (sau il scoate, daca exista deja) */
+      inp = '<span class="ob-rand"><input type="text" data-k="ob" value="' + esc(v) + '"><select class="ob-sel" aria-label="Texte uzuale pentru Observații">' + obOptiuni(v) + '</select></span>';
     } else if (c.typ === 'date' && (v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v))) {
       inp = '<input type="date" data-k="' + k + '" value="' + esc(v) + '"' + ro + '>';
     } else if (c.typ === 'num' || c.typ === 'int') {
@@ -828,6 +831,25 @@
     }
     return '<label class="camp' + (LATE[k] ? ' lat2' : '') + '"><span>' + esc(c.t) + '</span>' + inp + '</label>';
   }
+  function obParti(text) { return String(text || '').split('/').map(function (x) { return x.trim(); }).filter(Boolean); }
+  function obOptiuni(text) {
+    var are = obParti(text).map(SC.normText);
+    return '<option value="">Alege din listă…</option>' + (SC.config.observatii || []).map(function (x) {
+      return '<option value="' + esc(x) + '">' + (are.indexOf(SC.normText(x)) >= 0 ? '✓ ' : '') + esc(x) + '</option>';
+    }).join('');
+  }
+  document.addEventListener('change', function (e) {
+    var s = e.target.closest ? e.target.closest('.ob-sel') : null; if (!s || !s.value) return;
+    var inp = s.parentNode.querySelector('[data-k=ob]'), parti = obParti(inp.value), cheie = SC.normText(s.value), i = parti.map(SC.normText).indexOf(cheie);
+    if (i >= 0) parti.splice(i, 1); else parti.push(s.value);
+    inp.value = parti.join(' / ');
+    s.innerHTML = obOptiuni(inp.value); s.value = '';
+    inp.focus();
+  });
+  document.addEventListener('input', function (e) {
+    if (!e.target.matches || !e.target.matches('.ob-rand [data-k=ob]')) return;
+    var s = e.target.parentNode.querySelector('.ob-sel'); if (s) s.innerHTML = obOptiuni(e.target.value);
+  });
   function citesteCampuri(rad) {
     var val = {}, greseala = null;
     Array.prototype.forEach.call(rad.querySelectorAll('[data-k]'), function (el) {
@@ -1011,7 +1033,7 @@
     return modal({ titlu: 'Comanda ' + o.nc + (o.cl ? ' — ' + o.cl : ''), html: html, lat: true, butoane: butoane, laDeschidere: leagaCodClient });
   }
   $('btnNoua').onclick = function () {
-    var html = '<div class="grila">' + CAMPURI_NOI.map(function (k) { return campHtml(k, '', true); }).join('') + '</div>' +
+    var html = '<div class="grila">' + CAMPURI_NOI.map(function (k) { return campHtml(k, k === 'dc' ? SC.azi() : '', true); }).join('') + '</div>' +
       '<div class="mic">Comanda primește statusul Initiata, următorul Nr Crt și eticheta „MANUAL: data ora”. Cu Cod Client completat, destinatarul și adresa vin din Adrese.</div>';
     modal({
       titlu: 'Comandă nouă', html: html, lat: true, laDeschidere: leagaCodClient,
@@ -1801,6 +1823,7 @@
       '<label class="camp"><span>Client cu greutate automată</span><input type="text" id="cAuto" value="' + esc(SC.config.clientGreutateAuto) + '" style="width:150px"></label>' +
       '<label class="camp"><span>Kg / palet</span><input type="text" id="cKg" value="' + esc(SC.config.kgPalet) + '" style="width:80px"></label>' +
       '<label class="camp"><span>Toleranță paleți (±)</span><input type="text" id="cTol" value="' + esc(SC.config.tolerantaPaleti) + '" style="width:80px"></label>' +
+      '<label class="camp" style="flex:1 1 100%"><span>Texte din lista de la Observații (separate prin virgulă)</span><input type="text" id="cObs" value="' + esc((SC.config.observatii || []).join(', ')) + '"></label>' +
       '<button class="btn pri" id="cSalveaza">Salvează</button></div></div>';
 
     var cand = candidatiArhivare(14).length;
@@ -1859,7 +1882,8 @@
       var clienti = $('cClienti').value.split(',').map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean);
       var kg = SC.parseNum($('cKg').value), tol = SC.parseNum($('cTol').value);
       if (!clienti.length || kg == null || tol == null) return toast('Verifică valorile.', 'rau');
-      var cfg = Object.assign({}, SC.config, { clienti: clienti, clientGreutateAuto: $('cAuto').value.trim().toUpperCase(), kgPalet: kg, tolerantaPaleti: tol });
+      var cfg = Object.assign({}, SC.config, { clienti: clienti, clientGreutateAuto: $('cAuto').value.trim().toUpperCase(), kgPalet: kg, tolerantaPaleti: tol,
+        observatii: $('cObs').value.split(',').map(function (x) { return x.trim(); }).filter(Boolean) });
       SC.store.tx(function (t) { t.set('meta', 'config', cfg); t.log('Configurare: clienți / reguli modificate'); }).then(function () { toast('Salvat.', 'bun'); }, arataEroare);
     } else if (b.id === 'aArhiveaza') {
       var zile = SC.parseNum($('aZile').value);

@@ -3,7 +3,7 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '2.7';
+  SC.VERSIUNE = '2.8';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
   SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
@@ -16,7 +16,8 @@
     clientGreutateAuto: 'KANDIA',  // greutate finala = greutate + paleti reali * kgPalet
     kgPalet: 20,
     tolerantaPaleti: 1,
-    factorGreutate: 5
+    factorGreutate: 5,
+    observatii: ['Stoc', 'Cross', 'Ridicare client', 'Doar loturi cerute']   // textele uzuale din lista de la Observatii
   };
 
   /* Coloanele registrului, in ordinea din Excel.
