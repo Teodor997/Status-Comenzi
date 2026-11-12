@@ -95,6 +95,14 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
   A doua opțiune a aceleiași ferestre șterge camioanele „Fără dată”: Nr AUTO de pe comenzile neîncărcate care nu au dată de
   transport (valoarea veche rămâne în jurnal).
 
+## Cumul (comenzi legate)
+- Operatorul de date (și Administratorul) bifează două sau mai multe comenzi deschise și apasă **Cumulat**. Se pot lega doar
+  comenzi cu același client și același destinatar. Comenzile legate au o dungă albastră pe celula Nr Crt (nu există coloană separată).
+- Comenzile legate își schimbă statusul împreună. La Terminata / Self-Pick paleții (FPP, Pick) se trec o singură dată, pe
+  comanda la care se schimbă statusul; celelalte se închid cu 0 paleți. Greutatea finală rămâne greutatea din tabel.
+- La căutare sau filtrare, dacă apare o comandă dintr-un cumul, apar și celelalte.
+- Cumulul se vede și se anulează (cu confirmare) din bara de bifare: bifezi una dintre comenzi, apoi „Vezi cumulul” sau „Anulează cumulul”.
+
 ## Tabul KPI's
 - Vizibil pentru toate rolurile, doar pentru citire. Pe ziua de încărcare aleasă arată: paleții de încărcat (reali la comenzile
   pregătite, estimați la celelalte), împărțirea FPP / Pick, camioanele pe stări și paleții fiecăruia, comenzile pe statusuri,

@@ -83,7 +83,9 @@
   function poateIncarca() { return rol() === 'admin' || rol() === 'incarcari'; }
   function poateTms() { return poate() || rol() === 'transport'; }
   /* bifarea mai multor comenzi, cu totaluri (Transport; si Administratorul, ca sa poata verifica) */
-  function cuSelectie() { return rol() === 'transport' || rol() === 'admin'; }
+  function cuSelectie() { return rol() === 'transport' || rol() === 'admin' || rol() === 'operator'; }
+  /* comenzile legate in acelasi cumul cu o (inclusiv ea); [] daca nu e in niciun cumul */
+  function membriCumul(o) { return o && o.cum ? SC.comenzi.filter(function (x) { return x.cum === o.cum; }) : []; }
   function editareInLinie() { var a = document.activeElement; return !!(a && a.classList && (a.classList.contains('stSel') || a.classList.contains('naInline'))); }
   function nCom(n) { return n === 1 ? '1 comandă' : n + ' comenzi'; }
   function stampila() { var d = new Date(); return SC.p2(d.getDate()) + '.' + SC.p2(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + SC.oraAcum(); }
@@ -279,7 +281,17 @@
     });
     stare.numarStatus = num;
     var l = areSt ? baza.filter(function (o) { return f.st[o.st]; }) : baza;
-    var k = stare.sort.k, dir = stare.sort.dir;
+    var k = stare.sort.k, dir = stare.sort.dir, adaugate = false;
+    /* cumul: daca o comanda trece de filtre / cautare, apar si cele cu care este legata */
+    if (l.length < SC.comenzi.length) {
+      var inL = {}, cumL = {}, areCum = false;
+      l.forEach(function (o) { inL[o.n] = 1; if (o.cum) { cumL[o.cum] = 1; areCum = true; } });
+      if (areCum) {
+        var legate = SC.comenzi.filter(function (o) { return o.cum && cumL[o.cum] && !inL[o.n]; });
+        if (legate.length) { l = l.concat(legate); adaugate = true; }
+      }
+    }
+    if (adaugate && k === 'n' && dir === 1) l.sort(function (a, b) { return a.n - b.n; });
     if (!(k === 'n' && dir === 1)) {
       l = l.slice().sort(function (a, b) {
         var x = a[k], y = b[k];
@@ -321,6 +333,7 @@
     else if (SC.esteEDI(o) && SC.esteDeschisa(o)) cls += ' edi';
     var bifat = stare.sel && stare.sel[o.n];
     if (bifat) cls += ' bifat';
+    if (o.cum) cls += ' legata';       /* comanda dintr-un cumul: dunga in stanga, pe celula Nr Crt */
     var h = '<div class="' + cls + '" data-n="' + o.n + '" style="top:' + (i * RH) + 'px">';
     if (cuSelectie()) h += '<div class="selc"><input type="checkbox" class="selR" aria-label="Bifează comanda ' + esc(o.nc) + '"' + (bifat ? ' checked' : '') + '></div>';
     for (var j = 0; j < SC.COLS.length; j++) {
@@ -336,6 +349,7 @@
       if (c.k === 'inc' && o.inc === 'DA') cc = 'da';
       if (c.k === 'na' && rol() === 'transport' && o.inc !== 'DA') cc = 'ed';
       var titlu = (c.typ === 'txt' && v.length > 14) ? ' title="' + esc(v) + '"' : '';
+      if (c.k === 'n' && o.cum) { cc += ' nrc'; titlu = ' title="Comandă legată în cumulul ' + esc(o.cum) + ' (' + membriCumul(o).map(function (x) { return x.nc; }).join(', ') + ')"'; }
       /* comenzi mai vechi la care paletii reali nu sunt FPP + Pick: semnalate, se corecteaza din FPP / Pick */
       if (c.k === 'pr' && SC.esteNum(o.fpp) && SC.esteNum(o.pk) && SC.esteNum(o.pr) && o.fpp + o.pk !== o.pr) {
         cc += ' nepotrivit'; titlu = ' title="FPP ' + o.fpp + ' + Pick ' + o.pk + ' = ' + (o.fpp + o.pk) + ', dar paleți reali = ' + o.pr + '. Apasă pe FPP sau Pick și salvează."';
@@ -738,12 +752,17 @@
   };
 
   /* ================= COMENZI: statusuri ================= */
-  function cereDateTerminare(o, st) {
-    var cfg = SC.config, auto = L.greutateAuto(o), eKandia = SC.normText(o.cl) === SC.normText(cfg.clientGreutateAuto);
-    var est = SC.esteNum(o.pe) ? o.pe : null;
-    var html = '<div class="nota">' + esc(o.cl) + ' · comanda <b>' + esc(o.nc) + '</b><br>' + esc(o.de || '') +
+  function cereDateTerminare(o, st, grup) {
+    var cfg = SC.config, cumul = !!(grup && grup.length > 1);
+    /* la cumul nu se cere si nu se calculeaza greutatea: ramane cea din tabel */
+    var auto = cumul || L.greutateAuto(o), eKandia = SC.normText(o.cl) === SC.normText(cfg.clientGreutateAuto);
+    var est = cumul ? (grup.some(function (x) { return SC.esteNum(x.pe); }) ? SC.rotunjeste(suma(grup, 'pe')) : null) : (SC.esteNum(o.pe) ? o.pe : null);
+    var html = (cumul ? '<div class="nota">Cumul <b>' + esc(o.cum) + '</b> · ' + esc(o.cl) + ' · ' + esc(o.de || '') + '</div>' + tabelCumul(grup) +
+        '<div class="nota atentie" style="margin-top:8px">Paleții se trec o singură dată, pe comanda <b>' + esc(o.nc) + '</b>. ' + (grup.length === 2 ? 'Cealaltă comandă se închide' : 'Celelalte ' + (grup.length - 1) + ' comenzi se închid') +
+        ' automat cu 0 paleți. Greutatea finală rămâne greutatea din tabel.</div>' :
+      '<div class="nota">' + esc(o.cl) + ' · comanda <b>' + esc(o.nc) + '</b><br>' + esc(o.de || '') +
       (est != null ? '<br>Paleți estimați: <b>' + SC.fmtNum(est, 'num') + '</b>' : '') +
-      (SC.esteNum(o.g) ? ' · Greutate: <b>' + SC.fmtNum(o.g, 'num') + ' kg</b>' : '') + '</div>' +
+      (SC.esteNum(o.g) ? ' · Greutate: <b>' + SC.fmtNum(o.g, 'num') + ' kg</b>' : '') + '</div>') +
       '<div class="grila">' +
       '<label class="camp"><span>FPP (paleți full)</span><input type="text" id="tFpp" inputmode="numeric" value="' + (SC.esteNum(o.fpp) ? o.fpp : '') + '"></label>' +
       '<label class="camp"><span>Pick (paleți din picking)</span><input type="text" id="tPk" inputmode="numeric" value="' + (SC.esteNum(o.pk) ? o.pk : '') + '"></label>' +
@@ -751,7 +770,7 @@
       '<label class="camp"><span>Amprente paleți</span><input type="text" id="tAm" inputmode="numeric" value="' + (SC.esteNum(o.am) ? o.am : '') + '"></label>' +
       (auto ? '' : '<label class="camp"><span>Greutate finală (kg)</span><input type="text" id="tGf" inputmode="decimal" value="' + (SC.esteNum(o.gf) ? String(o.gf).replace('.', ',') : '') + '"></label>') +
       '</div>' +
-      (auto ? '<div class="mic">Greutatea finală se calculează automat: greutate + paleți reali × ' + cfg.kgPalet + ' kg.</div>' :
+      (cumul ? '' : auto ? '<div class="mic">Greutatea finală se calculează automat: greutate + paleți reali × ' + cfg.kgPalet + ' kg.</div>' :
         (eKandia ? '<div class="nota atentie">Comanda este ' + esc(cfg.clientGreutateAuto) + ', dar Greutatea lipsește, deci greutatea finală se introduce manual.</div>' :
           '<div class="mic">Zecimalele se scriu cu virgulă (ex. 2135,45).</div>')) +
       '<div class="mic">FPP și Pick se confirmă la închiderea comenzii. Paleții reali sunt mereu FPP + Pick. Amprentele pornesc de la aceeași sumă și pot fi corectate.</div>';
@@ -763,7 +782,7 @@
       return n;
     }
     return modal({
-      titlu: st === ST.SELF ? 'Ridicare client — date pregătire' : 'Terminare comandă', html: html,
+      titlu: (st === ST.SELF ? 'Ridicare client — date pregătire' : (cumul ? 'Terminare cumul' : 'Terminare comandă')), html: html, lat: cumul,
       laDeschidere: function (rad) {
         var iPr = rad.querySelector('#tPr'), iF = rad.querySelector('#tFpp'), iP = rad.querySelector('#tPk'), iA = rad.querySelector('#tAm');
         var atins = SC.esteNum(o.pk);
@@ -776,7 +795,7 @@
           if (!amAtins) iA.value = s == null ? '' : s;
         }
         iF.addEventListener('input', function () {
-          if (!atins) { var p = SC.pickPropus(SC.parseNum(iF.value.trim()), o.pe, null); if (p != null) iP.value = p; }
+          if (!atins) { var p = SC.pickPropus(SC.parseNum(iF.value.trim()), est, null); if (p != null) iP.value = p; }
           total();
         });
         iP.addEventListener('input', function () { atins = true; total(); });
@@ -798,7 +817,7 @@
             var rot = Math.ceil(est);
             if (Math.abs(pr - rot) > cfg.tolerantaPaleti) {
               pasi = pasi.then(function (ok) {
-                return ok && confirma('Pentru comanda ' + o.nc + ' estimarea este ' + SC.fmtNum(est, 'num') + ' paleți (aprox. ' + rot + ').\nFPP ' + fpp + ' + Pick ' + pk + ' = ' + pr + ' paleți reali. Este corect?');
+                return ok && confirma('Pentru ' + (cumul ? 'cumulul ' + o.cum : 'comanda ' + o.nc) + ' estimarea este ' + SC.fmtNum(est, 'num') + ' paleți (aprox. ' + rot + ').\nFPP ' + fpp + ' + Pick ' + pk + ' = ' + pr + ' paleți reali. Este corect?');
               });
             }
           }
@@ -813,14 +832,37 @@
                 ' ori mai mare decât greutatea din comandă (' + SC.fmtNum(o.g, 'num') + ' kg).\nZecimalele se introduc cu virgulă (ex. 2135,454). Este corectă valoarea?');
             });
           }
-          return pasi.then(function (ok) { return ok ? { pr: pr, am: am, gf: gf, fpp: fpp, pk: pk } : false; });
+          return pasi.then(function (ok) { return ok ? { pr: pr, am: am, gf: gf, fpp: fpp, pk: pk, cumul: cumul } : false; });
         }
       }]
+    });
+  }
+  /* cumul: statusul se schimba la toate comenzile legate; paletii se trec doar pe comanda la care s-a lucrat */
+  function schimbaStatusCumul(o, stNou, grup) {
+    var cod = o.cum, n = o.n, tinta = grup.filter(function (x) { return x.inc !== 'DA' && (x.n === n || x.st !== stNou); }).sort(function (a, b) { return a.n - b.n; });
+    var asteptat = {}; tinta.forEach(function (x) { asteptat[x.n] = x.st; });
+    var lista = tinta.map(function (x) { return x.nc; }).join(', '), p;
+    if (stNou === ST.TER) p = cereDateTerminare(o, stNou, tinta);
+    else if (stNou === ST.SELF) p = confirma('Cumulul ' + cod + ' (' + lista + ') se ridică de către client?').then(function (ok) { return ok ? cereDateTerminare(o, stNou, tinta) : null; });
+    else if (stNou === ST.ANU) p = confirma('Comanda ' + o.nc + ' face parte din cumulul ' + cod + '.\nSe anulează toate cele ' + tinta.length + ' comenzi: ' + lista + '?\n\nToate datele lor se șterg; rămân Nr Crt, clientul, numărul de comandă și eticheta de import.\nCa să anulezi doar una, anulează întâi cumulul.').then(function (ok) { return ok ? {} : null; });
+    else p = Promise.resolve({});
+    return p.then(function (date) {
+      if (!date) return;
+      return L.modifica(tinta.map(function (m) {
+        return {
+          n: m.n, fn: function (x) {
+            if (x.st !== asteptat[m.n]) throw L.eroare('Statusul comenzii ' + x.nc + ' a fost schimbat între timp de un coleg (acum: ' + x.st + '). Verifică și repetă.');
+            L.aplicaStatus(x, stNou, (stNou === ST.TER || stNou === ST.SELF) ? (m.n === n ? date : { pr: 0, am: 0, fpp: 0, pk: 0, cumul: true }) : date);
+          }
+        };
+      }), 'Cumul ' + cod + ' (' + lista + ') → ' + stNou).then(function () { toast('Cumul ' + cod + ': ' + nCom(tinta.length) + ' → ' + stNou, 'bun'); });
     });
   }
   function schimbaStatus(o, stNou) {
     var vechi = o.st, nc = o.nc, n = o.n;
     if (stNou === vechi) return Promise.resolve();
+    var grup = membriCumul(o);
+    if (grup.length > 1) return schimbaStatusCumul(o, stNou, grup);
     var p;
     if (stNou === ST.TER) p = cereDateTerminare(o, stNou);
     else if (stNou === ST.SELF) {
@@ -1007,12 +1049,100 @@
     b.innerHTML = '<span>Bifate: <b>' + nCom(l.length) + '</b></span><span>Greutate: <b>' + SC.fmtNum(SC.rotunjeste(suma(l, 'g')), 'num') + ' kg</b></span>' +
       '<span>Paleți estimați: <b>' + SC.fmtNum(SC.rotunjeste(suma(l, 'pe')), 'num') + '</b></span>' +
       (ascunse ? '<span class="mic">' + ascunse + (ascunse === 1 ? ' bifată nu se vede' : ' bifate nu se văd') + ' cu filtrele de acum</span>' : '') +
-      '<span style="flex:1"></span><button type="button" class="btn mic" id="selNa">Nr AUTO pentru cele bifate…</button><button type="button" class="btn mic" id="selGol">Debifează tot</button>';
+      '<span style="flex:1"></span>' +
+      (poate() ? '<button type="button" class="btn mic pri" id="selCum">Cumulat</button>' : '') +
+      (l.some(function (o) { return o.cum; }) ? '<button type="button" class="btn mic" id="selVezi">Vezi cumulul</button>' : '') +
+      (poate() && l.some(function (o) { return o.cum; }) ? '<button type="button" class="btn mic" id="selDecum">Anulează cumulul</button>' : '') +
+      '<button type="button" class="btn mic" id="selNa">Nr AUTO pentru cele bifate…</button><button type="button" class="btn mic" id="selGol">Debifează tot</button>';
   }
   $('baraSel').addEventListener('click', function (e) {
     if (e.target.id === 'selGol') { stare.sel = {}; deseneazaRanduri(); deseneazaBaraSel(); }
     else if (e.target.id === 'selNa') nrAutoPentruBifate();
+    else if (e.target.id === 'selCum') cumuleazaBifate();
+    else if (e.target.id === 'selVezi') { var prima = comenziBifate().filter(function (o) { return o.cum; })[0]; if (prima) arataCumul(prima); }
+    else if (e.target.id === 'selDecum') {
+      var cu = {}; comenziBifate().forEach(function (o) { if (o.cum) cu[o.cum] = 1; });
+      anuleazaCumul(Object.keys(cu));
+    }
   });
+  /* ---- cumul: comenzi legate intre ele (acelasi client, acelasi destinatar) ---- */
+  function tabelCumul(l) {
+    return '<div class="derulare-x"><table class="simplu"><tr><th>Nr Crt</th><th>Nr. Comandă</th><th>Status</th><th class="nr">Paleți estimați</th><th class="nr">Greutate</th><th class="nr">Paleți reali</th></tr>' +
+      l.map(function (o) {
+        return '<tr><td>' + o.n + '</td><td><b>' + esc(o.nc) + '</b></td><td>' + esc(o.st) + '</td><td class="nr">' + SC.fmtNum(o.pe, 'num') + '</td><td class="nr">' + SC.fmtNum(o.g, 'num') + '</td><td class="nr">' + SC.fmtNum(o.pr, 'int') + '</td></tr>';
+      }).join('') +
+      '<tr><th colspan="3">Total ' + nCom(l.length) + '</th><th class="nr">' + SC.fmtNum(SC.rotunjeste(suma(l, 'pe')), 'num') + '</th><th class="nr">' + SC.fmtNum(SC.rotunjeste(suma(l, 'g')), 'num') + '</th><th class="nr">' + SC.fmtNum(suma(l, 'pr'), 'int') + '</th></tr></table></div>';
+  }
+  function cumuleazaBifate() {
+    if (!poate()) return;
+    var bif = comenziBifate();
+    if (bif.length < 2) { toast('Bifează cel puțin două comenzi pentru cumul.', 'rau'); return; }
+    var coduri = {}; bif.forEach(function (o) { if (o.cum) coduri[o.cum] = 1; });
+    coduri = Object.keys(coduri);
+    if (coduri.length > 1) { toast('Comenzile bifate fac parte din cumuluri diferite (' + coduri.join(', ') + '). Anulează întâi unul dintre ele.', 'rau'); return; }
+    /* daca una e deja intr-un cumul, celelalte se adauga la el, impreuna cu toate comenzile lui */
+    var l = bif.slice();
+    if (coduri.length) SC.comenzi.forEach(function (o) { if (o.cum === coduri[0] && l.indexOf(o) < 0) l.push(o); });
+    if (l.every(function (o) { return o.cum; })) { toast('Comenzile bifate sunt deja legate în cumulul ' + coduri[0] + '.', 'rau'); return; }
+    var cl = SC.normText(l[0].cl), de = SC.normText(l[0].de);
+    var altele = l.filter(function (o) { return SC.normText(o.cl) !== cl || SC.normText(o.de) !== de; });
+    if (altele.length) {
+      modal({
+        titlu: 'Nu se pot cumula', lat: true,
+        html: '<div class="nota atentie">Se pot cumula doar comenzi cu același client și același destinatar.</div><div class="derulare-x"><table class="simplu"><tr><th>Nr. Comandă</th><th>Client</th><th>Destinatar</th></tr>' +
+          l.map(function (o) { return '<tr><td><b>' + esc(o.nc) + '</b></td><td>' + esc(o.cl) + '</td><td>' + esc(o.de || '—') + '</td></tr>'; }).join('') + '</table></div>',
+        butoane: [{ t: 'Am înțeles', cls: 'pri', v: null }]
+      });
+      return;
+    }
+    var inchise = l.filter(function (o) { return !SC.esteDeschisa(o) || o.inc === 'DA'; });
+    if (inchise.length) { toast('Se pot cumula doar comenzi încă deschise (Initiata / In lucru). Nu se potrivesc: ' + inchise.map(function (o) { return o.nc; }).join(', ') + '.', 'rau'); return; }
+    l.sort(function (a, b) { return a.n - b.n; });
+    var cod = coduri[0] || 'C' + l[0].n, numere = l.map(function (o) { return o.n; });
+    modal({
+      titlu: coduri.length ? 'Adaugă la cumulul ' + cod : 'Cumulează ' + nCom(l.length), lat: true,
+      html: '<div class="nota">' + esc(l[0].cl) + ' · ' + esc(l[0].de || '(fără destinatar)') + '</div>' + tabelCumul(l) +
+        '<div class="mic" style="margin-top:8px">Comenzile legate se închid împreună: la Terminata / Self-Pick paleții se trec o singură dată, pe comanda la care schimbi statusul, iar celelalte se închid cu 0 paleți. ' +
+        'Greutatea finală rămâne greutatea din tabel. Când cauți sau filtrezi una dintre ele, apar toate.</div>',
+      butoane: [{ t: 'Renunță', v: null }, {
+        t: 'Cumulează', cls: 'pri', fn: function () {
+          return L.modifica(numere.map(function (n) {
+            return {
+              n: n, fn: function (x) {
+                if (!SC.esteDeschisa(x) || x.inc === 'DA') throw L.eroare('Comanda ' + x.nc + ' a fost închisă între timp și nu mai poate fi cumulată.');
+                if (SC.normText(x.cl) !== cl || SC.normText(x.de) !== de) throw L.eroare('Comanda ' + x.nc + ' nu mai are același client și destinatar.');
+                if (x.cum && x.cum !== cod) throw L.eroare('Comanda ' + x.nc + ' a fost pusă între timp în cumulul ' + x.cum + '.');
+                x.cum = cod;
+              }
+            };
+          }), 'Cumul ' + cod + ': ' + l.map(function (o) { return o.nc; }).join(' + ')).then(function () {
+            stare.sel = {}; toast('Cumul ' + cod + ': ' + nCom(l.length) + ' legate.', 'bun'); redeseneaza();
+          });
+        }
+      }]
+    });
+  }
+  function anuleazaCumul(coduri) {
+    if (!poate() || !coduri.length) return;
+    var l = SC.comenzi.filter(function (o) { return o.cum && coduri.indexOf(o.cum) >= 0; });
+    if (!l.length) return;
+    var gata = l.filter(function (o) { return !SC.esteDeschisa(o); }).length;
+    return confirma('Anulezi ' + (coduri.length === 1 ? 'cumulul ' + coduri[0] : 'cumulurile ' + coduri.join(', ')) + '?\n\nComenzile ' + l.map(function (o) { return o.nc; }).join(', ') +
+      ' nu vor mai fi legate între ele.' + (gata ? '\n\n' + gata + (gata === 1 ? ' comandă este deja închisă' : ' comenzi sunt deja închise') + ': paleții rămân cum sunt acum (și cele cu 0).' : '')).then(function (ok) {
+      if (!ok) return;
+      return L.modifica(l.map(function (o) { return { n: o.n, fn: function (x) { delete x.cum; } }; }), 'Cumul anulat ' + coduri.join(', ') + ': ' + l.map(function (o) { return o.nc; }).join(', ')).then(function () {
+        toast('Cumul anulat: ' + nCom(l.length) + ' dezlegate.', 'bun'); redeseneaza();
+      });
+    }).catch(arataEroare);
+  }
+  function arataCumul(o) {
+    var l = membriCumul(o).sort(function (a, b) { return a.n - b.n; });
+    modal({
+      titlu: 'Cumul ' + o.cum, lat: true,
+      html: '<div class="nota">' + esc(o.cl) + ' · ' + esc(o.de || '') + '</div>' + tabelCumul(l),
+      butoane: (poate() ? [{ t: 'Anulează cumulul', fn: function () { anuleazaCumul([o.cum]); return null; } }] : []).concat([{ t: 'Închide', cls: 'pri', v: null }])
+    });
+  }
   function nrAutoPentruBifate() {
     var l = comenziBifate(), libere = l.filter(function (o) { return o.inc !== 'DA'; }), inc = l.length - libere.length;
     if (!libere.length) { toast('Toate comenzile bifate sunt deja încărcate; numărul auto nu mai poate fi schimbat.', 'rau'); return; }
@@ -1115,6 +1245,7 @@
           if (!chei.length) return null;
           if ('nc' in schimbari && !schimbari.nc) { toast('Numărul de comandă nu poate fi șters. Pentru renunțare folosește statusul Anulata.', 'rau'); return false; }
           if (schimbari.inc && o.st !== ST.TER) { toast('O comandă poate fi marcată ca încărcată doar dacă are statusul Terminata.', 'rau'); return false; }
+          if (o.cum && ('cl' in schimbari || 'de' in schimbari) && membriCumul(o).length > 1) { toast('Comanda este în cumulul ' + o.cum + ': clientul și destinatarul trebuie să rămână aceleași. Anulează întâi cumulul.', 'rau'); return false; }
           if ((o.st === ST.TER || o.st === ST.SELF) && SC.esteNum(val.fpp) && SC.esteNum(val.pk) && !('fpp' in schimbari) && !('pk' in schimbari) && 'pr' in schimbari && val.pr !== val.fpp + val.pk) {
             toast('Paleții reali sunt FPP + Pick (' + val.fpp + ' + ' + val.pk + ' = ' + (val.fpp + val.pk) + '). Modifică FPP sau Pick.', 'rau'); return false;
           }

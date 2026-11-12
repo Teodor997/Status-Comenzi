@@ -188,7 +188,7 @@
     var urmeaza = !SC.esteNum(x.am) || x.am === vechi;
     x.pr = nou;
     if (urmeaza) x.am = nou;
-    if (L.greutateAuto(x)) x.gf = SC.rotunjeste(x.g + nou * SC.config.kgPalet);
+    if (L.greutateAuto(x) && !x.cum) x.gf = SC.rotunjeste(x.g + nou * SC.config.kgPalet);
     return true;
   };
 
@@ -203,7 +203,10 @@
       o.pr = date.pr; o.am = date.am;
       if (date.fpp != null) o.fpp = date.fpp;
       if (date.pk != null) o.pk = date.pk;
-      if (auto) {
+      if (date.cumul) {
+        /* comanda dintr-un cumul: greutatea ramane cea din tabel (goala daca e goala), fara calcul si fara intrebare */
+        if (SC.esteNum(o.g)) o.gf = o.g; else delete o.gf;
+      } else if (auto) {
         o.gf = SC.rotunjeste(o.g + date.pr * cfg.kgPalet);
       } else {
         o.gf = date.gf;

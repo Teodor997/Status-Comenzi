@@ -3,7 +3,7 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '2.11';
+  SC.VERSIUNE = '2.13';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
   SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
@@ -63,6 +63,8 @@
   ];
   SC.COL = {};
   SC.COLS.concat(SC.COLS_INC).forEach(function (c) { SC.COL[c.k] = c; });
+  /* cumul = comenzi legate intre ele (acelasi cod = acelasi cumul). Nu are coloana in tabel; numele apare doar in jurnal. */
+  SC.COL.cum = { k: 'cum', x: 'Cumul', t: 'Cumul', w: 74, typ: 'txt' };
   /* coloanele care raman mereu editabile, ca in Excel (Status se schimba doar prin lista de statusuri) */
   SC.MEREU_EDITABILE = { na: 1, ob: 1, co: 1, nt: 1 };
   /* campurile care se sterg la anulare: tot ce tine de comanda, in afara de Nr Crt, Client, Status, Nr. Comanda, Import */
