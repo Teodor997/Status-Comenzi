@@ -466,6 +466,7 @@
     });
   });
   /* derulare cu rotita / bara in timp ce se scrie un Nr AUTO in celula: se salveaza ce s-a scris, apoi lista se deruleaza normal */
+  $('tabel').addEventListener('wheel', function () { inchideCal(); }, { passive: true });
   function inchideNaInLinie(e) {
     var act = document.activeElement;
     if (act && act.classList && act.classList.contains('naInline') && (e.type !== 'pointerdown' || e.target === $('tabel'))) act.blur();
@@ -1210,31 +1211,71 @@
     inp.addEventListener('blur', function () { termina(true, false); });
   }
   /* Transport: data de livrare se schimba direct in celula, cu confirmare; Operatorul de date primeste o notificare care ramane salvata */
+  var popCal = null;
+  function inchideCal() {
+    if (!popCal) return;
+    popCal.remove(); popCal = null;
+    document.removeEventListener('pointerdown', afaraCal, true);
+    document.removeEventListener('keydown', tastaCal, true);
+  }
+  function afaraCal(e) { if (popCal && !popCal.contains(e.target)) inchideCal(); }
+  function tastaCal(e) { if (e.key === 'Escape') { e.preventDefault(); inchideCal(); } }
   function editeazaDlInLinie(o, cel) {
     if (o.st === ST.ANU) { toast('Comanda ' + o.nc + ' este anulată; data de livrare nu mai poate fi schimbată.', 'rau'); return; }
     if (o.inc === 'DA') { toast('Comanda ' + o.nc + ' este deja încărcată; data de livrare nu mai poate fi schimbată.', 'rau'); return; }
-    if (cel.querySelector('.naInline')) return;
-    var vechi = /^\d{4}-\d{2}-\d{2}/.test(String(o.dl || '')) ? String(o.dl).slice(0, 10) : '', text = cel.textContent, gata = false, n = o.n;
-    cel.innerHTML = '<input type="date" class="naInline" aria-label="Livrare solicitată pentru comanda ' + esc(o.nc) + '" value="' + vechi + '">';
-    var inp = cel.firstChild; inp.focus();
-    function termina(salveaza) {
-      if (gata) return; gata = true;
-      var v = inp.value;
-      cel.textContent = text;
-      setTimeout(function () { if (stare.murdar) redeseneaza(); }, 0);
-      if (!salveaza || v === vechi) return;
-      if (!v) { toast('Data de livrare nu poate fi ștearsă, doar schimbată.', 'rau'); return; }
-      confirma('Schimbi data de livrare pentru comanda ' + o.nc + '?\n' + o.cl + (o.de ? ' · ' + o.de : '') + '\n\n' + (vechi ? SC.fmtDataLunga(vechi) : '(fără dată)') + '  →  ' + SC.fmtDataLunga(v) +
-        '\n\nOperatorul de date va primi o notificare cu această schimbare.').then(function (ok) {
-        if (!ok) return;
-        return L.schimbaLivrare(n, v).then(function () { toast('Livrare ' + SC.fmtDataLunga(v) + ' salvată pentru comanda ' + o.nc + '. Operatorul de date a fost notificat.', 'bun'); redeseneaza(); });
-      }).catch(arataEroare);
+    inchideCal(); inchideFiltru();
+    var vechi = /^\d{4}-\d{2}-\d{2}/.test(String(o.dl || '')) ? String(o.dl).slice(0, 10) : '', azi = SC.azi(), n = o.n;
+    var ales = '', lunaCal = (vechi || azi).slice(0, 7);
+    var pc = document.createElement('div');
+    pc.className = 'popfiltru popcal';
+    pc.setAttribute('role', 'dialog'); pc.setAttribute('aria-label', 'Alege data de livrare pentru comanda ' + o.nc);
+    function deseneaza(focusPe) {
+      var an = +lunaCal.slice(0, 4), luna = +lunaCal.slice(5, 7);
+      var prima = new Date(an, luna - 1, 1), nrZile = new Date(an, luna, 0).getDate(), decalaj = (prima.getDay() + 6) % 7;
+      var h = '<div class="pf-titlu">Livrare — comanda ' + esc(o.nc) + '</div><div class="mic">' + esc(o.cl) + (o.de ? ' · ' + esc(o.de) : '') + '<br>Data de acum: <b>' + (vechi ? esc(SC.fmtDataLunga(vechi)) : 'necompletată') + '</b></div>' +
+        '<div class="cal"><div class="cal-sus"><button type="button" class="btn mic" data-luna="-1" aria-label="Luna anterioară">‹</button><b>' + LUNI_CAL[luna - 1] + ' ' + an + '</b>' +
+        '<button type="button" class="btn mic" data-luna="1" aria-label="Luna următoare">›</button></div><div class="cal-grila">' +
+        ['L', 'Ma', 'Mi', 'J', 'V', 'S', 'D'].map(function (z) { return '<div class="cal-cap">' + z + '</div>'; }).join('');
+      for (var g = 0; g < decalaj; g++) h += '<div></div>';
+      for (var zi = 1; zi <= nrZile; zi++) {
+        var d = lunaCal + '-' + SC.p2(zi);
+        h += '<button type="button" class="zi are' + (d === ales ? ' activ' : '') + (d === azi ? ' azi' : '') + (d === vechi ? ' veche' : '') + '" data-d="' + d + '" aria-label="' + zi + ' ' + LUNI_CAL[luna - 1] + ' ' + an +
+          (d === vechi ? ', data de acum' : '') + '"' + (d === ales ? ' aria-pressed="true"' : '') + '><span>' + zi + '</span></button>';
+      }
+      h += '</div></div><div class="pf-jos"><span class="mic" style="flex:1">' + (ales ? 'Data nouă: <b>' + esc(SC.fmtDataLunga(ales)) + '</b>' : 'Alege data nouă de livrare.') + '</span>' +
+        '<button type="button" class="btn mic" data-a="renunta">Renunță</button><button type="button" class="btn mic pri" data-a="ok"' + (ales && ales !== vechi ? '' : ' disabled') + '>Ok</button></div>';
+      pc.innerHTML = h;
+      var f = focusPe === 'ok' ? pc.querySelector('[data-a=ok]:not(:disabled)') : (focusPe ? pc.querySelector('[data-luna="' + focusPe + '"]') : null);
+      if (f) f.focus();
     }
-    inp.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); termina(true); }
-      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); termina(false); }
+    pc.addEventListener('click', function (e) {
+      var bt = e.target.closest('button'); if (!bt) return;
+      if (bt.dataset.luna) {
+        var an = +lunaCal.slice(0, 4), luna = +lunaCal.slice(5, 7) + (+bt.dataset.luna);
+        if (luna < 1) { luna = 12; an--; } else if (luna > 12) { luna = 1; an++; }
+        lunaCal = an + '-' + SC.p2(luna); deseneaza(bt.dataset.luna);
+      } else if (bt.dataset.d) {
+        ales = bt.dataset.d; deseneaza('ok');
+        if (ales === vechi) toast('Aceasta este data de livrare de acum. Alege altă zi.');
+      } else if (bt.dataset.a === 'renunta') inchideCal();
+      else if (bt.dataset.a === 'ok' && ales && ales !== vechi) {
+        var v = ales; inchideCal();
+        confirma('Schimbi data de livrare pentru comanda ' + o.nc + '?\n' + o.cl + (o.de ? ' · ' + o.de : '') + '\n\n' + (vechi ? SC.fmtDataLunga(vechi) : '(fără dată)') + '  →  ' + SC.fmtDataLunga(v) +
+          '\n\nOperatorul de date va primi o notificare cu această schimbare.').then(function (ok) {
+          if (!ok) return;
+          return L.schimbaLivrare(n, v).then(function () { toast('Livrare ' + SC.fmtDataLunga(v) + ' salvată pentru comanda ' + o.nc + '. Operatorul de date a fost notificat.', 'bun'); redeseneaza(); });
+        }).catch(arataEroare);
+      }
     });
-    inp.addEventListener('blur', function () { termina(true); });
+    document.body.appendChild(pc); popCal = pc; deseneaza();
+    /* sub celula; daca nu incape, deasupra ei, fara sa iasa din ecran */
+    var r = cel.getBoundingClientRect(), lat = pc.offsetWidth, inalt = pc.offsetHeight;
+    var x = Math.max(8, Math.min(r.left, window.innerWidth - lat - 8)), y = r.bottom + 4;
+    if (y + inalt > window.innerHeight - 8) y = Math.max(8, r.top - inalt - 4);
+    pc.style.left = x + 'px'; pc.style.top = y + 'px';
+    var prim = pc.querySelector('.zi.veche') || pc.querySelector('.zi.azi') || pc.querySelector('.zi'); if (prim) prim.focus();
+    document.addEventListener('pointerdown', afaraCal, true);
+    document.addEventListener('keydown', tastaCal, true);
   }
   /* ---- notificari pentru Operatorul de date / Administrator ---- */
   var notifInitial = true, notifVazute = {};
