@@ -58,6 +58,13 @@ service cloud.firestore {
       allow delete: if eAdmin();
     }
 
+    // CMR-urile emise (un document pe luna) si setarile lor (expeditorul fiecarui client etc.)
+    match /cmr/{doc} {
+      allow read: if activ();
+      allow create, update: if poateScrie();
+      allow delete: if eAdmin();
+    }
+
     match /adrese/{id} {
       allow read: if activ();
       allow create, update: if poateScrie();

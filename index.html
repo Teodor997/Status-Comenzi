@@ -201,7 +201,39 @@
 
   /* ---- tiparire ---- */
   #tiparire { display: none; }
+  /* ---- formularul CMR (tiparire) ---- */
+  .cmr-pag { --cmr: #000; width: 210mm; height: 296mm; box-sizing: border-box; padding: 0 6.35mm; display: flex; align-items: center; justify-content: center; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
+  .cmr-pag.c2 { --cmr: #ff0000; } .cmr-pag.c3 { --cmr: #00b0f0; } .cmr-pag.c4 { --cmr: #00b050; }
+  table.cmr-t { width: 197.3mm; border-collapse: collapse; table-layout: fixed; margin: 0; }
+  table.cmr-t td { border: 0 solid var(--cmr); padding: 0 0.5mm; line-height: 1.05; vertical-align: bottom; text-align: left; overflow: hidden; font-size: 4.6pt; word-break: normal; }
+  table.cmr-t td.t1 { border-top-width: 0.2mm; } table.cmr-t td.t2 { border-top-width: 0.45mm; } table.cmr-t td.t3 { border-top-width: 0.8mm; }
+  table.cmr-t td.b1 { border-bottom-width: 0.2mm; } table.cmr-t td.b2 { border-bottom-width: 0.45mm; } table.cmr-t td.b3 { border-bottom-width: 0.8mm; }
+  table.cmr-t td.l1 { border-left-width: 0.2mm; } table.cmr-t td.l2 { border-left-width: 0.45mm; } table.cmr-t td.l3 { border-left-width: 0.8mm; }
+  table.cmr-t td.r1 { border-right-width: 0.2mm; } table.cmr-t td.r2 { border-right-width: 0.45mm; } table.cmr-t td.r3 { border-right-width: 0.8mm; }
+  table.cmr-t td.g { font-weight: 700; } table.cmr-t td.c { text-align: center; } table.cmr-t td.d { text-align: right; }
+  table.cmr-t td.vs { vertical-align: top; } table.cmr-t td.vm { vertical-align: middle; } table.cmr-t td.vj { vertical-align: bottom; }
+  table.cmr-t td.n { white-space: nowrap; overflow: visible; }
+  table.cmr-t td.u { white-space: nowrap; }
+  table.cmr-t td.rv { position: relative; padding: 0; }
+  table.cmr-t .rot { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  table.cmr-t .rot span { writing-mode: vertical-rl; transform: rotate(180deg); line-height: 1.05; max-height: 100%; }
+  table.cmr-t .rot.jos span { transform: none; }
+  .cmr-sigla { display: inline-block; border: 0.5mm solid #000; border-radius: 50%; padding: 0.6mm 2.2mm; font-size: 9pt; font-weight: 900; letter-spacing: 0.2mm; line-height: 1; }
+  .cmr-pag { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #cmrPrint { display: none; }
+  body.tip-cmr #cmrPrint { display: block; position: fixed; left: -400mm; top: 0; }
+  @page cmr { size: A4 portrait; margin: 0; }
+  .cmr-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; }
+  .cmr-form .camp { margin: 0; } .cmr-form .l2 { grid-column: span 2; } .cmr-form .l4 { grid-column: 1 / -1; }
+  .cmr-form h4 { grid-column: 1 / -1; margin: 8px 0 0; font-size: 13px; color: var(--navy); border-bottom: 1px solid var(--line); padding-bottom: 3px; }
+  .cmr-form textarea { width: 100%; font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+  .cmr-form table input { width: 150px; }
+  @media (max-width: 900px) { .cmr-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media print {
+    body.tip-cmr #cmrPrint { position: static; }
+    body.tip-cmr #tiparire { display: none; }
+    .cmr-pag { page: cmr; break-after: page; }
+    .cmr-pag:last-child { break-after: auto; }
     #aplicatie, #ecranLogin, #toasturi, .fundal { display: none !important; }
     #tiparire { display: block; padding: 0; font-size: 12px; }
     #tiparire h1 { font-size: 18px; margin: 0 0 4px; }
@@ -291,6 +323,7 @@
         <button class="btn doarEdit" id="btnImportExcel">Import din Excel</button>
         <button class="btn doarTransport" id="btnTransport2">Import fișier transport (TMS)</button>
         <button class="btn" id="btnExport">Export Excel</button>
+        <button class="btn doarEdit" id="btnCmrLista">CMR-uri emise</button>
         <span class="sep"></span>
         <select id="fScop" aria-label="Ce comenzi se afișează">
           <option value="activ">Active și recente (timp real)</option>
@@ -386,6 +419,7 @@
 
 <div id="toasturi" aria-live="polite"></div>
 <div id="tiparire"></div>
+<div id="cmrPrint"></div>
 <input type="file" id="fisier" class="ascuns" accept=".xlsx,.xlsm,.xls">
 
 <script src="config.js"></script>
@@ -393,6 +427,7 @@
 <script src="js/util.js"></script>
 <script src="js/store.js"></script>
 <script src="js/logic.js"></script>
+<script src="js/cmr-sablon.js"></script>
 <script src="js/ui.js"></script>
 </body>
 </html>

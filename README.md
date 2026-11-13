@@ -110,6 +110,17 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
   la cunoștință. Lista arată ultimele două luni; notificările mai vechi rămân în baza de date.
 - Necesită regulile din `firestore.rules` publicate (blocul `notificari`).
 
+## CMR (scrisoare de transport internațional)
+- Înlocuiește fișierul `C.M.R_DSV.xlsm`. Operatorul de date (și Administratorul) bifează în lista de comenzi comenzile care merg
+  pe același CMR (același client și destinatar, cel mult 9) și apasă **CMR** în bara de bifare.
+- Destinatarul, adresa, orașul, țara (coloana Județ), cartoanele, greutatea și paleții reali vin din comenzi. Se completează
+  factura fiecărei comenzi, transportatorul, codul UIT și mențiunile. Toate câmpurile pot fi corectate înainte de tipărire.
+- Expeditorul, natura mărfii și instrucțiunile se țin minte pe client (ultimele folosite).
+- „Salvează și tipărește” scoate cele 4 copii (negru, roșu, albastru, verde) pe A4. CMR-urile rămân salvate (colecția `cmr`,
+  un document pe lună) și se redeschid din **CMR-uri emise** sau bifând din nou aceleași comenzi.
+- „Email” deschide programul de email cu subiectul și textul standard; adresele se setează în Administrare → Clienți și reguli.
+- Formularul tipărit este generat din foaia `CMR_Black` (`js/cmr-sablon.js`). Necesită regulile din `firestore.rules` (blocul `cmr`).
+
 ## Tabul KPI's
 - Vizibil pentru toate rolurile, doar pentru citire. Pe ziua de încărcare aleasă arată: paleții de încărcat (reali la comenzile
   pregătite, estimați la celelalte), împărțirea FPP / Pick, camioanele pe stări și paleții fiecăruia, comenzile pe statusuri,

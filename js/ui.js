@@ -380,7 +380,11 @@
     var gol = $('gol');
     gol.classList.toggle('ascuns', N > 0);
     if (!N) {
-      gol.textContent = SC.comenzi.length ? 'Nicio comandă nu corespunde filtrelor.' :
+      var qGol = String(stare.f.q || '').trim(), stIst = qGol ? istoricCautat[SC.cheieComanda(qGol)] : '';
+      gol.textContent = SC.comenzi.length ? 'Nicio comandă nu corespunde filtrelor. ' +
+        (stIst === 'caut' ? 'Caut numărul „' + qGol + '” și în istoric…' :
+          stIst === 'lipsa' ? 'Am căutat numărul „' + qGol + '” și în istoric: nu există nicio comandă cu exact acest număr.' :
+            'Lista ține doar comenzile active și recente: pentru una mai veche scrie numărul ei exact în căutare sau alege „Istoric pe perioadă…”.') :
         'Nu există comenzi încărcate. Adaugă o comandă, importă un borderou sau (administrator) fă migrarea din Excel.';
     }
   }
@@ -689,7 +693,25 @@
     clearTimeout(tCauta);
     var v = this.value;
     tCauta = setTimeout(function () { stare.f.q = v; $('tabel').scrollTop = 0; redeseneaza(); }, 180);
+    clearTimeout(tIstoric);
+    tIstoric = setTimeout(function () { cautaInIstoric(v); }, 700);
   });
+  /* Lista tine in memorie doar comenzile active si recente. Daca scrii un numar de comanda care nu e printre ele,
+     il cautam o singura data in toata baza de date (o interogare mica) si aducem comanda in lista. */
+  var tIstoric = null, istoricCautat = {};
+  function cautaInIstoric(text) {
+    var q = String(text || '').trim(), cheie = SC.cheieComanda(q);
+    if (q.length < 3 || /\s/.test(q) || !cheie || istoricCautat[cheie]) return;
+    if (SC.comenzi.some(function (o) { return SC.cheieComanda(o.nc) === cheie; })) return;      /* e deja in lista */
+    istoricCautat[cheie] = 'caut';
+    L.cautaComenzi([q]).then(function (rez) {
+      var gasite = (rez[cheie] || []).length;
+      istoricCautat[cheie] = gasite ? 'gasit' : 'lipsa';
+      if ($('fCauta').value.trim() !== q) return;
+      if (gasite) toast('Comanda ' + q + ' a fost găsită în istoric și adusă în listă.', 'bun');
+      redeseneaza();
+    }, function () { delete istoricCautat[cheie]; });
+  }
   $('fClient').onchange = function () { stare.f.cl = this.value; redeseneaza(); };
   $('fNeinc').onchange = function () { stare.f.neinc = this.checked; redeseneaza(); };
   $('fColData').onchange = function () { stare.f.colData = this.value; redeseneaza(); };
@@ -1067,6 +1089,7 @@
       (ascunse ? '<span class="mic">' + ascunse + (ascunse === 1 ? ' bifată nu se vede' : ' bifate nu se văd') + ' cu filtrele de acum</span>' : '') +
       '<span style="flex:1"></span>' +
       (poate() ? '<button type="button" class="btn mic pri" id="selCum">Cumulat</button>' : '') +
+      (poate() ? '<button type="button" class="btn mic" id="selCmr">CMR</button>' : '') +
       (l.some(function (o) { return o.cum; }) ? '<button type="button" class="btn mic" id="selVezi">Vezi cumulul</button>' : '') +
       (poate() && l.some(function (o) { return o.cum; }) ? '<button type="button" class="btn mic" id="selDecum">Anulează cumulul</button>' : '') +
       '<button type="button" class="btn mic" id="selNa">Nr AUTO pentru cele bifate…</button><button type="button" class="btn mic" id="selGol">Debifează tot</button>';
@@ -1075,6 +1098,7 @@
     if (e.target.id === 'selGol') { stare.sel = {}; deseneazaRanduri(); deseneazaBaraSel(); }
     else if (e.target.id === 'selNa') nrAutoPentruBifate();
     else if (e.target.id === 'selCum') cumuleazaBifate();
+    else if (e.target.id === 'selCmr') cmrDinBifate();
     else if (e.target.id === 'selVezi') { var prima = comenziBifate().filter(function (o) { return o.cum; })[0]; if (prima) arataCumul(prima); }
     else if (e.target.id === 'selDecum') {
       var cu = {}; comenziBifate().forEach(function (o) { if (o.cum) cu[o.cum] = 1; });
@@ -2174,6 +2198,185 @@
     $('incCauta').value = x.nt || x.na; arataTab('incarcari');
   });
 
+  /* ================= CMR ================= */
+  /* Scrisoarea de transport international, dupa formularul din C.M.R_DSV.xlsm: 4 copii pe A4 (negru, rosu, albastru, verde). */
+  var CMR_COPII = [['c1', '1', 'Copie pentru expeditor', 'Copy for sender'], ['c2', '2', 'Copie pentru destinatar', 'Copy for consignee'],
+    ['c3', '3', 'Copie pentru operator', 'Copy for carrier'], ['c4', '4', 'Copie pentru', 'Copy for']];
+  var CMR_LUNI = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var CMR_IMPLICIT = {
+    loc: 'Bolintin Deal Romania', st: 'Romania', so: 'Bolintin Deal', kg: 20,
+    cl: { KANDIA: { exp: 'Kandia Dulce\nSoseaua Viilor, Nr. 20\n050156, Bucuresti, RO', marfa: 'Produse zaharoase / Sugar products.', instr: 'Temperatura controlata 16°C ~ 20°C\nCounted temperature 16°C ~ 20°C' } }
+  };
+  var CMR_MAX = 9;
+  function cmrText(v) { return esc(v == null ? '' : String(v)).replace(/\n/g, '<br>'); }
+  function cmrData(zi, scurt) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(zi || ''))) return '';
+    var a = zi.slice(0, 4), l = CMR_LUNI[+zi.slice(5, 7) - 1], z = +zi.slice(8, 10);
+    return scurt ? z + '/' + l + '/' + a.slice(2) : z + '-' + l + '-' + a;
+  }
+  function cmrValori(c) {
+    var pal = c.arataPal && SC.esteNum(c.pal) ? c.pal : null;
+    return {
+      exp: cmrText(c.exp), dest: cmrText(c.de), adresa: cmrText(c.ad), oras: cmrText(c.or), tara: cmrText(c.ta),
+      car1: cmrText(c.car[0]), car2: cmrText(c.car[1]), car3: cmrText(c.car[2]),
+      loc: cmrText(c.loc), data1: cmrData(c.data), data2: cmrData(c.data, true),
+      rez1: cmrText(c.uit ? 'COD UIT: ' + c.uit : ''), rez2: cmrText(c.rez[0]), rez3: cmrText(c.rez[1]), rez4: cmrText(c.rez[2]),
+      facturi: cmrText((c.fa || []).filter(Boolean).map(function (f) { return f + ';'; }).join('')), doc2: cmrText(c.doc2),
+      marfa: cmrText(c.marfa), cart: SC.esteNum(c.cart) ? String(c.cart) : '', greutate: SC.esteNum(c.g) ? c.g.toFixed(3) : '',
+      pal: pal == null ? '' : String(pal), palkg: pal == null ? '' : String(SC.rotunjeste(pal * (SC.esteNum(c.kg) ? c.kg : 0))),
+      instr: cmrText(c.instr), instr2: cmrText(c.instr2), stab_tara: cmrText(c.st), stab_oras: cmrText(c.so)
+    };
+  }
+  function htmlCmr(c) {
+    var v = cmrValori(c);
+    return CMR_COPII.map(function (k) {
+      v.nr = k[1]; v.copie_ro = k[2]; v.copie_en = k[3];
+      return '<div class="cmr-pag ' + k[0] + '">' + SC.CMR_SABLON.replace(/\{\{(\w+)\}\}/g, function (_, cheie) { return v[cheie] == null ? '' : v[cheie]; }) + '</div>';
+    }).join('');
+  }
+  /* textele scrise de operator care nu incap in caseta lor se micsoreaza pana incap */
+  function potrivesteCmr(rad) {
+    Array.prototype.forEach.call(rad.querySelectorAll('td.dat'), function (td) {
+      var m = parseFloat(td.style.fontSize) || 7, pasi = 0;
+      while (pasi++ < 14 && m > 3.2 && (td.scrollWidth > td.clientWidth + 1 || td.scrollHeight > td.clientHeight + 1)) { m *= 0.92; td.style.fontSize = m.toFixed(2) + 'pt'; }
+    });
+  }
+  function tiparesteCmr(c) {
+    $('cmrPrint').innerHTML = htmlCmr(c);
+    document.body.classList.add('tip-cmr');
+    potrivesteCmr($('cmrPrint'));
+    window.print();
+  }
+  window.addEventListener('afterprint', function () { document.body.classList.remove('tip-cmr'); $('cmrPrint').innerHTML = ''; });
+  function cmrNou(l, setari) {
+    var o = l[0], s = setari || {}, cheie = L.cheieClientCmr(o.cl);
+    var pc = (s.cl && s.cl[cheie]) || CMR_IMPLICIT.cl[cheie] || {};
+    var remorci = l.map(function (x) { return x.re; }).filter(Boolean), auto = l.map(function (x) { return x.na; }).filter(Boolean);
+    return {
+      cl: o.cl, n: l.map(function (x) { return x.n; }), nc: l.map(function (x) { return String(x.nc); }), fa: l.map(function () { return ''; }),
+      rand: l.map(function (x) { return { g: SC.esteNum(x.g) ? x.g : null, ca: SC.esteNum(x.ca) ? x.ca : null, pr: SC.esteNum(x.pr) ? x.pr : null }; }),
+      de: o.de || '', ad: o.ad || '', or: o.or || '', ta: o.ju || '',
+      exp: pc.exp || '', marfa: pc.marfa || '', instr: pc.instr || '', instr2: '',
+      loc: s.loc || CMR_IMPLICIT.loc, st: s.st || CMR_IMPLICIT.st, so: s.so || CMR_IMPLICIT.so, kg: SC.esteNum(s.kg) ? s.kg : CMR_IMPLICIT.kg,
+      data: SC.azi(), car: ['', auto[0] || '', remorci[0] || ''], uit: '', rez: ['', '', ''], doc2: '',
+      cart: SC.rotunjeste(suma(l, 'ca')), g: SC.rotunjeste(suma(l, 'g')), pal: suma(l, 'pr'), arataPal: true
+    };
+  }
+  function cmrDinBifate() {
+    if (!poate()) return;
+    var l = comenziBifate().sort(function (a, b) { return a.n - b.n; });
+    if (!l.length) { toast('Bifează comenzile care merg pe același CMR.', 'rau'); return; }
+    if (l.length > CMR_MAX) { toast('Pe un CMR încap cel mult ' + CMR_MAX + ' comenzi. Ai bifat ' + l.length + '.', 'rau'); return; }
+    var cl = SC.normText(l[0].cl), de = SC.normText(l[0].de);
+    if (l.some(function (o) { return SC.normText(o.cl) !== cl || SC.normText(o.de) !== de; })) { toast('Un CMR are un singur destinatar: bifează doar comenzi cu același client și același destinatar.', 'rau'); return; }
+    if (l.some(function (o) { return o.st === ST.ANU; })) { toast('Ai bifat și comenzi anulate. Debifează-le.', 'rau'); return; }
+    L.citesteCmr().then(function (r) { return r; }, function () { return { lista: [], setari: {}, faraAcces: true }; }).then(function (r) {
+      var cheie = l.map(function (o) { return o.n; }).join(',');
+      var vechi = r.lista.filter(function (c) { return (c.n || []).join(',') === cheie; })[0];
+      deschideCmr(vechi || cmrNou(l, r.setari), l, r.faraAcces);
+    });
+  }
+  function deschideCmr(c, comenzi, faraAcces) {
+    var salvat = !!c.id;
+    function camp(id, eticheta, val, cls, extra) { return '<label class="camp ' + (cls || '') + '"><span>' + eticheta + '</span><input type="text" id="' + id + '" value="' + esc(val == null ? '' : val) + '"' + (extra || '') + '></label>'; }
+    function numar(v) { return SC.esteNum(v) ? String(v).replace('.', ',') : ''; }
+    var nepregatite = (comenzi || []).filter(function (o) { return o.st !== ST.TER && o.st !== ST.SELF; });
+    var html = (salvat ? '<div class="nota">CMR salvat la ' + esc(SC.fmtDT(SC.ymd(new Date(c.t)) + ' ' + SC.p2(new Date(c.t).getHours()) + ':' + SC.p2(new Date(c.t).getMinutes()))) + ' de ' + esc(c.u || '') +
+        (c.uu ? ', modificat ultima dată de ' + esc(c.uu) : '') + '. Valorile de mai jos sunt cele salvate.</div>' : '') +
+      (faraAcces ? '<div class="nota atentie">CMR-urile nu pot fi salvate încă: publică regulile din firestore.rules în Firebase. Până atunci poți completa și tipări.</div>' : '') +
+      (nepregatite.length ? '<div class="nota atentie">' + nepregatite.length + (nepregatite.length === 1 ? ' comandă nu este' : ' comenzi nu sunt') + ' încă Terminata: paleții reali pot lipsi (' + esc(nepregatite.map(function (o) { return o.nc; }).join(', ')) + ').</div>' : '') +
+      '<div class="cmr-form">' +
+      '<h4>1 · Expeditor</h4><label class="camp l4"><span>Expeditor (nume, adresă, țară) — se ține minte pentru clientul ' + esc(c.cl) + '</span><textarea id="cmExp" rows="3">' + esc(c.exp) + '</textarea></label>' +
+      '<h4>2–3 · Destinatar și loc de livrare</h4>' + camp('cmDe', 'Destinatar', c.de, 'l2') + camp('cmAd', 'Adresă', c.ad, 'l2') + camp('cmOr', 'Oraș', c.or, 'l2') + camp('cmTa', 'Țară', c.ta, 'l2') +
+      '<h4>4 și 21 · Preluarea mărfii</h4>' + camp('cmLoc', 'Locul preluării', c.loc, 'l2') + '<label class="camp"><span>Data</span><input type="date" id="cmData" value="' + esc(c.data || '') + '"></label><span></span>' +
+      camp('cmSt', 'Întocmit în (țara)', c.st) + camp('cmSo', 'Întocmit în (localitatea)', c.so) +
+      '<h4>5 · Documente atașate</h4><div class="l4 derulare-x"><table class="simplu"><tr><th>Nr. Comandă</th><th class="nr">Greutate</th><th class="nr">Cartoane</th><th class="nr">Paleți reali</th><th>Factură (Invoice)</th></tr>' +
+      c.nc.map(function (nc, i) {
+        var x = (c.rand || [])[i] || {};
+        return '<tr><td><b>' + esc(nc) + '</b></td><td class="nr">' + SC.fmtNum(x.g, 'num') + '</td><td class="nr">' + SC.fmtNum(x.ca, 'int') + '</td><td class="nr">' + SC.fmtNum(x.pr, 'int') +
+          '</td><td><input type="text" data-fa="' + i + '" value="' + esc((c.fa || [])[i] || '') + '" aria-label="Factura pentru comanda ' + esc(nc) + '"></td></tr>';
+      }).join('') + '</table></div>' + camp('cmDoc2', 'Alte documente (al doilea rând, ex. „Factura : 1900050959”)', c.doc2, 'l4') +
+      '<h4>6–11 · Marfa</h4>' + camp('cmMarfa', 'Natura mărfii — se ține minte pentru client', c.marfa, 'l4') +
+      camp('cmCart', 'Cartoane (CAR.)', numar(c.cart), '', ' inputmode="numeric"') + camp('cmG', 'Greutate brută (kg)', numar(c.g), '', ' inputmode="decimal"') +
+      camp('cmPal', 'Paleți (BUC.)', numar(c.pal), '', ' inputmode="numeric"') + camp('cmKg', 'Kg pe palet', numar(c.kg), '', ' inputmode="decimal"') +
+      '<label class="bifa l4"><input type="checkbox" id="cmArataPal"' + (c.arataPal ? ' checked' : '') + '> <span>Paleții apar pe CMR (debifează la clienții cu vamă)</span></label>' +
+      '<h4>16 · Transportator</h4>' + camp('cmCar1', 'Rândul 1 (nume)', c.car[0], 'l2') + camp('cmCar2', 'Rândul 2 (nr. auto)', c.car[1]) + camp('cmCar3', 'Rândul 3 (remorcă)', c.car[2]) +
+      '<h4>18 · Rezervările și observațiile transportatorului</h4>' + camp('cmUit', 'Cod UIT (se tipărește „COD UIT: …”)', c.uit, 'l2') + camp('cmRez1', 'Alte mențiuni', c.rez[0], 'l2') + camp('cmRez2', 'Alte mențiuni', c.rez[1], 'l2') + camp('cmRez3', 'Alte mențiuni', c.rez[2], 'l2') +
+      '<h4>13 · Instrucțiunile expeditorului</h4><label class="camp l2"><span>Instrucțiuni — se țin minte pentru client</span><textarea id="cmInstr" rows="2">' + esc(c.instr) + '</textarea></label>' +
+      '<label class="camp l2"><span>Instrucțiuni suplimentare (doar pentru acest CMR)</span><textarea id="cmInstr2" rows="2">' + esc(c.instr2) + '</textarea></label>' +
+      '</div>';
+    function citeste(rad) {
+      function t(id) { return rad.querySelector('#' + id).value.trim(); }
+      function nr(id, nume) { var v = t(id); if (v === '') return null; var x = SC.parseNum(v); if (x == null || x < 0) { toast(nume + ': „' + v + '” nu este un număr valid.', 'rau'); return undefined; } return x; }
+      var x = JSON.parse(JSON.stringify(c));
+      x.exp = rad.querySelector('#cmExp').value.trim(); x.de = t('cmDe'); x.ad = t('cmAd'); x.or = t('cmOr'); x.ta = t('cmTa');
+      x.loc = t('cmLoc'); x.data = rad.querySelector('#cmData').value; x.st = t('cmSt'); x.so = t('cmSo');
+      x.fa = c.nc.map(function (_, i) { return rad.querySelector('[data-fa="' + i + '"]').value.trim(); });
+      x.doc2 = t('cmDoc2'); x.marfa = t('cmMarfa');
+      x.cart = nr('cmCart', 'Cartoane'); x.g = nr('cmG', 'Greutate'); x.pal = nr('cmPal', 'Paleți'); x.kg = nr('cmKg', 'Kg pe palet');
+      if (x.cart === undefined || x.g === undefined || x.pal === undefined || x.kg === undefined) return null;
+      x.arataPal = rad.querySelector('#cmArataPal').checked;
+      x.car = [t('cmCar1'), t('cmCar2'), t('cmCar3')]; x.uit = t('cmUit').replace(/^cod\s*uit\s*:?\s*/i, ''); x.rez = [t('cmRez1'), t('cmRez2'), t('cmRez3')];
+      x.instr = rad.querySelector('#cmInstr').value.trim(); x.instr2 = rad.querySelector('#cmInstr2').value.trim();
+      if (!x.de) { toast('Completează destinatarul.', 'rau'); return null; }
+      if (!x.data) { toast('Completează data.', 'rau'); return null; }
+      return x;
+    }
+    function salveaza(rad, apoi) {
+      var x = citeste(rad); if (!x) return false;
+      return L.salveazaCmr(x).then(function (s) { c = s; salvat = true; toast('CMR salvat: ' + s.de + ' (' + s.nc.join(', ') + ').', 'bun'); if (apoi) apoi(s); return apoi ? null : false; }, function (e) {
+        /* tiparirea nu se blocheaza daca salvarea nu merge (ex. regulile Firebase nepublicate) */
+        if (!apoi) throw e;
+        toast('CMR-ul nu a putut fi salvat (' + (e && e.message ? e.message : 'eroare') + '). Îl tipăresc oricum.', 'rau'); apoi(x); return null;
+      });
+    }
+    modal({
+      titlu: 'CMR — ' + c.cl + ' → ' + (c.de || '') + ' · ' + nCom(c.nc.length), lat: true, html: html,
+      butoane: (salvat && poate() ? [{ t: 'Șterge CMR', fn: function () {
+        return confirma('Ștergi CMR-ul salvat pentru ' + c.de + ' (' + c.nc.join(', ') + ')?\nComenzile nu sunt afectate.').then(function (ok) {
+          if (!ok) return false;
+          return L.stergeCmr(c).then(function () { toast('CMR șters.', 'bun'); return null; });
+        });
+      } }] : []).concat([{ t: 'Renunță', v: null }, {
+        t: 'Email', fn: function (rad) {
+          var x = citeste(rad); if (!x) return false;
+          if (!SC.config.cmrCatre) { toast('Adresele de email pentru CMR nu sunt setate. Administratorul le completează în Administrare → Clienți și reguli.', 'rau'); return false; }
+          var a = document.createElement('a');
+          a.href = 'mailto:' + encodeURIComponent(SC.config.cmrCatre).replace(/%3B/gi, ';').replace(/%40/g, '@').replace(/%20/g, '') + '?' + (SC.config.cmrCopie ? 'cc=' + encodeURIComponent(SC.config.cmrCopie) + '&' : '') +
+            'subject=' + encodeURIComponent('CMR ' + x.de + ' ' + x.nc[0]) + '&body=' + encodeURIComponent('Buna ziua,\n\nAtasat regasiti CMR-ul pentru ' + x.de + '.\n\nMultumesc.\nO zi buna.');
+          a.click();
+          return false;
+        }
+      }, { t: 'Salvează', fn: function (rad) { return salveaza(rad, null); } },
+      { t: 'Salvează și tipărește', cls: 'pri', fn: function (rad) { return salveaza(rad, function (s) { setTimeout(function () { tiparesteCmr(s); }, 50); }); } }])
+    });
+  }
+  $('btnCmrLista').onclick = function () {
+    if (!poate()) return;
+    L.citesteCmr().then(function (r) {
+      var l = r.lista;
+      modal({
+        titlu: 'CMR-uri emise (ultimele trei luni)', lat: true,
+        html: l.length ? '<div class="derulare-x"><table class="simplu"><tr><th>Emis</th><th>De</th><th>Client</th><th>Destinatar</th><th>Țară</th><th>Comenzi</th><th>Facturi</th><th></th></tr>' +
+          l.map(function (c, i) {
+            return '<tr><td>' + esc(SC.fmtDT(SC.ymd(new Date(c.t)) + ' ' + SC.p2(new Date(c.t).getHours()) + ':' + SC.p2(new Date(c.t).getMinutes()))) + '</td><td>' + esc(c.u || '') + '</td><td>' + esc(c.cl || '') + '</td><td><b>' + esc(c.de || '') +
+              '</b></td><td>' + esc(c.ta || '') + '</td><td>' + esc((c.nc || []).join(', ')) + '</td><td>' + esc((c.fa || []).filter(Boolean).join(', ')) + '</td><td><button type="button" class="btn mic" data-cmr="' + i + '">Deschide</button></td></tr>';
+          }).join('') + '</table></div><div class="mic" style="margin-top:8px">Un CMR nou se face din lista de comenzi: bifezi comenzile și apeși „CMR”.</div>' :
+          '<div class="mic">Niciun CMR salvat în ultimele trei luni. Un CMR nou se face din lista de comenzi: bifezi comenzile și apeși „CMR”.</div>',
+        laDeschidere: function (rad) {
+          rad.addEventListener('click', function (e) {
+            var b = e.target.closest('[data-cmr]'); if (!b) return;
+            rad.closest('.fundal').querySelector('.x').click();
+            deschideCmr(l[+b.dataset.cmr], null, false);
+          });
+        },
+        butoane: [{ t: 'Închide', cls: 'pri', v: null }]
+      });
+    }, function (e) {
+      toast('CMR-urile salvate nu pot fi citite: publică regulile din firestore.rules în Firebase (blocul „cmr”).', 'rau');
+    });
+  };
+
   /* ================= ADRESE ================= */
   var adreseAfisate = [];
   function deseneazaAdrese() {
@@ -2259,6 +2462,8 @@
       '<label class="camp"><span>Kg / palet</span><input type="text" id="cKg" value="' + esc(SC.config.kgPalet) + '" style="width:80px"></label>' +
       '<label class="camp"><span>Toleranță paleți (±)</span><input type="text" id="cTol" value="' + esc(SC.config.tolerantaPaleti) + '" style="width:80px"></label>' +
       '<label class="camp" style="flex:1 1 100%"><span>Texte din lista de la Observații (separate prin virgulă)</span><input type="text" id="cObs" value="' + esc((SC.config.observatii || []).join(', ')) + '"></label>' +
+      '<label class="camp" style="flex:1 1 48%"><span>CMR — email către (adrese separate prin ;)</span><input type="text" id="cCmrTo" value="' + esc(SC.config.cmrCatre || '') + '"></label>' +
+      '<label class="camp" style="flex:1 1 48%"><span>CMR — email în copie (CC)</span><input type="text" id="cCmrCc" value="' + esc(SC.config.cmrCopie || '') + '"></label>' +
       '<button class="btn pri" id="cSalveaza">Salvează</button></div></div>';
 
     var cand = candidatiArhivare(14).length;
@@ -2318,7 +2523,8 @@
       var kg = SC.parseNum($('cKg').value), tol = SC.parseNum($('cTol').value);
       if (!clienti.length || kg == null || tol == null) return toast('Verifică valorile.', 'rau');
       var cfg = Object.assign({}, SC.config, { clienti: clienti, clientGreutateAuto: $('cAuto').value.trim().toUpperCase(), kgPalet: kg, tolerantaPaleti: tol,
-        observatii: $('cObs').value.split(',').map(function (x) { return x.trim(); }).filter(Boolean) });
+        observatii: $('cObs').value.split(',').map(function (x) { return x.trim(); }).filter(Boolean),
+        cmrCatre: $('cCmrTo').value.trim(), cmrCopie: $('cCmrCc').value.trim() });
       SC.store.tx(function (t) { t.set('meta', 'config', cfg); t.log('Configurare: clienți / reguli modificate'); }).then(function () { toast('Salvat.', 'bun'); }, arataEroare);
     } else if (b.id === 'aArhiveaza') {
       var zile = SC.parseNum($('aZile').value);

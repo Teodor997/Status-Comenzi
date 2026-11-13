@@ -130,6 +130,46 @@
       }
     });
   };
+  /* ---------- CMR (scrisoare de transport international) ----------
+     Fiecare CMR emis ramane salvat in „cmr/AAAA-LL” (un document pe luna); „cmr/_setari” tine minte, pe client,
+     expeditorul, descrierea marfii si instructiunile folosite ultima data. */
+  L.citesteCmr = function () {
+    var acum = new Date(), dela = new Date(acum.getFullYear(), acum.getMonth() - 2, 1);
+    return Promise.all([SC.store.citesteInterval('cmr', L.lunaNotif(dela.getTime()), L.lunaNotif()), SC.store.citesteDoc('cmr', '_setari')]).then(function (r) {
+      var l = [];
+      (r[0] || []).forEach(function (d) { var e = (d.data || {}).e || {}; Object.keys(e).forEach(function (k) { l.push(e[k]); }); });
+      l.sort(function (a, b) { return (b.t || 0) - (a.t || 0); });
+      return { lista: l, setari: r[1] || {} };
+    });
+  };
+  L.cheieClientCmr = function (cl) { return String(cl || '').trim().toUpperCase() || '-'; };
+  L.salveazaCmr = function (c) {
+    var acum = Date.now(), user = SC.store.user ? SC.store.user.nume : '?', nou = !c.id;
+    c = JSON.parse(JSON.stringify(c));
+    if (nou) { c.id = String(acum); c.luna = L.lunaNotif(acum); c.t = acum; c.u = user; } else { c.ut = acum; c.uu = user; }
+    return SC.store.tx(function (t) {
+      return Promise.all([t.get('cmr', c.luna), t.get('cmr', '_setari')]).then(function (r) {
+        var doc = r[0] || { e: {} }, s = r[1] || {};
+        doc.e = doc.e || {}; doc.e[c.id] = c; doc.upd = acum;
+        t.set('cmr', c.luna, doc);
+        s.cl = s.cl || {};
+        s.cl[L.cheieClientCmr(c.cl)] = { exp: c.exp || '', marfa: c.marfa || '', instr: c.instr || '' };
+        s.loc = c.loc || ''; s.st = c.st || ''; s.so = c.so || ''; s.kg = c.kg; s.upd = acum;
+        t.set('cmr', '_setari', s);
+        t.log('CMR ' + (nou ? 'emis' : 'modificat') + ': ' + c.cl + ' → ' + c.de + ' (' + (c.nc || []).join(', ') + ')');
+      });
+    }).then(function () { return c; });
+  };
+  L.stergeCmr = function (c) {
+    return SC.store.tx(function (t) {
+      return t.get('cmr', c.luna).then(function (doc) {
+        if (!doc || !doc.e || !doc.e[c.id]) return;
+        delete doc.e[c.id]; doc.upd = Date.now();
+        t.set('cmr', c.luna, doc);
+        t.log('CMR șters: ' + c.cl + ' → ' + c.de + ' (' + (c.nc || []).join(', ') + ')');
+      });
+    });
+  };
   /* Operatorul de date confirma ca a vazut notificarile (ramane cine si cand) */
   L.vazutNotificari = function (lista) {
     var peLuna = {}, user = SC.store.user ? SC.store.user.nume : '?', acum = Date.now();
