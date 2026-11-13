@@ -382,12 +382,12 @@
       cb(l);
     }, raporteaza);
   };
-  StoreFirebase.prototype.urmaresteDela = function (col, idMin, cb) {
+  StoreFirebase.prototype.urmaresteDela = function (col, idMin, cb, laEroare) {
     var F = this.F;
     return F.onSnapshot(F.query(F.collection(this.db, col), F.where(F.documentId(), '>=', idMin)), function (qs) {
       var l = []; qs.forEach(function (d) { l.push({ id: d.id, data: d.data() }); });
       cb(l);
-    }, raporteaza);
+    }, laEroare || raporteaza);
   };
   StoreFirebase.prototype.citesteInterval = function (col, a, b) {
     var F = this.F;

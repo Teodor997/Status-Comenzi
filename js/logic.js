@@ -70,8 +70,9 @@
     modificari.forEach(function (m) { ids[SC.idGrupa(m.n)] = 1; });
     var listaId = Object.keys(ids);
     return SC.store.tx(function (t) {
-      return Promise.all(listaId.map(function (id) { return t.get('comenzi', id); })).then(function (docs) {
-        var g = {}, linii = [];
+      /* opt.citeste / opt.scrie: un document in plus citit si scris in aceeasi tranzactie (ex. notificarea), ca sa nu existe una fara cealalta */
+      return Promise.all([Promise.all(listaId.map(function (id) { return t.get('comenzi', id); })), opt.citeste ? opt.citeste(t) : null]).then(function (rr) {
+        var docs = rr[0], g = {}, linii = [], schimbate = {};
         listaId.forEach(function (id, i) { g[id] = docs[i]; });
         modificari.forEach(function (m) {
           var gr = g[SC.idGrupa(m.n)], o = gr && gr.o && gr.o[m.n];
@@ -83,7 +84,7 @@
           L.curata(o);
           var d = L.diferente(inainte, o);
           if (d) {
-            o.ut = Date.now(); o.uu = user;
+            o.ut = Date.now(); o.uu = user; schimbate[m.n] = { inainte: inainte, dupa: o };
             if (!opt.faraDetalii) linii.push(((o.cl || inainte.cl || '') + ' ' + (o.nc || inainte.nc || '')).trim() + ' (Nr Crt ' + m.n + ') — ' + d);
           }
         });
@@ -91,9 +92,57 @@
         /* fiecare modificare ramane in jurnal cu valoarea veche si cea noua */
         if (textJurnal && (modificari.length > 1 || opt.faraDetalii)) t.log(textJurnal);
         linii.forEach(function (x) { t.log(x); });
+        if (opt.scrie) opt.scrie(t, rr[1], schimbate);
         return rez;
       });
     }).then(function (rez) { L.aplicaGrupe(rez); return rez; });
+  };
+
+  /* ---------- notificari (raman salvate in baza de date, un document pe luna) ---------- */
+  SC.notif = [];
+  L.lunaNotif = function (ms) { var d = ms ? new Date(ms) : new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); };
+  L.seteazaNotificari = function (docs) {
+    var l = [];
+    docs.forEach(function (d) {
+      var e = d.data.e || {};
+      Object.keys(e).forEach(function (k) { var x = e[k]; x._luna = d.id; x._k = k; l.push(x); });
+    });
+    l.sort(function (a, b) { return b.t - a.t; });
+    SC.notif = l;
+  };
+  /* Transport: schimba data de livrare a unei comenzi; in aceeasi tranzactie se salveaza notificarea pentru Operatorul de date */
+  L.schimbaLivrare = function (n, nou) {
+    var acum = Date.now(), luna = L.lunaNotif(acum), user = SC.store.user ? SC.store.user.nume : '?';
+    return L.modifica([{
+      n: n, fn: function (x) {
+        if (x.st === ST.ANU) throw eroare('Comanda ' + x.nc + ' este anulată; data de livrare nu mai poate fi schimbată.');
+        if (x.inc === 'DA') throw eroare('Comanda ' + x.nc + ' este deja încărcată; data de livrare nu mai poate fi schimbată.');
+        x.dl = nou;
+      }
+    }], null, {
+      citeste: function (t) { return t.get('notificari', luna); },
+      scrie: function (t, doc, schimbate) {
+        var s = schimbate[n]; if (!s) return;
+        doc = doc || { e: {} }; doc.e = doc.e || {};
+        doc.e[acum + '_' + n] = L.curata({ t: acum, u: user, tip: 'dl', n: n, cl: s.dupa.cl, nc: s.dupa.nc, de: s.dupa.de, v: s.inainte.dl, nou: nou });
+        doc.upd = acum;
+        t.set('notificari', luna, doc);
+      }
+    });
+  };
+  /* Operatorul de date confirma ca a vazut notificarile (ramane cine si cand) */
+  L.vazutNotificari = function (lista) {
+    var peLuna = {}, user = SC.store.user ? SC.store.user.nume : '?', acum = Date.now();
+    lista.forEach(function (x) { (peLuna[x._luna] = peLuna[x._luna] || []).push(x._k); });
+    return Promise.all(Object.keys(peLuna).map(function (luna) {
+      return SC.store.tx(function (t) {
+        return t.get('notificari', luna).then(function (doc) {
+          if (!doc || !doc.e) return;
+          peLuna[luna].forEach(function (k) { if (doc.e[k] && !doc.e[k].vz) doc.e[k].vz = { u: user, t: acum }; });
+          doc.upd = acum; t.set('notificari', luna, doc);
+        });
+      });
+    }));
   };
 
   /* Adauga comenzi noi; Nr Crt se aloca dintr-un contor unic (fara dubluri intre colegi). */

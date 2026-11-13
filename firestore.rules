@@ -44,10 +44,17 @@ service cloud.firestore {
     }
 
     // liniile din fisierul de transport care nu exista in registrul de comenzi (un document pe zi)
+    // tot aici se tine evidenta camioanelor (ora tiparirii borderoului = inceputul incarcarii)
     match /extra/{zi} {
       allow read: if activ();
-      allow create: if poateScrie();
-      allow update: if atingeComenzi();
+      allow create, update: if atingeComenzi();
+      allow delete: if eAdmin();
+    }
+
+    // notificari pentru Operatorul de date (ex. Transportul a schimbat data de livrare); un document pe luna
+    match /notificari/{luna} {
+      allow read: if activ();
+      allow create, update: if atingeComenzi();
       allow delete: if eAdmin();
     }
 

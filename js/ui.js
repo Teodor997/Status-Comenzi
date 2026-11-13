@@ -193,6 +193,16 @@
       L.seteazaAdrese(docs);
       if (stare.tab === 'adrese') deseneazaAdrese();
     }));
+    notifInitial = true; notifVazute = {}; SC.notif = []; actualizeazaNotificari(); notifInitial = true;
+    if (poate()) {
+      var lunaTrecuta = new Date(); lunaTrecuta.setDate(1); lunaTrecuta.setMonth(lunaTrecuta.getMonth() - 1);
+      stare.opriri.push(SC.store.urmaresteDela('notificari', L.lunaNotif(lunaTrecuta.getTime()), function (docs) {
+        L.seteazaNotificari(docs); actualizeazaNotificari();
+      }, function () {
+        /* regulile Firestore pentru „notificari” nu sunt inca publicate: aplicatia merge mai departe, doar fara notificari */
+        $('btnNotif').title = 'Notificările nu sunt disponibile: publică regulile Firestore din firestore.rules.';
+      }));
+    }
     stare.opriri.push(SC.store.urmaresteDela('extra', SC.ziPlus(SC.azi(), -(SC.ZILE_EXTRA + 7)), function (docs) {
       L.seteazaExtra(docs);
       if (stare.tab === 'incarcari') deseneazaIncarcari();
@@ -348,13 +358,14 @@
       if (c.k === 'ju' && o.jd) cc = 'jd';
       if (c.k === 'inc' && o.inc === 'DA') cc = 'da';
       if (c.k === 'na' && rol() === 'transport' && o.inc !== 'DA') cc = 'ed';
+      if (c.k === 'dl' && rol() === 'transport' && o.inc !== 'DA' && o.st !== ST.ANU) cc = 'ed';
       var titlu = (c.typ === 'txt' && v.length > 14) ? ' title="' + esc(v) + '"' : '';
       if (c.k === 'n' && o.cum) { cc += ' nrc'; titlu = ' title="Comandă legată în cumulul ' + esc(o.cum) + ' (' + membriCumul(o).map(function (x) { return x.nc; }).join(', ') + ')"'; }
       /* comenzi mai vechi la care paletii reali nu sunt FPP + Pick: semnalate, se corecteaza din FPP / Pick */
       if (c.k === 'pr' && SC.esteNum(o.fpp) && SC.esteNum(o.pk) && SC.esteNum(o.pr) && o.fpp + o.pk !== o.pr) {
         cc += ' nepotrivit'; titlu = ' title="FPP ' + o.fpp + ' + Pick ' + o.pk + ' = ' + (o.fpp + o.pk) + ', dar paleți reali = ' + o.pr + '. Apasă pe FPP sau Pick și salvează."';
       }
-      h += '<div' + (cc ? ' class="' + cc + '"' : '') + (c.k === 'na' || c.k === 'fpp' || c.k === 'pk' || c.k === 'am' ? ' data-k="' + c.k + '"' : '') + titlu + '>' + esc(v) + '</div>';
+      h += '<div' + (cc ? ' class="' + cc + '"' : '') + (c.k === 'na' || c.k === 'fpp' || c.k === 'pk' || c.k === 'am' || c.k === 'dl' ? ' data-k="' + c.k + '"' : '') + titlu + '>' + esc(v) + '</div>';
     }
     return h + '</div>';
   }
@@ -497,7 +508,11 @@
       return;
     }
     /* Transport: comanda nu se deschide; Nr AUTO se scrie direct in celula */
-    if (rol() === 'transport') { var cel = e.target.closest('[data-k=na]'); if (cel) editeazaNaInLinie(o, cel); return; }
+    if (rol() === 'transport') {
+      var cel = e.target.closest('[data-k=na]'), celDl = e.target.closest('[data-k=dl]');
+      if (cel) editeazaNaInLinie(o, cel); else if (celDl) editeazaDlInLinie(o, celDl);
+      return;
+    }
     if (poate() && o.st !== ST.ANU && e.target.closest('[data-k=fpp],[data-k=pk]')) editeazaFppPick(o);
     else if (poate() && (o.st === ST.TER || o.st === ST.SELF) && e.target.closest('[data-k=am]')) editeazaAmprente(o);
     else deschideComanda(o);
@@ -1194,6 +1209,80 @@
     });
     inp.addEventListener('blur', function () { termina(true, false); });
   }
+  /* Transport: data de livrare se schimba direct in celula, cu confirmare; Operatorul de date primeste o notificare care ramane salvata */
+  function editeazaDlInLinie(o, cel) {
+    if (o.st === ST.ANU) { toast('Comanda ' + o.nc + ' este anulată; data de livrare nu mai poate fi schimbată.', 'rau'); return; }
+    if (o.inc === 'DA') { toast('Comanda ' + o.nc + ' este deja încărcată; data de livrare nu mai poate fi schimbată.', 'rau'); return; }
+    if (cel.querySelector('.naInline')) return;
+    var vechi = /^\d{4}-\d{2}-\d{2}/.test(String(o.dl || '')) ? String(o.dl).slice(0, 10) : '', text = cel.textContent, gata = false, n = o.n;
+    cel.innerHTML = '<input type="date" class="naInline" aria-label="Livrare solicitată pentru comanda ' + esc(o.nc) + '" value="' + vechi + '">';
+    var inp = cel.firstChild; inp.focus();
+    function termina(salveaza) {
+      if (gata) return; gata = true;
+      var v = inp.value;
+      cel.textContent = text;
+      setTimeout(function () { if (stare.murdar) redeseneaza(); }, 0);
+      if (!salveaza || v === vechi) return;
+      if (!v) { toast('Data de livrare nu poate fi ștearsă, doar schimbată.', 'rau'); return; }
+      confirma('Schimbi data de livrare pentru comanda ' + o.nc + '?\n' + o.cl + (o.de ? ' · ' + o.de : '') + '\n\n' + (vechi ? SC.fmtDataLunga(vechi) : '(fără dată)') + '  →  ' + SC.fmtDataLunga(v) +
+        '\n\nOperatorul de date va primi o notificare cu această schimbare.').then(function (ok) {
+        if (!ok) return;
+        return L.schimbaLivrare(n, v).then(function () { toast('Livrare ' + SC.fmtDataLunga(v) + ' salvată pentru comanda ' + o.nc + '. Operatorul de date a fost notificat.', 'bun'); redeseneaza(); });
+      }).catch(arataEroare);
+    }
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); termina(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); termina(false); }
+    });
+    inp.addEventListener('blur', function () { termina(true); });
+  }
+  /* ---- notificari pentru Operatorul de date / Administrator ---- */
+  var notifInitial = true, notifVazute = {};
+  function actualizeazaNotificari() {
+    var b = $('btnNotif'), noi = SC.notif.filter(function (x) { return !x.vz; });
+    b.classList.toggle('ascuns', !poate());
+    b.classList.toggle('are', noi.length > 0);
+    $('notifNr').textContent = noi.length || '';
+    b.title = noi.length ? noi.length + (noi.length === 1 ? ' notificare nouă' : ' notificări noi') : 'Nicio notificare nouă';
+    /* cele sosite cat aplicatia e deschisa se anunta si printr-un mesaj */
+    if (!notifInitial && poate()) noi.forEach(function (x) {
+      if (notifVazute[x._k]) return;
+      toast('Transport (' + x.u + '): comanda ' + x.nc + ' — livrare ' + (x.v ? SC.fmtData(x.v) : '(fără dată)') + ' → ' + SC.fmtData(x.nou));
+    });
+    SC.notif.forEach(function (x) { notifVazute[x._k] = 1; });
+    notifInitial = false;
+    var lista = document.getElementById('notifLista'); if (lista) lista.innerHTML = htmlNotificari(lista.dataset.toate === '1');
+  }
+  function htmlNotificari(toate) {
+    var l = SC.notif.filter(function (x) { return toate || !x.vz; });
+    if (!l.length) return '<div class="mic" style="padding:10px 0">' + (toate ? 'Nicio notificare în ultimele două luni.' : 'Nicio notificare nouă.') + '</div>';
+    return '<div class="derulare-x"><table class="simplu"><tr><th>Când</th><th>Cine</th><th>Client</th><th>Nr. Comandă</th><th>Destinatar</th><th>Livrare veche</th><th>Livrare nouă</th><th>Stare</th><th></th></tr>' +
+      l.map(function (x, i) {
+        return '<tr' + (x.vz ? '' : ' class="noua"') + '><td>' + esc(SC.fmtDT(SC.ymd(new Date(x.t)) + ' ' + ('0' + new Date(x.t).getHours()).slice(-2) + ':' + ('0' + new Date(x.t).getMinutes()).slice(-2))) + '</td><td>' + esc(x.u) + '</td><td>' + esc(x.cl || '') +
+          '</td><td><button type="button" class="btn mic" data-nc="' + esc(x.nc || '') + '" title="Arată comanda în listă">' + esc(x.nc || '') + '</button></td><td>' + esc(x.de || '') + '</td><td>' + esc(x.v ? SC.fmtDataLunga(x.v) : '—') +
+          '</td><td><b>' + esc(SC.fmtDataLunga(x.nou)) + '</b></td><td>' + (x.vz ? '<span class="mic">văzută de ' + esc(x.vz.u) + ', ' + esc(SC.fmtDT(SC.ymd(new Date(x.vz.t)) + ' ' + ('0' + new Date(x.vz.t).getHours()).slice(-2) + ':' + ('0' + new Date(x.vz.t).getMinutes()).slice(-2))) + '</span>' : '<span class="eticheta asteapta">nouă</span>') +
+          '</td><td>' + (x.vz ? '' : '<button type="button" class="btn mic" data-vz="' + esc(x._k) + '">Am văzut</button>') + '</td></tr>';
+      }).join('') + '</table></div>';
+  }
+  $('btnNotif').onclick = function () {
+    if (!poate()) return;
+    var noi = SC.notif.filter(function (x) { return !x.vz; }).length;
+    modal({
+      titlu: 'Notificări — date de livrare schimbate de Transport', lat: true,
+      html: '<label class="bifa" style="margin-bottom:8px"><input type="checkbox" id="notifToate"> Arată și cele deja văzute (ultimele două luni)</label><div id="notifLista" data-toate="0">' + htmlNotificari(false) + '</div>' +
+        '<div class="mic" style="margin-top:8px">Notificările rămân salvate. „Am văzut” notează cine și când a luat la cunoștință, pentru toți operatorii.</div>',
+      laDeschidere: function (rad) {
+        var lista = rad.querySelector('#notifLista');
+        rad.querySelector('#notifToate').onchange = function () { lista.dataset.toate = this.checked ? '1' : '0'; lista.innerHTML = htmlNotificari(this.checked); };
+        lista.addEventListener('click', function (e) {
+          var v = e.target.closest('[data-vz]'), c = e.target.closest('[data-nc]');
+          if (v) { var x = SC.notif.filter(function (y) { return y._k === v.dataset.vz; })[0]; if (x) { v.disabled = true; L.vazutNotificari([x]).catch(arataEroare); } }
+          else if (c) { rad.closest('.fundal').querySelector('.x').click(); $('fCauta').value = c.dataset.nc; stare.f.q = c.dataset.nc; arataTab('comenzi'); $('tabel').scrollTop = 0; redeseneaza(); }
+        });
+      },
+      butoane: (noi ? [{ t: 'Am văzut toate (' + noi + ')', fn: function () { return L.vazutNotificari(SC.notif.filter(function (x) { return !x.vz; })).then(function () { return false; }); } }] : []).concat([{ t: 'Închide', cls: 'pri', v: null }])
+    });
+  };
   function editeazaNrAuto(o) {
     if (o.inc === 'DA') { toast('Comanda ' + o.nc + ' este deja încărcată; numărul auto nu mai poate fi schimbat.', 'rau'); return; }
     var n = o.n;
@@ -1418,9 +1507,11 @@
   var incDate = {};          // datele bifate in filtrul de date (gol = toate)
   function poateExtra() { return poate() || poateIncarca(); }
   /* o linie doar din transport, in forma unei comenzi (pentru liste, incarcare si borderou) */
+  /* linie doar din transport: amprentele sunt paletii din TMS, pana cand cineva le scrie de mana; retururile nu au */
+  function amExtra(x) { return SC.esteNum(x.am) ? x.am : (x.retur ? undefined : x.pr); }
   function caComanda(x) {
     return { extra: true, retur: !!x.retur, _zi: x._zi, _k: x._k, n: '', cl: x.cl || '', nc: x.ref, de: x.de || '', or: x.or || '', ju: x.ju || '', na: x.na || '', nt: x.nt || '', dtr: x.dtr || '',
-      so: x.so, re: x.re, pr: x.pr, am: x.am, gf: x.gf, ca: x.ca, ob: x.ob, inc: x.inc, di: x.di, sc: x.sc, te: x.te, se: x.se, st: ST.TER };
+      so: x.so, re: x.re, pr: x.pr, am: amExtra(x), gf: x.gf, ca: x.ca, ob: x.ob, inc: x.inc, di: x.di, sc: x.sc, te: x.te, se: x.se, st: ST.TER };
   }
   function dataDin(o) { return o.dtr ? String(o.dtr).slice(0, 10) : ''; }
   /* toate camioanele: comenzile din registru cu Nr AUTO + liniile doar din transport */
@@ -1516,7 +1607,7 @@
         return '<tr' + (poateExtra() ? ' class="clic"' : '') + ' data-x="' + i + '"><td>' + esc(x.dtr ? SC.fmtDataLunga(x.dtr) : '—') + '</td><td><b>' + esc(x.na || '') + '</b></td><td>' + esc(x.nt || '') + '</td><td>' + esc(x.cl || '') +
           '</td><td>' + esc(x.ref) + '</td><td>' + esc(x.de || '') + '</td><td>' + esc(x.or || '') + '</td>' +
           (x.retur ? '<td class="nr mic" colspan="3" title="În TMS: ' + esc(SC.fmtNum(x.pr, 'int')) + ' paleți, ' + esc(SC.fmtNum(x.gf, 'num')) + ' kg">nu se ia în calcul</td><td><span class="eticheta gri">Retur</span></td></tr>' : '') +
-          (x.retur ? '' : '<td class="nr"' + (x.prm ? ' title="Corectat manual (în TMS: ' + esc(SC.fmtNum(x.un, 'int')) + ')"' : '') + '>' + SC.fmtNum(x.pr, 'int') + (x.prm ? ' ✎' : '') + '</td><td class="nr">' + SC.fmtNum(x.am, 'int') + '</td><td class="nr">' + SC.fmtNum(x.gf, 'num') +
+          (x.retur ? '' : '<td class="nr"' + (x.prm ? ' title="Corectat manual (în TMS: ' + esc(SC.fmtNum(x.un, 'int')) + ')"' : '') + '>' + SC.fmtNum(x.pr, 'int') + (x.prm ? ' ✎' : '') + '</td><td class="nr">' + SC.fmtNum(amExtra(x), 'int') + '</td><td class="nr">' + SC.fmtNum(x.gf, 'num') +
           '</td><td>' + (x.inc === 'DA' ? '<span class="eticheta ok">DA ' + esc(SC.fmtDT(x.di)) + '</span>' : '') + '</td></tr>');
       }).join('') + '</table>';
   }

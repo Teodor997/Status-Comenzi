@@ -103,6 +103,13 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - La căutare sau filtrare, dacă apare o comandă dintr-un cumul, apar și celelalte.
 - Cumulul se vede și se anulează (cu confirmare) din bara de bifare: bifezi una dintre comenzi, apoi „Vezi cumulul” sau „Anulează cumulul”.
 
+## Notificări (data de livrare schimbată de Transport)
+- Transportul poate schimba *Livrare solicitată* direct în celulă, cu confirmare, la comenzile neîncărcate și neanulate.
+- Fiecare schimbare se salvează ca notificare (colecția `notificari`, un document pe lună) în aceeași operație cu modificarea.
+- Operatorul de date și Administratorul au butonul **Notificări**, cu numărul celor noi. „Am văzut” notează cine și când a luat
+  la cunoștință. Lista arată ultimele două luni; notificările mai vechi rămân în baza de date.
+- Necesită regulile din `firestore.rules` publicate (blocul `notificari`).
+
 ## Tabul KPI's
 - Vizibil pentru toate rolurile, doar pentru citire. Pe ziua de încărcare aleasă arată: paleții de încărcat (reali la comenzile
   pregătite, estimați la celelalte), împărțirea FPP / Pick, camioanele pe stări și paleții fiecăruia, comenzile pe statusuri,
