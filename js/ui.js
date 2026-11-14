@@ -187,7 +187,9 @@
       '<button type="button" class="btn mic" id="veziCaInapoi">Înapoi la Administrator</button>' : '';
     $('tabAdmin').classList.toggle('ascuns', !eAdmin());
     var doarInc = u.rol === 'incarcari';
-    document.querySelector('.tab[data-tab=comenzi]').classList.toggle('ascuns', doarInc);
+    /* Incarcari: vede si lista de comenzi, dar doar ca s-o citeasca (fara deschidere la click, fara modificari) */
+    document.querySelector('.tab[data-tab=comenzi]').classList.remove('ascuns');
+    $('tabel').classList.toggle('doarCitire', doarInc);
     document.querySelector('.tab[data-tab=adrese]').classList.toggle('ascuns', doarInc);
     Array.prototype.forEach.call(document.querySelectorAll('.doarEdit'), function (el) { el.classList.toggle('ascuns', !poate()); });
     $('btnTransport').classList.toggle('ascuns', !poateTms());
@@ -538,6 +540,8 @@
       deseneazaBaraSel();
       return;
     }
+    /* Incarcari: lista de comenzi este doar de citit - click-ul nu deschide si nu modifica nimic */
+    if (rol() === 'incarcari') return;
     /* Transport: comanda nu se deschide; Nr AUTO se scrie direct in celula */
     if (rol() === 'transport') {
       var cel = e.target.closest('[data-k=na]'), celDl = e.target.closest('[data-k=dl]');

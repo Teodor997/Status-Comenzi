@@ -44,7 +44,7 @@ Datele rămân doar în acel browser, deci este bun pentru probă, nu pentru luc
 |---|---|
 | **Administrator** | Tot: utilizatori, migrare, arhivare, jurnal, plus tot ce pot celelalte roluri. |
 | **Operator date** | Toată partea de comenzi: adaugă manual, modifică orice câmp al comenzii, schimbă statusuri, importă borderoul Kandia, fișiere Excel și fișierul de transport din TMS; editează Adrese. Nu confirmă încărcări. |
-| **Încărcări** | Taburile *Încărcări* și *KPI's*: confirmă camioanele (stare camion, temperatură, semnătură) și tipărește borderoul. |
+| **Încărcări** | Taburile *Încărcări* și *KPI's*: confirmă camioanele (stare camion, temperatură, semnătură) și tipărește borderoul. Vede și tabul *Comenzi*, doar pentru citit: poate căuta, filtra și exporta, dar comanda nu se deschide la click și nu poate modifica nimic acolo. |
 | **Transport** | Vede comenzile și încărcările; modifică doar **Nr AUTO**, direct în celulă (sau pe mai multe comenzi bifate), cât timp comanda nu e încărcată. Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
 
 **Vezi ca alt rol (doar Administrator).** În bara de sus, lângă nume, administratorul are lista **Vezi ca**: alege
