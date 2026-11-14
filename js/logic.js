@@ -39,7 +39,8 @@
     var toate = [], idx = {};
     Object.keys(SC.grupe).forEach(function (id) {
       var o = SC.grupe[id].o || {};
-      Object.keys(o).forEach(function (n) { var c = o[n]; c.n = +n; toate.push(c); idx[+n] = c; });
+      /* judetul apare peste tot in forma „Bucuresti”, si la comenzile salvate mai demult cu majuscule (fara nicio scriere in baza de date) */
+      Object.keys(o).forEach(function (n) { var c = o[n]; c.n = +n; if (c.ju) c.ju = SC.fmtJudet(c.ju); toate.push(c); idx[+n] = c; });
     });
     toate.sort(function (a, b) { return a.n - b.n; });
     SC.comenzi = toate; SC.dupaNr = idx;
@@ -77,10 +78,12 @@
         modificari.forEach(function (m) {
           var gr = g[SC.idGrupa(m.n)], o = gr && gr.o && gr.o[m.n];
           if (!o) throw eroare('Comanda cu Nr Crt ' + m.n + ' nu mai există în baza de date.');
+          if (o.ju) o.ju = SC.fmtJudet(o.ju);      /* inainte de comparare: rescrierea cu litere mici nu apare in jurnal ca modificare */
           var inainte = JSON.parse(JSON.stringify(o));
           o.n = m.n;
           m.fn(o);
           delete o.n;
+          if (o.ju) o.ju = SC.fmtJudet(o.ju);
           L.curata(o);
           var d = L.diferente(inainte, o);
           if (d) {
@@ -204,6 +207,7 @@
             parte.forEach(function (src, j) {
               var o = L.curata(JSON.parse(JSON.stringify(src)));
               delete o.n;
+              if (o.ju) o.ju = SC.fmtJudet(o.ju);
               o.ct = acum; o.cu = user;
               g[SC.idGrupa(numere[j])].o[numere[j]] = o;
             });
@@ -323,7 +327,7 @@
   }
   L.seteazaAdrese = function (docs) {
     var l = [];
-    docs.forEach(function (d) { (d.data.r || []).forEach(function (r) { r._c = d.id; l.push(r); }); });
+    docs.forEach(function (d) { (d.data.r || []).forEach(function (r) { r._c = d.id; if (r.jud) r.jud = SC.fmtJudet(r.jud); l.push(r); }); });
     SC.adrese = l; adrNorm = null;
   };
   function norm() {
@@ -380,7 +384,7 @@
   /* salveaza (adauga / modifica / sterge) un rand din Adrese */
   L.salveazaAdresa = function (rand, sterge) {
     var chunk = rand._c, date = { id: rand.id || SC.idScurt(), cl: rand.cl || '', cod: rand.cod || '', nume: rand.nume || '',
-      str: rand.str || '', loc: rand.loc || '', jud: rand.jud || '' };
+      str: rand.str || '', loc: rand.loc || '', jud: SC.fmtJudet(rand.jud) };
     if (!chunk) {
       var numar = {}, max = -1;
       SC.adrese.forEach(function (a) { numar[a._c] = (numar[a._c] || 0) + 1; });
@@ -573,7 +577,7 @@
           adrese.push({
             id: SC.idScurt(), cl: ha.cl != null ? vText(cel(wsA, ra, ha.cl)).toUpperCase() : '', cod: ha.cod != null ? vText(cel(wsA, ra, ha.cod)) : '',
             nume: nume, str: ha.str != null ? vAdresa(cel(wsA, ra, ha.str)) : '', loc: ha.loc != null ? vText(cel(wsA, ra, ha.loc)) : '',
-            jud: ha.jud != null ? vText(cel(wsA, ra, ha.jud)) : ''
+            jud: ha.jud != null ? SC.fmtJudet(vText(cel(wsA, ra, ha.jud))) : ''
           });
         }
       }
@@ -603,6 +607,7 @@
     Object.keys(folosite).map(Number).sort(function (a, b) { return a - b; }).forEach(function (n) {
       var o = JSON.parse(JSON.stringify(folosite[n]));
       delete o.n;
+      if (o.ju) o.ju = SC.fmtJudet(o.ju);
       o.ct = momentCreare(o) || ultimCt || Date.now();
       ultimCt = o.ct;
       if (o.st === ST.TER && o.inc !== 'DA' && (!o.dp || String(o.dp) < prag)) { o.ar = 1; stat.arhivate++; }
@@ -647,6 +652,7 @@
       if (!ref) continue;
       var x = { ref: ref, na: vText(cel(ws, r2, h.na)).toUpperCase() };
       ['nt', 'so', 're', 'cl', 'de', 'or', 'ju'].forEach(function (kk) { if (h[kk] != null) x[kk] = vText(cel(ws, r2, h[kk])); });
+      if (x.ju) x.ju = SC.fmtJudet(x.ju);
       ['un', 'ma'].forEach(function (kk) { if (h[kk] != null) { var nv = vNum(cel(ws, r2, h[kk])); if (SC.esteNum(nv)) x[kk] = SC.rotunjeste(nv, 2); } });
       x.dtr = ziua(h.dtr) || ziua(h.dtr2);
       if (x.na || x.nt) randuri.push(x);
@@ -660,7 +666,7 @@
     var l = [];
     docs.forEach(function (d) {
       var m = d.data.l || {};
-      Object.keys(m).forEach(function (k) { var x = m[k]; x._zi = d.id; x._k = k; x.retur = SC.esteRetur(x.ref); l.push(x); });
+      Object.keys(m).forEach(function (k) { var x = m[k]; x._zi = d.id; x._k = k; x.retur = SC.esteRetur(x.ref); if (x.ju) x.ju = SC.fmtJudet(x.ju); l.push(x); });
     });
     SC.extra = l;
     /* pe acelasi document al zilei se tine si evidenta camioanelor: cand s-a tiparit borderoul = cand a inceput incarcarea */
@@ -741,8 +747,10 @@
         modificari.forEach(function (m) {
           var x = g[m.zi] && g[m.zi].l && g[m.zi].l[m.k];
           if (!x) throw eroare('Linia de transport nu mai există (fișierul TMS a fost reimportat între timp). Reîncarcă lista.');
+          if (x.ju) x.ju = SC.fmtJudet(x.ju);
           var inainte = JSON.parse(JSON.stringify(x));
           m.fn(x);
+          if (x.ju) x.ju = SC.fmtJudet(x.ju);
           L.curata(x);
           var d = L.diferente(inainte, x);
           if (d) { x.ut = Date.now(); x.uu = user; linii.push('Doar transport ' + ((x.cl || '') + ' ' + (x.ref || '')).trim() + ' (' + (x.na || x.nt || '') + ') — ' + d); }

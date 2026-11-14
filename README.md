@@ -54,7 +54,11 @@ simulare — ce modifici în această vedere se salvează cu adevărat, pe numel
 ieșire sau la reîncărcarea paginii. Nu consumă nimic în plus din planul gratuit (se recitesc o dată aceleași date).
 
 **Jurnal.** Fiecare modificare rămâne în *Administrare → Jurnal de modificări*: cine, când, comanda, câmpul,
-valoarea veche → valoarea nouă. Jurnalul nu poate fi șters sau citit decât de administrator.
+valoarea veche → valoarea nouă. Jurnalul nu poate fi șters sau citit decât de administrator. Se poate afișa pe o zi sau pe o
+perioadă (*De la* / *Până la*, cel mult 366 de zile o dată), cu căutare după comandă, utilizator sau câmp, iar
+**Export Excel** descarcă tot ce corespunde perioadei și căutării: Data, Ora, Utilizator, Comandă, Nr Crt, Modificare
+(Data și Ora sunt valori de dată adevărate, deci se pot sorta și filtra în Excel). Jurnalul are câte un document pe
+ora în care s-a lucrat: o zi înseamnă cel mult câteva zeci de citiri, o lună câteva sute.
 
 **Unde sunt impuse drepturile.** Regulile bazei de date împart utilizatorii în trei trepte: cine poate crea comenzi și
 modifica adrese (Administrator, Operator date), cine poate doar modifica comenzi existente (Încărcări, Transport) și cine
@@ -72,6 +76,10 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - Import borderou: „Document” = comenzi (EDI), „Nr. aviz” = materiale (EDI MAT); comenzile existente sunt sărite;
   județul din Adrese după destinatar, altfel după oraș (roșu), altfel se cere.
 - Încărcată = DA doar pentru comenzi Terminata.
+- Județul se scrie peste tot în forma „Bucuresti”, nu „BUCURESTI” (prima literă a fiecărui cuvânt mare: „Satu Mare”,
+  „Caras-Severin”), indiferent de unde vine: scris de mână, Adrese, borderou, Excel, fișierul TMS. Rămân cu majuscule
+  prescurtările (SUA) și codurile de 1–2 litere scrise singure (MH, B). Comenzile salvate mai demult cu majuscule apar
+  direct în forma nouă, fără nicio scriere în baza de date; se rescriu acolo abia când comanda este modificată.
 
 ## Ce diferă față de Excel
 

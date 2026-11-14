@@ -3,7 +3,7 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '2.19';
+  SC.VERSIUNE = '2.21';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
   SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
@@ -79,6 +79,27 @@
     });
   };
   SC.gol = function (v) { return v == null || String(v).trim() === ''; };
+  /* Judetul se scrie peste tot „Bucuresti”, nu „BUCURESTI”: prima litera a fiecarui cuvant mare, restul mici.
+     - text scris tot cu majuscule sau tot cu litere mici: se rescrie fiecare cuvant (SATU MARE -> Satu Mare, CARAS-SEVERIN -> Caras-Severin);
+     - text deja amestecat (Ridica personal): se rescriu doar cuvintele ramase cu majuscule;
+     - raman cu majuscule prescurtarile (SUA, UK...) si codurile de judet de 1-2 litere scrise singure (MH, B, IF). */
+  var JUDET_MAJUSCULE = { SUA: 1, USA: 1, UK: 1, UE: 1 };
+  SC.fmtJudet = function (v) {
+    var s = String(v == null ? '' : v).replace(/[\s ]+/g, ' ').trim();
+    if (!s) return '';
+    var sus = s.toLocaleUpperCase('ro-RO'), jos = s.toLocaleLowerCase('ro-RO');
+    if (sus === jos) return s;                                  /* fara litere */
+    var uniform = s === sus || s === jos;
+    if (uniform && sus.length <= 2) return sus;                 /* cod de judet */
+    function cuv(w) {
+      var W = w.toLocaleUpperCase('ro-RO'), l = w.toLocaleLowerCase('ro-RO');
+      if (W === l) return w;
+      if (JUDET_MAJUSCULE[W] && (uniform || w === W)) return W;
+      if (!uniform && (w !== W || w.length < 3)) return w;      /* text amestecat: se ating doar cuvintele cu majuscule */
+      return l.charAt(0).toLocaleUpperCase('ro-RO') + l.slice(1);
+    }
+    return s.split(' ').map(function (parte) { return parte.split('-').map(cuv).join('-'); }).join(' ');
+  };
   /* litere mici, fara spatii in plus / randuri noi (NormalizeazaAntet din VBA) */
   SC.normAntet = function (v) {
     return String(v == null ? '' : v).toLowerCase().replace(/[\r\n\t ]+/g, ' ').replace(/ {2,}/g, ' ').trim();

@@ -1004,6 +1004,7 @@
         else v = n;
       }
       if (k === 'na' || k === 'cl') v = String(v).toUpperCase();
+      if (k === 'ju') v = SC.fmtJudet(v);      /* „BUCURESTI” scris de mana se salveaza „Bucuresti” */
       val[k] = v;
     });
     if (greseala) { toast(greseala, 'rau'); return null; }
@@ -2510,9 +2511,11 @@
     h += '<div class="card"><h2>Migrare din Excel</h2><p>Încarcă registrul „Status Comenzi” (.xlsm): toate comenzile, cu Nr Crt păstrat, și foaia Adrese. <b>Înlocuiește tot ce există</b> în aplicație — se folosește la pornire și, dacă e nevoie, încă o dată în ziua trecerii de pe Excel.</p>' +
       '<div class="rand-form"><button class="btn" id="mMigrare">Alege fișierul și migrează…</button></div></div>';
 
-    h += '<div class="card"><h2>Jurnal de modificări</h2><p>Fiecare modificare, cu cine a făcut-o, valoarea veche și cea nouă. Alege ziua; opțional caută un număr de comandă sau un nume.</p><div class="rand-form"><input type="date" id="jZi" value="' + SC.azi() + '" aria-label="Ziua">' +
-      '<input type="search" id="jFiltru" placeholder="Comandă, utilizator, câmp…" aria-label="Caută în jurnal">' +
-      '<button class="btn" id="jArata">Arată</button><span class="mic" id="jNumar"></span></div><div id="jLista" style="margin-top:10px"></div></div>';
+    h += '<div class="card"><h2>Jurnal de modificări</h2><p>Fiecare modificare, cu cine a făcut-o, valoarea veche și cea nouă. Alege ziua sau perioada; opțional caută un număr de comandă sau un nume. „Export Excel” descarcă tot ce corespunde perioadei și căutării.</p><div class="rand-form">' +
+      '<label class="camp"><span>De la</span><input type="date" id="jZi" value="' + SC.azi() + '"></label>' +
+      '<label class="camp"><span>Până la</span><input type="date" id="jZi2" value="' + SC.azi() + '"></label>' +
+      '<label class="camp"><span>Caută</span><input type="search" id="jFiltru" placeholder="Comandă, utilizator, câmp…"></label>' +
+      '<button class="btn" id="jArata">Arată</button><button class="btn" id="jExport">Export Excel</button><span class="mic" id="jNumar" role="status"></span></div><div id="jLista" style="margin-top:10px"></div></div>';
 
     h += '<div class="card"><h2>Despre consum (plan gratuit Firebase)</h2><p>Comenzile sunt păstrate în grupe de ' + SC.MARIME_GRUPA + ', iar aplicația urmărește în timp real doar grupele cu comenzi active și pe cele recente. ' +
       'Acum sunt încărcate ' + Object.keys(SC.grupe).length + ' grupe (' + SC.comenzi.length + ' comenzi). Consumul real se vede în consola Firebase → Firestore → Usage.</p></div>';
@@ -2590,23 +2593,72 @@
       }).catch(arataEroare);
     } else if (b.id === 'mMigrare') {
       migrare();
-    } else if (b.id === 'jArata') {
-      var zi = $('jZi').value, cuv = SC.normText($('jFiltru').value).split(' ').filter(Boolean);
-      SC.store.citesteInterval('jurnal', zi + '_', zi + '_\uf8ff').then(function (docs) {
-        var e2 = [];
-        docs.forEach(function (d) { if (d.data && d.data.e) e2 = e2.concat(d.data.e); });
-        var randuri = e2.map(function (x) { var p = x.split('|'); return { t: +p[0], u: p[1], x: p.slice(2).join('|') }; }).sort(function (a2, b2) { return b2.t - a2.t; });
-        var total = randuri.length;
-        if (cuv.length) randuri = randuri.filter(function (r2) { var h2 = SC.normText(r2.u + ' ' + r2.x); return cuv.every(function (c) { return h2.indexOf(c) >= 0; }); });
+    } else if (b.id === 'jArata' || b.id === 'jExport') {
+      var per = perioadaJurnal(); if (!per) return;
+      var exporta = b.id === 'jExport', perText = per.a === per.b ? SC.fmtDataLunga(per.a) : 'perioada ' + SC.fmtDataLunga(per.a) + ' – ' + SC.fmtDataLunga(per.b);
+      b.disabled = true; $('jNumar').textContent = 'Se citește jurnalul…';
+      citesteJurnal(per).then(function (j) {
+        var randuri = j.randuri, total = j.total;
         $('jNumar').textContent = total ? randuri.length + ' din ' + total + ' înregistrări' : '';
-        if (!randuri.length) { $('jLista').innerHTML = '<div class="mic">' + (total ? 'Nicio înregistrare nu corespunde căutării.' : 'Nicio modificare înregistrată în ' + esc(SC.fmtDataLunga(zi)) + '.') + '</div>'; return; }
-        var totalFiltrat = randuri.length; randuri = randuri.slice(0, 1500);
-        if (totalFiltrat > 1500) $('jNumar').textContent += ' — afișate primele 1500, restrânge cu căutarea';
-        $('jLista').innerHTML = '<div class="lista-mica" style="max-height:420px"><table class="simplu"><tr><th>Ora</th><th>Cine</th><th>Ce</th></tr>' +
-          randuri.map(function (r) { var dt = new Date(r.t); return '<tr><td>' + SC.p2(dt.getHours()) + ':' + SC.p2(dt.getMinutes()) + ':' + SC.p2(dt.getSeconds()) + '</td><td>' + esc(r.u) + '</td><td>' + esc(r.x) + '</td></tr>'; }).join('') + '</table></div>';
-      }, arataEroare);
+        if (!randuri.length) {
+          var gol = total ? 'Nicio înregistrare nu corespunde căutării.' : 'Nicio modificare înregistrată în ' + perText + '.';
+          if (exporta) toast(gol + ' Nu am ce exporta.', 'rau'); else $('jLista').innerHTML = '<div class="mic">' + esc(gol) + '</div>';
+          return;
+        }
+        if (exporta) {
+          exportaJurnal(randuri, 'Jurnal modificari ' + per.a + (per.a === per.b ? '' : ' - ' + per.b) + '.xlsx');
+          toast('Jurnal exportat: ' + randuri.length + (randuri.length === 1 ? ' înregistrare' : ' înregistrări') + ' din ' + perText + '.', 'bun');
+          return;
+        }
+        var totalFiltrat = randuri.length, cuZi = per.a !== per.b; randuri = randuri.slice(0, 1500);
+        if (totalFiltrat > 1500) $('jNumar').textContent += ' — afișate primele 1500; restrânge cu căutarea sau folosește Export Excel pentru toate';
+        $('jLista').innerHTML = '<div class="lista-mica" style="max-height:420px"><table class="simplu"><tr>' + (cuZi ? '<th>Data</th>' : '') + '<th>Ora</th><th>Cine</th><th>Ce</th></tr>' +
+          randuri.map(function (r) { var dt = new Date(r.t); return '<tr>' + (cuZi ? '<td>' + SC.p2(dt.getDate()) + '.' + SC.p2(dt.getMonth() + 1) + '.' + dt.getFullYear() + '</td>' : '') + '<td>' + SC.p2(dt.getHours()) + ':' + SC.p2(dt.getMinutes()) + ':' + SC.p2(dt.getSeconds()) + '</td><td>' + esc(r.u) + '</td><td>' + esc(r.x) + '</td></tr>'; }).join('') + '</table></div>';
+      }).catch(function (e2) { $('jNumar').textContent = ''; arataEroare(e2); }).then(function () { b.disabled = false; });
     }
   });
+  /* ---- jurnal: perioada, citire, export ----
+     Jurnalul are cate un document pe ora in care s-a lucrat, deci o zi inseamna cel mult cateva zeci de citiri. */
+  var JURNAL_ZILE_MAX = 366;
+  $('pag-admin').addEventListener('change', function (e) {
+    /* alegerea zilei de inceput muta si sfarsitul pe aceeasi zi: o singura zi ramane un singur click */
+    if (e.target.id === 'jZi' && $('jZi2')) $('jZi2').value = e.target.value;
+  });
+  function perioadaJurnal() {
+    var a = $('jZi').value, b = $('jZi2').value || a;
+    if (!a) { toast('Alege ziua de început.', 'rau'); $('jZi').focus(); return null; }
+    if (b < a) { toast('„Până la” este înaintea zilei de început. Corectează perioada.', 'rau'); $('jZi2').focus(); return null; }
+    var zile = Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000) + 1;
+    if (zile > JURNAL_ZILE_MAX) { toast('Perioada are ' + zile + ' zile. Alege cel mult ' + JURNAL_ZILE_MAX + ' de zile o dată, ca să nu consumi citirile zilnice din planul gratuit.', 'rau'); $('jZi2').focus(); return null; }
+    return { a: a, b: b, cuv: SC.normText($('jFiltru').value).split(' ').filter(Boolean) };
+  }
+  function citesteJurnal(per) {
+    return SC.store.citesteInterval('jurnal', per.a + '_', per.b + '_\uf8ff').then(function (docs) {
+      var e2 = [];
+      docs.forEach(function (d) { if (d.data && d.data.e) e2 = e2.concat(d.data.e); });
+      var randuri = e2.map(function (x) { var p = x.split('|'); return { t: +p[0], u: p[1], x: p.slice(2).join('|') }; }).sort(function (a2, b2) { return b2.t - a2.t; });
+      var total = randuri.length;
+      if (per.cuv.length) randuri = randuri.filter(function (r2) { var h2 = SC.normText(r2.u + ' ' + r2.x); return per.cuv.every(function (c) { return h2.indexOf(c) >= 0; }); });
+      return { randuri: randuri, total: total };
+    });
+  }
+  /* Excel: Data si Ora sunt valori de data adevarate (se pot sorta si filtra pe ani / luni / zile);
+     la modificarile de comenzi, comanda si Nr Crt stau in coloane separate. */
+  function exportaJurnal(randuri, numeFisier) {
+    var aoa = [['Data', 'Ora', 'Utilizator', 'Comandă', 'Nr Crt', 'Modificare']];
+    randuri.forEach(function (r) {
+      var d = new Date(r.t), zi = Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000) + 25569;
+      var ora = (d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()) / 86400;
+      var m = /^(.*?) \(Nr Crt (\d+)\) — ([\s\S]*)$/.exec(r.x);
+      aoa.push([{ t: 'n', v: zi, z: 'dd.mm.yyyy' }, { t: 'n', v: ora, z: 'hh:mm:ss' }, r.u, m ? m[1] : null, m ? +m[2] : null, m ? m[3] : r.x]);
+    });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 11 }, { wch: 9 }, { wch: 20 }, { wch: 26 }, { wch: 8 }, { wch: 110 }];
+    ws['!autofilter'] = { ref: 'A1:F' + aoa.length };
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Jurnal');
+    XLSX.writeFile(wb, numeFisier);
+  }
   function migrare() {
     var fisier, p, m;
     alegeFisier().then(function (f) {
