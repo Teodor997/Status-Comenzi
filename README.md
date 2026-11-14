@@ -47,6 +47,12 @@ Datele rămân doar în acel browser, deci este bun pentru probă, nu pentru luc
 | **Încărcări** | Taburile *Încărcări* și *KPI's*: confirmă camioanele (stare camion, temperatură, semnătură) și tipărește borderoul. |
 | **Transport** | Vede comenzile și încărcările; modifică doar **Nr AUTO**, direct în celulă (sau pe mai multe comenzi bifate), cât timp comanda nu e încărcată. Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
 
+**Vezi ca alt rol (doar Administrator).** În bara de sus, lângă nume, administratorul are lista **Vezi ca**: alege
+*Operator date*, *Încărcări* sau *Transport* și aplicația se reface exact cum o vede acel rol (taburi, butoane, ce se
+poate modifica). O bandă galbenă arată rolul ales și are butonul *Înapoi la Administrator*. Atenție: nu este o
+simulare — ce modifici în această vedere se salvează cu adevărat, pe numele tău. Vederea revine la Administrator la
+ieșire sau la reîncărcarea paginii. Nu consumă nimic în plus din planul gratuit (se recitesc o dată aceleași date).
+
 **Jurnal.** Fiecare modificare rămâne în *Administrare → Jurnal de modificări*: cine, când, comanda, câmpul,
 valoarea veche → valoarea nouă. Jurnalul nu poate fi șters sau citit decât de administrator.
 

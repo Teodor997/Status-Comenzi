@@ -59,6 +59,11 @@
   #sync.rau i { background: #ff7b72; }
   #banda { background: #fff3cd; color: #6b4a00; padding: 6px 12px; font-size: 13px; border-bottom: 1px solid #e6d28a; }
   #banda.rau { background: #fde2e0; color: #7a1b15; border-color: #efb1ac; }
+  #bandaRol { background: #ffe9a8; color: #5a3d00; padding: 7px 12px; font-size: 13.5px; border-bottom: 2px solid #d9a400; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+  #bandaRol.ascuns { display: none; }
+  .vezi-ca { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .vezi-ca.ascuns { display: none; }
+  .vezi-ca select { height: 28px; padding: 0 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,.55); background: #fff; color: var(--text); font: inherit; font-size: 13px; }
   main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .pagina { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .pagina.derulabila { overflow: auto; padding: 14px; gap: 14px; }
@@ -308,12 +313,14 @@
     <div class="dreapta">
       <span id="sync"><i></i><span id="syncText">conectare…</span></span>
       <span id="cine"></span>
+      <label class="vezi-ca ascuns" id="veziCaCutie">Vezi ca <select id="veziCa" aria-label="Vezi aplicația ca alt rol"></select></label>
       <button class="btn mic ascuns" id="btnNotif">Notificări<b id="notifNr"></b></button>
       <button class="btn mic" id="btnPin">Schimbă PIN</button>
       <button class="btn mic" id="btnIesire">Ieșire</button>
     </div>
   </header>
   <div id="banda" class="ascuns"></div>
+  <div id="bandaRol" class="ascuns" role="status"></div>
   <main>
     <!-- COMENZI -->
     <section class="pagina" id="pag-comenzi">

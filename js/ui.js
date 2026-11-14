@@ -78,6 +78,9 @@
   function poate() { var u = SC.store.user; return !!u && (u.rol === 'admin' || u.rol === 'operator'); }
   function eAdmin() { var u = SC.store.user; return !!u && u.rol === 'admin'; }
   function rol() { return SC.store.user ? SC.store.user.rol : ''; }
+  /* Administratorul poate vedea aplicatia ca alt rol: user.rol devine rolul ales, iar rolReal ramane 'admin'.
+     Drepturile din baza de date raman cele de administrator; se schimba doar ce arata si ce permite ecranul. */
+  function rolReal() { var u = SC.store.user; return u ? (u.rolReal || u.rol) : ''; }
   /* Administrator + Operator date: tot ce tine de comenzi, adrese, importuri (poate()).
      Incarcari: doar confirmarea incarcarii.  Transport: doar Nr AUTO. */
   function poateIncarca() { return rol() === 'admin' || rol() === 'incarcari'; }
@@ -138,7 +141,12 @@
       $('loginEroare').textContent = e && e.prietenos ? e.message : 'Autentificare eșuată: ' + (e && e.message ? e.message : e);
     });
   });
-  SC.onAuth = function (user, mesaj) { if (user) porneste(); else arataLogin(mesaj); };
+  SC.onAuth = function (user, mesaj) {
+    if (!user) { stare.veziCa = ''; arataLogin(mesaj); return; }
+    /* daca profilul este recitit cat timp administratorul vede aplicatia ca alt rol, vederea aleasa se pastreaza */
+    if (stare.veziCa && user.rol === 'admin' && !user.rolReal) { user.rolReal = 'admin'; user.rol = stare.veziCa; }
+    porneste();
+  };
   SC.onEroareSync = function (e) {
     $('sync').classList.add('rau'); $('syncText').textContent = 'eroare de sincronizare';
     var b = $('banda'); b.className = 'rau'; b.textContent = e && e.message ? e.message : String(e);
@@ -170,7 +178,13 @@
     stare.pornit = true; stare.primaData = true;
     var u = SC.store.user;
     $('ecranLogin').classList.add('ascuns'); $('aplicatie').classList.remove('ascuns');
-    $('cine').textContent = u.nume + ' · ' + (SC.ROLURI[u.rol] || u.rol);
+    $('cine').textContent = u.nume + ' · ' + (SC.ROLURI[rolReal()] || rolReal());
+    var caAltul = rolReal() === 'admin' && u.rol !== 'admin';
+    $('veziCaCutie').classList.toggle('ascuns', rolReal() !== 'admin');
+    $('veziCa').innerHTML = Object.keys(SC.ROLURI).map(function (r) { return '<option value="' + r + '"' + (r === u.rol ? ' selected' : '') + '>' + esc(SC.ROLURI[r]) + '</option>'; }).join('');
+    $('bandaRol').classList.toggle('ascuns', !caAltul);
+    $('bandaRol').innerHTML = caAltul ? '<span>Vezi aplicația ca <b>' + esc(SC.ROLURI[u.rol]) + '</b>. Ecranul arată și permite exact ce are acest rol. Modificările pe care le faci sunt reale și se salvează pe numele tău.</span>' +
+      '<button type="button" class="btn mic" id="veziCaInapoi">Înapoi la Administrator</button>' : '';
     $('tabAdmin').classList.toggle('ascuns', !eAdmin());
     var doarInc = u.rol === 'incarcari';
     document.querySelector('.tab[data-tab=comenzi]').classList.toggle('ascuns', doarInc);
@@ -240,6 +254,18 @@
   }
   $('taburi').addEventListener('click', function (e) { var b = e.target.closest('.tab'); if (b) arataTab(b.dataset.tab); });
   $('btnIesire').onclick = function () { SC.store.logout(); };
+  function veziCa(r) {
+    var u = SC.store.user;
+    if (!u || rolReal() !== 'admin' || !SC.ROLURI[r] || r === u.rol) return;
+    u.rolReal = 'admin'; u.rol = r; stare.veziCa = r === 'admin' ? '' : r;
+    /* se inchid ferestrele deschise si aplicatia reporneste cu rolul ales (taburi, butoane, liste) */
+    Array.prototype.forEach.call(document.querySelectorAll('.fundal'), function (f) { f.remove(); });
+    inchideFiltru(); inchideCal();
+    opresteTot(); porneste();
+    toast(r === 'admin' ? 'Ai revenit la vederea de Administrator.' : 'Acum vezi aplicația ca ' + SC.ROLURI[r] + '.', 'bun');
+  }
+  $('veziCa').onchange = function () { veziCa(this.value); };
+  $('bandaRol').addEventListener('click', function (e) { if (e.target.id === 'veziCaInapoi') veziCa('admin'); });
   $('btnPin').onclick = function () {
     modal({
       titlu: 'Schimbă PIN', html: '<label class="camp"><span>PIN nou (6 cifre)</span><input type="password" id="pinNou" inputmode="numeric" maxlength="6"></label>',
