@@ -75,6 +75,11 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - Comandă manuală: „MANUAL: data ora”, verificare de dublură pe același client, completare din Adrese după Cod Client.
 - Import borderou: „Document” = comenzi (EDI), „Nr. aviz” = materiale (EDI MAT); comenzile existente sunt sărite;
   județul din Adrese după destinatar, altfel după oraș (roșu), altfel se cere.
+- **Rescriere din borderou (doar Administratorul)**: la importul unui borderou care conține comenzi existente, fereastra
+  arată pentru fiecare ce diferă (destinatar, adresă, oraș, județ, date, greutate, cartoane, paleți estimați; Observațiile
+  doar la cerere), iar administratorul bifează ce comenzi să fie rescrise. Statusul, paleții reali, Nr AUTO și încărcarea
+  rămân neschimbate, o celulă goală din borderou nu șterge nimic, iar valorile vechi rămân în jurnal. La o comandă
+  Terminata cu greutate finală calculată automat, greutatea finală se recalculează după noua greutate.
 - Încărcată = DA doar pentru comenzi Terminata.
 - Județul se scrie peste tot în forma „Bucuresti”, nu „BUCURESTI” (prima literă a fiecărui cuvânt mare: „Satu Mare”,
   „Caras-Severin”), indiferent de unde vine: scris de mână, Adrese, borderou, Excel, fișierul TMS. Rămân cu majuscule

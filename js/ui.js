@@ -1648,17 +1648,23 @@
     }).then(function (imp) {
       var deja = imp && (imp.l || []).filter(function (x) { return x.f === fisier.name; })[0];
       if (!deja) return true;
-      return confirma('Fișierul „' + fisier.name + '” a mai fost importat (' + deja.t + ', ' + deja.u + ').\nComenzile existente vor fi oricum sărite. Continui?');
+      return confirma('Fișierul „' + fisier.name + '” a mai fost importat (' + deja.t + ', ' + deja.u + ').\n' +
+        (eAdmin() ? 'Comenzile existente nu se importă a doua oară; în fereastra următoare poți alege care să fie rescrise cu datele din borderou. Continui?' : 'Comenzile existente vor fi oricum sărite. Continui?'));
     }).then(function (ok) {
       if (!ok) return null;
       return L.cautaComenzi(b.randuri.map(function (r) { return r.nc; }));
     }).then(function (exist) {
       if (!exist) return;
-      var noi = [], dubluri = [], vazute = {}, dupaOras = 0, faraJudet = [];
+      var noi = [], dubluri = [], vazute = {}, dupaOras = 0, faraJudet = [], existente = [];
       b.randuri.forEach(function (r) {
         var k = SC.cheieComanda(r.nc);
         if ((exist[k] && exist[k].length) || vazute[k]) {
           dubluri.push(r.nc + (exist[k] && exist[k].length ? ' (Nr Crt ' + exist[k][0].n + ')' : ' (de două ori în borderou)'));
+          /* Administratorul poate rescrie comenzile existente ale aceluiasi client cu datele din borderou */
+          if (!vazute[k] && exist[k] && exist[k].length) {
+            exist[k].filter(function (o) { return SC.normText(o.cl) === SC.normText(client); }).forEach(function (o) { existente.push({ o: o, r: r }); });
+            vazute[k] = 1;
+          }
           return;
         }
         vazute[k] = 1;
@@ -1673,7 +1679,28 @@
       });
       var html = '<div class="nota">Borderou (' + b.tip + '): <b>' + esc(fisier.name) + '</b><br>Eticheta de import: <b>' + esc(b.eticheta) + '</b></div>' +
         '<div><b>Comenzi noi: ' + noi.length + '</b></div>';
-      if (dubluri.length) html += '<div>Comenzi sărite (existau deja): ' + dubluri.length + '</div>' + listaHtml(dubluri);
+      var rescriu = eAdmin() && existente.length > 0, bifate = {};
+      if (dubluri.length && !rescriu) html += '<div>Comenzi sărite (existau deja): ' + dubluri.length + '</div>' + listaHtml(dubluri);
+      if (rescriu) html += '<div id="brSec" style="margin:10px 0"></div>';
+      function valB(k, v) { return v == null || v === '' ? '(gol)' : SC.fmtCelula({ x: v }, { k: 'x', typ: (SC.COL[k] || {}).typ }); }
+      /* sectiunea „exista deja”: ce difera fata de borderou, cu bifa pe fiecare comanda */
+      function deseneazaExistente(rad) {
+        var cuObs = rad.querySelector('#brObs') ? rad.querySelector('#brObs').checked : false, difera = 0;
+        existente.forEach(function (e) { var d = L.diferenteBorderou(e.o, e.r, cuObs); e.dif = d.dif; e.jd = d.jd; if (e.dif.length) difera++; else delete bifate[e.o.n]; });
+        var cuDif = existente.filter(function (e) { return e.dif.length; }), nb = cuDif.filter(function (e) { return bifate[e.o.n]; }).length;
+        var h2 = '<div><b>Comenzi care există deja: ' + existente.length + '</b> — ' + (difera ? difera + ' diferă de borderou' : 'niciuna nu diferă de borderou') +
+          (existente.length - difera ? ', ' + (existente.length - difera) + ' identice' : '') + (dubluri.length > existente.length ? ', ' + (dubluri.length - existente.length) + ' sărite (alt client sau de două ori în borderou)' : '') + '.</div>' +
+          '<div class="mic" style="margin:4px 0 8px">Doar Administratorul: bifează comenzile pe care vrei să le rescrii cu datele din borderou. Statusul, paleții reali, Nr AUTO și încărcarea rămân neschimbate; valorile vechi rămân în jurnal. O celulă goală din borderou nu șterge nimic. Dacă se schimbă greutatea unei comenzi Terminata cu greutate finală calculată automat, se recalculează și greutatea finală.</div>' +
+          '<label class="bifa"><input type="checkbox" id="brObs"' + (cuObs ? ' checked' : '') + '> Compară și rescrie și Observațiile din borderou</label>';
+        if (cuDif.length) {
+          h2 += '<div class="lista-mica" style="max-height:300px;margin-top:8px"><table class="simplu"><tr><th style="width:34px"><input type="checkbox" id="brToate" aria-label="Bifează toate comenzile care diferă"' + (nb === cuDif.length ? ' checked' : '') + '></th><th>Comandă</th><th>Status</th><th>Ce se schimbă</th></tr>' +
+            cuDif.map(function (e) {
+              return '<tr><td><input type="checkbox" data-br="' + e.o.n + '" aria-label="Rescrie comanda ' + esc(e.o.nc) + '"' + (bifate[e.o.n] ? ' checked' : '') + '></td><td><b>' + esc(e.o.nc) + '</b><br><span class="mic">Nr Crt ' + e.o.n + '</span></td><td>' + esc(e.o.st || '') + (e.o.inc === 'DA' ? '<br><span class="mic">încărcată</span>' : '') + '</td><td>' +
+                e.dif.map(function (d) { return '<div><span class="mic">' + esc(SC.COL[d.k].t) + ':</span> ' + esc(valB(d.k, d.vechi)) + ' → <b>' + esc(valB(d.k, d.nou)) + '</b></div>'; }).join('') + '</td></tr>';
+            }).join('') + '</table></div><div class="mic" style="margin-top:6px" id="brNumar" role="status">' + (nb ? nCom(nb) + ' de rescris' : 'Nicio comandă bifată pentru rescriere.') + '</div>';
+        }
+        rad.querySelector('#brSec').innerHTML = h2;
+      }
       if (b.ramase) html += '<div class="nota atentie">Atenție: după ultima comandă citită mai sunt ' + b.ramase + ' rânduri completate în borderou care nu au fost preluate (coloana A nu este un număr de comandă). Verifică fișierul.</div>';
       if (b.adreseCorectate) html += '<div class="mic">' + b.adreseCorectate + ' adrese transformate de Excel în dată au fost refăcute ca text (ex. „22 Decembrie 1989”).</div>';
       if (dupaOras) html += '<div class="mic">Județ completat după oraș (destinatar negăsit în Adrese): ' + dupaOras + ' — apare cu roșu în listă.</div>';
@@ -1683,25 +1710,52 @@
             return '<tr><td>' + esc(o.nc) + '</td><td>' + esc(o.de) + '<br><span class="mic">' + esc(o.ad) + ' · ' + esc(o.or) + '</span></td><td><input type="text" data-j="' + i + '" placeholder="Județ" style="width:120px"></td></tr>';
           }).join('') + '</table></div>';
       }
-      if (!noi.length) return alerta('Borderou (' + b.tip + '): ' + fisier.name + '\n\nNicio comandă nouă — toate cele ' + dubluri.length + ' există deja.');
+      if (!noi.length && !rescriu) return alerta('Borderou (' + b.tip + '): ' + fisier.name + '\n\nNicio comandă nouă — toate cele ' + dubluri.length + ' există deja.');
       return modal({
         titlu: 'Import borderou', html: html, lat: true,
+        laDeschidere: function (rad) {
+          if (!rescriu) return;
+          deseneazaExistente(rad);
+          rad.querySelector('#brSec').addEventListener('change', function (e) {
+            var el = e.target;
+            if (el.id === 'brToate') existente.forEach(function (x) { if (x.dif.length) { if (el.checked) bifate[x.o.n] = 1; else delete bifate[x.o.n]; } });
+            else if (el.dataset.br) { if (el.checked) bifate[el.dataset.br] = 1; else delete bifate[el.dataset.br]; }
+            deseneazaExistente(rad);
+            var inapoi = el.id ? rad.querySelector('#' + el.id) : rad.querySelector('[data-br="' + el.dataset.br + '"]');
+            if (inapoi) inapoi.focus();
+          });
+        },
         butoane: [{ t: 'Renunță', v: null }, {
-          t: 'Importă ' + nCom(noi.length), cls: 'pri', fn: function (rad) {
+          t: rescriu ? (noi.length ? 'Importă ' + nCom(noi.length) + ' și rescrie cele bifate' : 'Rescrie comenzile bifate') : 'Importă ' + nCom(noi.length), cls: 'pri', fn: function (rad) {
             Array.prototype.forEach.call(rad.querySelectorAll('[data-j]'), function (el) {
               var v = el.value.trim(); if (v) faraJudet[+el.dataset.j].ju = v;
             });
-            return L.creeaza(noi, 'Import borderou ' + fisier.name + ': ' + noi.length + ' comenzi').then(function (nr) {
-              return SC.store.tx(function (t) {
-                return t.get('meta', 'importuri').then(function (d) {
-                  d = d || { l: [] };
-                  d.l.push({ f: fisier.name, t: stampila(), u: SC.store.user.nume, k: noi.length });
-                  if (d.l.length > 300) d.l = d.l.slice(-300);
-                  t.set('meta', 'importuri', d);
+            var deRescris = rescriu ? existente.filter(function (e) { return e.dif.length && bifate[e.o.n]; }) : [];
+            if (!noi.length && !deRescris.length) { toast('Nu ai bifat nicio comandă de rescris.', 'rau'); return false; }
+            var intreb = deRescris.length ? confirma('Rescrii ' + nCom(deRescris.length) + ' cu datele din borderou?\n\nDestinatarul, adresa și celelalte valori afișate se înlocuiesc. Valorile vechi rămân doar în jurnalul de modificări.', { da: 'Rescrie', nu: 'Renunță' }) : Promise.resolve(true);
+            return intreb.then(function (da) {
+              if (!da) return false;
+              var nrNoi = [];
+              return (noi.length ? L.creeaza(noi, 'Import borderou ' + fisier.name + ': ' + noi.length + ' comenzi') : Promise.resolve([])).then(function (nr) {
+                nrNoi = nr;
+                if (!deRescris.length) return 0;
+                return L.modificaPeLoturi(deRescris.map(function (e) {
+                  return { n: e.o.n, fn: function (x) { L.aplicaBorderou(x, e.dif, e.jd); } };
+                }), 'Rescriere din borderou ' + fisier.name + ': ' + nCom(deRescris.length));
+              }).then(function () {
+                return SC.store.tx(function (t) {
+                  return t.get('meta', 'importuri').then(function (d) {
+                    d = d || { l: [] };
+                    var linie = { f: fisier.name, t: stampila(), u: SC.store.user.nume, k: noi.length };
+                    if (deRescris.length) linie.r = deRescris.length;
+                    d.l.push(linie);
+                    if (d.l.length > 300) d.l = d.l.slice(-300);
+                    t.set('meta', 'importuri', d);
+                  });
                 });
               }).then(function () {
-                toast('Importate ' + noi.length + ' comenzi (Nr Crt ' + nr[0] + '–' + nr[nr.length - 1] + ').', 'bun');
-                arataComenzi(nr);
+                toast([nrNoi.length ? 'Importate ' + nCom(nrNoi.length) + ' (Nr Crt ' + nrNoi[0] + '–' + nrNoi[nrNoi.length - 1] + ')' : '', deRescris.length ? 'Rescrise ' + nCom(deRescris.length) : ''].filter(Boolean).join('. ') + '.', 'bun');
+                arataComenzi(nrNoi.length ? nrNoi : deRescris.map(function (e) { return e.o.n; }));
               });
             });
           }

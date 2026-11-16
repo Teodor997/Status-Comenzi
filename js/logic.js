@@ -94,7 +94,7 @@
         });
         var rez = listaId.map(function (id) { L.recalc(g[id]); t.set('comenzi', id, g[id]); return { id: id, data: g[id] }; });
         /* fiecare modificare ramane in jurnal cu valoarea veche si cea noua */
-        if (textJurnal && (modificari.length > 1 || opt.faraDetalii)) t.log(textJurnal);
+        if (textJurnal && (modificari.length > 1 || opt.faraDetalii || opt.cuText)) t.log(textJurnal);
         linii.forEach(function (x) { t.log(x); });
         if (opt.scrie) opt.scrie(t, rr[1], schimbate);
         return rez;
@@ -885,6 +885,47 @@
       for (var r = z.s.r + 1; r <= Math.min(z.e.r, z.s.r + 50); r++) { var v = vText(cel(ws, r, col[s.a])); if (v) { rez[s.k] = v; break; } }
     });
     return rez;
+  };
+  /* Aceeasi modificare ca L.modifica, dar pentru multe comenzi: cate 8 grupe pe tranzactie, ca sa nu depaseasca limita Firebase.
+     In jurnal: textul o singura data (la prima transa), apoi cate o linie pe comanda, cu valoarea veche si cea noua.
+     Intoarce numarul de comenzi trimise. */
+  L.modificaPeLoturi = function (modificari, text) {
+    var peGrupa = {};
+    modificari.forEach(function (m) { var id = SC.idGrupa(m.n); (peGrupa[id] = peGrupa[id] || []).push(m); });
+    var ids = Object.keys(peGrupa).sort(), loturi = [];
+    for (var i = 0; i < ids.length; i += 8) loturi.push(ids.slice(i, i + 8).reduce(function (a, id) { return a.concat(peGrupa[id]); }, []));
+    function pas(k) {
+      if (k >= loturi.length) return Promise.resolve(modificari.length);
+      return L.modifica(loturi[k], k === 0 ? text : '', { cuText: true }).then(function () { return pas(k + 1); });
+    }
+    return pas(0);
+  };
+  /* Campurile care vin din borderoul Kandia si pot rescrie o comanda existenta (doar Administratorul) */
+  L.BORDEROU_CAMPURI = ['de', 'ad', 'or', 'ju', 'dc', 'dl', 'g', 'ca', 'pe'];
+  /* Ce s-ar schimba pe comanda o daca ar fi rescrisa cu randul r din borderou: [{k, vechi, nou}].
+     O celula goala in borderou nu sterge ce exista pe comanda. Observatiile intra doar la cerere (cuObs). */
+  L.diferenteBorderou = function (o, r, cuObs) {
+    var nou = { de: r.de, ad: r.ad, or: r.or, dc: r.dc, dl: r.dl, g: r.g, ca: r.ca, pe: r.pe }, dif = [], jd = false;
+    var a = L.adresaDupaNume(o.cl, r.de, r.ad, r.or);
+    if (a && a.jud) nou.ju = SC.fmtJudet(a.jud);
+    else { var j = L.judetDupaLocalitate(r.or); if (j) { nou.ju = SC.fmtJudet(j); jd = true; } }
+    if (cuObs) nou.ob = r.ob;
+    L.BORDEROU_CAMPURI.concat(cuObs ? ['ob'] : []).forEach(function (k) {
+      var n = nou[k], v = o[k];
+      if (n == null || n === '') return;
+      var col = SC.COL[k] || {}, numeric = col.typ === 'num' || col.typ === 'int';
+      var egal = numeric ? (SC.esteNum(v) && Math.abs(v - n) < 0.005) : String(v == null ? '' : v).trim() === String(n).trim();
+      if (!egal) dif.push({ k: k, vechi: v, nou: n });
+    });
+    return { dif: dif, jd: jd };
+  };
+  /* aplica diferentele pe comanda (in tranzactie); greutatea finala calculata automat se reface dupa noua greutate */
+  L.aplicaBorderou = function (x, dif, jd) {
+    dif.forEach(function (d) {
+      x[d.k] = d.nou;
+      if (d.k === 'ju') { if (jd) x.jd = 1; else delete x.jd; }
+      if (d.k === 'g' && (x.st === ST.TER || x.st === ST.SELF) && L.greutateAuto(x) && !x.cum && !x.gfm && SC.esteNum(x.pr)) x.gf = SC.rotunjeste(x.g + x.pr * SC.config.kgPalet);
+    });
   };
   /* Marcheaza comenzile ca exportate, in transe mici (cate 8 grupe pe tranzactie). O comanda marcata intre timp de altcineva
      este sarita, deci nu poate ajunge in doua fisiere. Intoarce { ts, eroare? }; comenzile marcate sunt cele cu tx === ts. */
