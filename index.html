@@ -198,6 +198,15 @@
   .grila .lat2 { grid-column: span 2; }
   .nota { background: #eef3fb; border-radius: 8px; padding: 9px 11px; font-size: 13px; }
   .nota.atentie { background: #fff3cd; color: #5c4400; }
+  .nota.rau { background: #fde2e0; color: #7a1b15; }
+  .nota.bun { background: #dff3e4; color: #14532d; }
+  #btnTmsExport b { display: none; margin-left: 6px; min-width: 18px; padding: 1px 6px; border-radius: 9px; background: #b45309; color: #fff; font-size: 11.5px; }
+  #btnTmsExport b.are { display: inline-block; }
+  .tms-rez { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+  .tms-rez .mare { font-size: 16px; }
+  .tms-rez ul { margin: 4px 0 0; padding-left: 18px; }
+  .tms-vechi { border-top: 1px solid var(--line2); margin-top: 12px; padding-top: 10px; }
+  .legatura { background: none; border: 0; padding: 0; color: var(--navy2); text-decoration: underline; cursor: pointer; font: inherit; }
   .lista-mica { max-height: 220px; overflow: auto; border: 1px solid var(--line2); border-radius: 8px; }
   pre.msg { white-space: pre-wrap; font: inherit; margin: 0; }
   #toasturi { position: fixed; right: 14px; top: 56px; display: flex; flex-direction: column; gap: 8px; z-index: 90; max-width: min(420px, 92vw); }
@@ -330,6 +339,7 @@
         <button class="btn doarEdit" id="btnBorderou">Import borderou Kandia</button>
         <button class="btn doarEdit" id="btnImportExcel">Import din Excel</button>
         <button class="btn doarTransport" id="btnTransport2">Import fișier transport (TMS)</button>
+        <button class="btn ascuns" id="btnTmsExport">Export pentru TMS<b id="tmsNr"></b></button>
         <button class="btn" id="btnExport">Export Excel</button>
         <button class="btn doarEdit" id="btnCmrLista">CMR-uri emise</button>
         <span class="sep"></span>

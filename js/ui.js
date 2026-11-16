@@ -85,6 +85,8 @@
      Incarcari: doar confirmarea incarcarii.  Transport: doar Nr AUTO. */
   function poateIncarca() { return rol() === 'admin' || rol() === 'incarcari'; }
   function poateTms() { return poate() || rol() === 'transport'; }
+  /* fisierul de import in TMS il face Transportul (si Administratorul) */
+  function poateTmsExport() { return rol() === 'transport' || rol() === 'admin'; }
   /* bifarea mai multor comenzi, cu totaluri (Transport; si Administratorul, ca sa poata verifica) */
   function cuSelectie() { return rol() === 'transport' || rol() === 'admin' || rol() === 'operator'; }
   /* comenzile legate in acelasi cumul cu o (inclusiv ea); [] daca nu e in niciun cumul */
@@ -194,6 +196,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('.doarEdit'), function (el) { el.classList.toggle('ascuns', !poate()); });
     $('btnTransport').classList.toggle('ascuns', !poateTms());
     $('btnTransport2').classList.toggle('ascuns', u.rol !== 'transport');
+    $('btnTmsExport').classList.toggle('ascuns', !poateTmsExport());
     $('btnGolesteInc').classList.toggle('ascuns', !eAdmin());
     stare.sel = {};
     var b = $('banda');
@@ -486,6 +489,7 @@
     var nf = Object.keys(stare.fc).length;
     $('numarare').textContent = (stare.lista.length === tot ? tot + ' comenzi' : stare.lista.length + ' din ' + tot + ' comenzi încărcate') +
       (nf ? ' · ' + nf + (nf === 1 ? ' filtru pe coloană' : ' filtre pe coloane') : '');
+    actualizeazaTmsNr();
   }
   var rafCerut = false;
   $('tabel').addEventListener('scroll', function () {
@@ -785,6 +789,146 @@
     if (tip === 'ct') return o.ct ? SC.ymd(new Date(o.ct)) : '';
     return String(o[tip] || '').slice(0, 10);
   }
+  /* ================= export pentru TMS ================= */
+  function tmsDeExportat() { return SC.comenzi.filter(function (o) { return L.tmsStare(o) === 'deExportat'; }); }
+  function actualizeazaTmsNr() {
+    var b = $('tmsNr'); if (!b || !poateTmsExport()) return;
+    var n = tmsDeExportat().length;
+    b.textContent = n || ''; b.classList.toggle('are', n > 0);
+    $('btnTmsExport').title = n ? nCom(n) + ' din status nu ' + (n === 1 ? 'a fost exportată' : 'au fost exportate') + ' încă pentru TMS' : 'Toate comenzile care au nevoie de transport au fost exportate pentru TMS';
+  }
+  function tmsNumeFisier(ts) { var d = new Date(ts); return 'Import TMS ' + SC.ymd(d) + ' ' + SC.p2(d.getHours()) + SC.p2(d.getMinutes()) + '.xlsx'; }
+  function tmsMoment(ts) { var d = new Date(ts); return SC.p2(d.getDate()) + '.' + SC.p2(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + SC.p2(d.getHours()) + ':' + SC.p2(d.getMinutes()); }
+  function tmsEticheta(o) { return ((o.cl || '') + ' ' + (o.nc || '')).trim() + ' (Nr Crt ' + o.n + ')'; }
+  /* exporturile facute pana acum, din marcajele de pe comenzile incarcate: [{ts, u, n, manual}] cele mai noi primele */
+  function tmsExporturi() {
+    var m = {};
+    SC.comenzi.forEach(function (o) { if (!o.tx) return; var e = m[o.tx] = m[o.tx] || { ts: o.tx, u: o.txu || '?', n: 0, manual: !!o.txm }; e.n++; });
+    return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 15);
+  }
+  $('btnTmsExport').onclick = function () {
+    if (!poateTmsExport()) return;
+    var html = '<div class="rand-form">' +
+      '<label class="camp"><span>Client</span><select id="txCl"><option value="">Toți clienții</option>' + SC.config.clienti.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="camp"><span>Perioada după</span><select id="txDupa"><option value="dc">Data comandă</option><option value="dl">Livrare solicitată</option></select></label>' +
+      '<label class="camp"><span>De la</span><input type="date" id="txDe"></label>' +
+      '<label class="camp"><span>Până la</span><input type="date" id="txPana"></label></div>' +
+      '<div class="mic" style="margin-top:6px">Fără perioadă aleasă intră toate comenzile neexportate, din orice zi. Comenzile exportate se marchează, deci nu ajung a doua oară în fișier.</div>' +
+      '<div class="tms-rez" id="txRez" role="status"></div>' +
+      '<label class="bifa"><input type="checkbox" id="txCuLipsa"> Exportă și comenzile fără destinatar, oraș, județ sau dată de livrare (celulele rămân goale)</label>' +
+      '<div class="tms-vechi" id="txVechi"></div>';
+    var sel = { deExportat: [], lipsa: [] };
+    function citeste(rad) {
+      var f = { cl: rad.querySelector('#txCl').value, dupa: rad.querySelector('#txDupa').value, a: rad.querySelector('#txDe').value, b: rad.querySelector('#txPana').value, cuLipsa: rad.querySelector('#txCuLipsa').checked };
+      f.gresit = !!(f.a && f.b && f.b < f.a);
+      return f;
+    }
+    function inFiltru(o, f) {
+      if (f.cl && String(o.cl || '').toUpperCase() !== f.cl) return false;
+      if (!f.a && !f.b) return true;
+      var d = String(o[f.dupa] || '').slice(0, 10);
+      if (!d) return false;
+      return (!f.a || d >= f.a) && (!f.b || d <= f.b);
+    }
+    function calculeaza(rad) {
+      var f = citeste(rad), numar = { exportata: 0, inTms: 0, faraTransport: 0 }, inF = [], afara = [];
+      SC.comenzi.forEach(function (o) {
+        var s = L.tmsStare(o), a = !f.gresit && inFiltru(o, f);
+        if (s === 'deExportat') (a ? inF : afara).push(o);
+        else if (a && numar[s] != null) numar[s]++;
+      });
+      var complete = [], lipsa = [];
+      inF.forEach(function (o) { var l = L.tmsLipsa(o); if (l.length) lipsa.push({ o: o, l: l }); else complete.push(o); });
+      sel = { f: f, complete: complete, lipsa: lipsa, afara: afara, numar: numar, deExportat: f.cuLipsa ? inF : complete };
+      return sel;
+    }
+    function deseneaza(rad) {
+      var s = calculeaza(rad), f = s.f, h = '', l = s.deExportat;
+      if (!L.tmsSetariComplete()) h += '<div class="nota rau"><b>Setările pentru TMS nu sunt completate</b> (furnizorul și celelalte valori fixe din fișier). ' +
+        (eAdmin() ? 'Completează-le o singură dată în Administrare → Export pentru TMS; le poți prelua direct din fișierul de import folosit acum.' : 'Roagă administratorul să le completeze în Administrare → Export pentru TMS.') + ' Până atunci exportul nu este posibil.</div>';
+      if (f.gresit) h += '<div class="nota rau">„Până la” este înaintea zilei de început. Corectează perioada.</div>';
+      var pal = 0, kg = 0; l.forEach(function (o) { pal += L.tmsPaleti(o) || 0; kg += L.tmsMasa(o) || 0; });
+      h += '<div class="nota"><span class="mare"><b>' + nCom(l.length) + '</b> de exportat acum</span>' + (l.length ? ' · ' + SC.fmtNum(pal, 'int') + ' paleți · ' + SC.fmtNum(kg, 'num') + ' kg' : '') +
+        '<div class="mic">Nu intră în fișier, din ce se potrivește filtrului: ' + s.numar.exportata + ' deja exportate · ' + s.numar.inTms + ' deja în TMS (au număr de transport) · ' + s.numar.faraTransport + ' fără transport (Self-Pick / Ridicare client).</div></div>';
+      if (s.lipsa.length) {
+        h += '<div class="nota atentie"><b>' + nCom(s.lipsa.length) + ' cu date de livrare lipsă</b> — ' + (f.cuLipsa ? 'se exportă cu celulele goale; verifică-le în fișier.' : (s.lipsa.length === 1 ? 'rămâne neexportată' : 'rămân neexportate') + ' până completezi datele în comandă:') +
+          '<ul>' + s.lipsa.slice(0, 8).map(function (x) { return '<li>' + esc(tmsEticheta(x.o)) + ' — lipsește: ' + esc(x.l.join(', ')) + '</li>'; }).join('') + (s.lipsa.length > 8 ? '<li>… și încă ' + (s.lipsa.length - 8) + '</li>' : '') + '</ul></div>';
+      }
+      var faraPal = 0, faraKg = 0, multi = [];
+      l.forEach(function (o) { var pp = L.tmsPaleti(o); if (pp == null) faraPal++; else if (pp > L.TMS_PALETI_MULTI) multi.push(o); if (L.tmsMasa(o) == null) faraKg++; });
+      if (faraPal || faraKg) h += '<div class="nota atentie"><b>De completat în fișier înainte de import:</b> ' + [faraKg ? nCom(faraKg) + ' fără greutate' : '', faraPal ? nCom(faraPal) + ' fără paleți' : ''].filter(Boolean).join(' · ') +
+        '. Statusul nu are încă aceste valori, așa că în coloanele MASA PALETI / NUMAR PALETI celula rămâne goală.</div>';
+      if (multi.length) h += '<div class="nota atentie"><b>De verificat:</b> ' + nCom(multi.length) + ' cu peste ' + L.TMS_PALETI_MULTI + ' de paleți (' + esc(multi.slice(0, 4).map(function (o) { return tmsEticheta(o) + ': ' + L.tmsPaleti(o); }).join('; ')) + (multi.length > 4 ? '…' : '') + '). Pare o greșeală de scriere în status.</div>';
+      var externe = l.filter(function (o) { return L.tmsTara(o); }), faraNume = {};
+      l.forEach(function (o) { var c = String(o.cl || '').toUpperCase(); if (c && !(SC.config.tmsClienti || {})[c]) faraNume[c] = 1; });
+      if (externe.length) h += '<div class="nota atentie">' + nCom(externe.length) + ' pentru altă țară (' + esc(externe.slice(0, 4).map(function (o) { return o.nc; }).join(', ')) + (externe.length > 4 ? '…' : '') + '): țara este luată din câmpul Județ. Verifică-le în fișier înainte de import.</div>';
+      if (Object.keys(faraNume).length) h += '<div class="nota atentie">Client fără nume de TMS: ' + esc(Object.keys(faraNume).join(', ')) + '. În fișier se scrie codul din aplicație; numele din TMS se trec în Administrare → Export pentru TMS.</div>';
+      /* cheia de verificare: ce ramane neexportat dupa acest export */
+      var ramaseLipsa = f.cuLipsa ? 0 : s.lipsa.length;
+      if (s.afara.length) {
+        var vechi = s.afara.map(function (o) { return String(o.dc || '').slice(0, 10); }).filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); }).sort()[0];
+        h += '<div class="nota atentie"><b>Verificare:</b> în afara filtrului ales mai ' + (s.afara.length === 1 ? 'rămâne 1 comandă neexportată' : 'rămân ' + s.afara.length + ' comenzi neexportate') +
+          (vechi ? ' (cea mai veche are data comenzii ' + esc(SC.fmtDataLunga(vechi)) + ')' : '') + '. <button type="button" class="legatura" id="txToate">Arată-le pe toate</button></div>';
+      } else if (!f.gresit) {
+        h += '<div class="nota bun"><b>Verificare:</b> ' + (l.length || ramaseLipsa ? 'după acest export nu mai rămâne nicio comandă neexportată' + (ramaseLipsa ? ', în afară de ' + (ramaseLipsa === 1 ? 'cea' : 'cele ' + ramaseLipsa) + ' cu date de livrare lipsă.' : '.') : 'toate comenzile care au nevoie de transport au fost exportate.') + '</div>';
+      }
+      rad.querySelector('#txRez').innerHTML = h;
+      var ex = tmsExporturi();
+      rad.querySelector('#txVechi').innerHTML = ex.length ? '<div class="rand-form"><label class="camp" style="flex:1;min-width:260px"><span>Exporturi anterioare</span><select id="txLot">' +
+        ex.map(function (e) { return '<option value="' + e.ts + '">' + esc(tmsMoment(e.ts) + ' · ' + e.u + ' · ' + nCom(e.n) + (e.manual ? ' · marcate fără fișier' : '')) + '</option>'; }).join('') + '</select></label>' +
+        '<button type="button" class="btn" id="txDinNou">Descarcă din nou</button><button type="button" class="btn" id="txAnuleaza">Anulează marcajul</button></div>' : '<div class="mic">Încă nu s-a făcut niciun export.</div>';
+    }
+    function marcheaza(rad, faraFisier) {
+      var s = calculeaza(rad), l = s.deExportat;
+      if (s.f.gresit) { toast('Corectează perioada.', 'rau'); return Promise.resolve(false); }
+      if (!faraFisier && !L.tmsSetariComplete()) { toast('Setările pentru TMS nu sunt completate.', 'rau'); return Promise.resolve(false); }
+      if (!l.length) { toast('Nu este nicio comandă de exportat cu filtrul ales.', 'rau'); return Promise.resolve(false); }
+      var intreb = faraFisier ? confirma('Marchezi ' + nCom(l.length) + ' ca exportate, fără să se facă fișier?\n\nFolosește asta doar pentru comenzile care sunt deja în TMS (introduse de mână sau cu fișierul vechi). Marcajul se poate anula din „Exporturi anterioare”.', { da: 'Marchează', nu: 'Renunță' }) : Promise.resolve(true);
+      return intreb.then(function (da) {
+        if (!da) return false;
+        var numere = l.map(function (o) { return o.n; });
+        return L.tmsMarcheaza(numere, faraFisier, (faraFisier ? 'Export TMS — marcate fără fișier: ' : 'Export TMS: ') + nCom(numere.length)).then(function (r) {
+          var facute = L.tmsExportate(r.ts);
+          if (facute.length && !faraFisier) L.tmsFisier(facute, tmsNumeFisier(r.ts));
+          redeseneaza(); deseneaza(rad);
+          if (r.eroare || facute.length !== numere.length) {
+            return alerta((faraFisier ? 'Au fost marcate' : 'Au fost exportate') + ' doar ' + facute.length + ' din ' + numere.length + ' comenzi' + (r.eroare ? ' (' + (r.eroare.message || r.eroare) + ')' : ' — restul au fost exportate între timp de altcineva') + '.\n\n' +
+              (facute.length && !faraFisier ? 'Fișierul descărcat conține exact comenzile marcate. ' : '') + 'Cele rămase apar în continuare ca neexportate: apasă din nou pe Exportă.', 'Export pentru TMS').then(function () { return false; });
+          }
+          toast(faraFisier ? nCom(facute.length) + ' marcate ca exportate.' : 'Exportat: ' + nCom(facute.length) + ' în „' + tmsNumeFisier(r.ts) + '”.', 'bun');
+          return false;
+        });
+      });
+    }
+    modal({
+      titlu: 'Export pentru TMS', html: html, lat: true,
+      laDeschidere: function (rad) {
+        deseneaza(rad);
+        rad.addEventListener('change', function (e) { if (e.target.id !== 'txLot') deseneaza(rad); });
+        rad.addEventListener('click', function (e) {
+          var id = e.target.id;
+          if (id === 'txToate') { rad.querySelector('#txCl').value = ''; rad.querySelector('#txDe').value = ''; rad.querySelector('#txPana').value = ''; deseneaza(rad); }
+          else if (id === 'txDinNou' || id === 'txAnuleaza') {
+            var ts = +rad.querySelector('#txLot').value, lot = L.tmsExportate(ts);
+            if (!lot.length) return toast('Exportul ales nu mai are comenzi marcate.', 'rau');
+            if (id === 'txDinNou') {
+              if (!L.tmsSetariComplete()) return toast('Setările pentru TMS nu sunt completate.', 'rau');
+              L.tmsFisier(lot, tmsNumeFisier(ts)); toast('Descărcat din nou: ' + nCom(lot.length) + '.', 'bun');
+            } else {
+              confirma('Anulezi marcajul exportului din ' + tmsMoment(ts) + '?\n\n' + nCom(lot.length) + ' ' + (lot.length === 1 ? 'redevine neexportată' : 'redevin neexportate') + ' și intră în următorul fișier. Fă asta doar dacă fișierul nu a fost importat în TMS.', { da: 'Anulează marcajul', nu: 'Renunță' }).then(function (da) {
+                if (!da) return;
+                return L.tmsAnuleaza(ts, 'Export TMS din ' + tmsMoment(ts) + ' anulat: ' + nCom(lot.length) + (lot.length === 1 ? ' redevine neexportată' : ' redevin neexportate')).then(function () { redeseneaza(); deseneaza(rad); toast('Marcaj anulat pentru ' + nCom(lot.length) + '.', 'bun'); });
+              }).catch(arataEroare);
+            }
+          }
+        });
+      },
+      butoane: [{ t: 'Închide', v: null },
+        { t: 'Marchează ca exportate, fără fișier', fn: function (rad) { return marcheaza(rad, true); } },
+        { t: 'Exportă fișierul', cls: 'pri', fn: function (rad) { return marcheaza(rad, false); } }]
+    }).then(function () { redeseneaza(); });
+  };
+
   $('btnExport').onclick = function () {
     var html = '<label class="bifa"><input type="radio" name="exTip" value="lista" checked> Ce se vede acum în listă, cu filtrele aplicate (' + nCom(stare.lista.length) + ')</label>' +
       '<label class="bifa"><input type="radio" name="exTip" value="zi"> Toate comenzile dintr-o zi</label>' +
@@ -2371,15 +2515,46 @@
       } }] : []).concat([{ t: 'Renunță', v: null }, {
         t: 'Email', fn: function (rad) {
           var x = citeste(rad); if (!x) return false;
-          if (!SC.config.cmrCatre) { toast('Adresele de email pentru CMR nu sunt setate. Administratorul le completează în Administrare → Clienți și reguli.', 'rau'); return false; }
-          var a = document.createElement('a');
-          a.href = 'mailto:' + encodeURIComponent(SC.config.cmrCatre).replace(/%3B/gi, ';').replace(/%40/g, '@').replace(/%20/g, '') + '?' + (SC.config.cmrCopie ? 'cc=' + encodeURIComponent(SC.config.cmrCopie) + '&' : '') +
-            'subject=' + encodeURIComponent('CMR ' + x.de + ' ' + x.nc[0]) + '&body=' + encodeURIComponent('Buna ziua,\n\nAtasat regasiti CMR-ul pentru ' + x.de + '.\n\nMultumesc.\nO zi buna.');
-          a.click();
-          return false;
+          return emailCmr(x).then(function () { return false; });
         }
       }, { t: 'Salvează', fn: function (rad) { return salveaza(rad, null); } },
       { t: 'Salvează și tipărește', cls: 'pri', fn: function (rad) { return salveaza(rad, function (s) { setTimeout(function () { tiparesteCmr(s); }, 50); }); } }])
+    });
+  }
+  /* ---- CMR pe email: adrese diferite pentru fiecare client ----
+     config.cmrEmail = { CLIENT: { catre, copie } }; clientii fara adrese proprii le folosesc pe cele implicite (cmrCatre / cmrCopie). */
+  function adreseCmr(client) {
+    var e = (SC.config.cmrEmail || {})[String(client || '').toUpperCase()];
+    if (e && e.catre) return { catre: e.catre, copie: e.copie || '', proprii: true };
+    return { catre: SC.config.cmrCatre || '', copie: SC.config.cmrCopie || '', proprii: false };
+  }
+  function adreseMailto(s) { return encodeURIComponent(s).replace(/%3B/gi, ';').replace(/%2C/gi, ';').replace(/%40/g, '@').replace(/%20/g, ''); }
+  function emailCmr(x) {
+    var clienti = SC.config.clienti.slice(), al = String(x.cl || '').toUpperCase();
+    if (al && clienti.indexOf(al) < 0) clienti.unshift(al);
+    var html = '<label class="camp"><span>Trimit CMR-ul pentru clientul</span><select id="ceCl">' + clienti.map(function (c) { return '<option' + (c === al ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select></label>' +
+      '<div id="ceAdrese" role="status" style="margin-top:10px"></div>';
+    function arata(rad) {
+      var cl = rad.querySelector('#ceCl').value, a = adreseCmr(cl);
+      rad.querySelector('#ceAdrese').innerHTML = a.catre ?
+        '<div class="nota"><b>Către:</b> ' + esc(a.catre) + (a.copie ? '<br><b>CC:</b> ' + esc(a.copie) : '') +
+          (a.proprii ? '' : '<div class="mic">' + esc(cl) + ' nu are adrese proprii: se folosesc cele implicite.</div>') + '</div>' :
+        '<div class="nota rau">Nu sunt setate adrese de email pentru ' + esc(cl) + ' și nici adrese implicite. ' + (eAdmin() ? 'Le completezi în Administrare → CMR — adrese de email.' : 'Administratorul le completează în Administrare → CMR — adrese de email.') + '</div>';
+    }
+    return modal({
+      titlu: 'CMR pe email — ' + (x.de || ''), html: html,
+      laDeschidere: function (rad) { arata(rad); rad.querySelector('#ceCl').addEventListener('change', function () { arata(rad); }); },
+      butoane: [{ t: 'Renunță', v: null }, {
+        t: 'Deschide emailul', cls: 'pri', fn: function (rad) {
+          var cl = rad.querySelector('#ceCl').value, a = adreseCmr(cl);
+          if (!a.catre) { toast('Nu sunt adrese de email pentru ' + cl + '.', 'rau'); return false; }
+          var l = document.createElement('a');
+          l.href = 'mailto:' + adreseMailto(a.catre) + '?' + (a.copie ? 'cc=' + adreseMailto(a.copie) + '&' : '') +
+            'subject=' + encodeURIComponent('CMR ' + x.de + ' ' + x.nc[0]) + '&body=' + encodeURIComponent('Buna ziua,\n\nAtasat regasiti CMR-ul pentru ' + x.de + '.\n\nMultumesc.\nO zi buna.');
+          l.click();
+          return true;
+        }
+      }]
     });
   }
   $('btnCmrLista').onclick = function () {
@@ -2493,9 +2668,26 @@
       '<label class="camp"><span>Kg / palet</span><input type="text" id="cKg" value="' + esc(SC.config.kgPalet) + '" style="width:80px"></label>' +
       '<label class="camp"><span>Toleranță paleți (±)</span><input type="text" id="cTol" value="' + esc(SC.config.tolerantaPaleti) + '" style="width:80px"></label>' +
       '<label class="camp" style="flex:1 1 100%"><span>Texte din lista de la Observații (separate prin virgulă)</span><input type="text" id="cObs" value="' + esc((SC.config.observatii || []).join(', ')) + '"></label>' +
-      '<label class="camp" style="flex:1 1 48%"><span>CMR — email către (adrese separate prin ;)</span><input type="text" id="cCmrTo" value="' + esc(SC.config.cmrCatre || '') + '"></label>' +
-      '<label class="camp" style="flex:1 1 48%"><span>CMR — email în copie (CC)</span><input type="text" id="cCmrCc" value="' + esc(SC.config.cmrCopie || '') + '"></label>' +
       '<button class="btn pri" id="cSalveaza">Salvează</button></div></div>';
+
+    var ceE = SC.config.cmrEmail || {};
+    function ceRand(cheie, nume, v) {
+      return '<tr><td><b>' + esc(nume) + '</b></td><td><input type="text" data-ce="' + esc(cheie) + '" data-f="catre" value="' + esc(v.catre || '') + '" style="width:100%" aria-label="Către, ' + esc(nume) + '"></td>' +
+        '<td><input type="text" data-ce="' + esc(cheie) + '" data-f="copie" value="' + esc(v.copie || '') + '" style="width:100%" aria-label="CC, ' + esc(nume) + '"></td></tr>';
+    }
+    h += '<div class="card"><h2>CMR — adrese de email</h2><p>Adresele la care se trimite CMR-ul, pentru fiecare client (mai multe adrese se despart prin „;”). La apăsarea pe Email în fereastra CMR se alege clientul și se folosesc adresele lui; ' +
+      'un client fără adrese proprii le folosește pe cele implicite.</p><div class="derulare-x"><table class="simplu" id="ceTabel" style="width:100%;min-width:640px"><tr><th style="width:170px">Client</th><th>Către</th><th>În copie (CC)</th></tr>' +
+      ceRand('', 'Implicit (ceilalți clienți)', { catre: SC.config.cmrCatre, copie: SC.config.cmrCopie }) +
+      SC.config.clienti.map(function (c) { return ceRand(c, c, ceE[c] || {}); }).join('') + '</table></div>' +
+      '<div class="rand-form" style="margin-top:10px"><button class="btn pri" id="ceSalveaza">Salvează adresele</button></div></div>';
+
+    var tmsS = SC.config.tms || {}, tmsC = SC.config.tmsClienti || {};
+    h += '<div class="card"><h2>Export pentru TMS</h2><p>Valorile fixe din fișierul de import în TMS (furnizorul este depozitul) și numele clienților așa cum sunt scrise în TMS. ' +
+      '„Preia din fișierul model” le citește din fișierul de import pe care îl folosiți acum; apoi apasă Salvează. Exportul se face din tabul Comenzi (Transport și Administrator).</p><div class="rand-form">' +
+      L.TMS_SETARI.map(function (c) { return '<label class="camp"' + (c.lat ? ' style="flex:1 1 48%"' : '') + '><span>' + esc(c.t) + '</span><input type="text" id="ts_' + c.k + '" value="' + esc(tmsS[c.k] == null ? '' : tmsS[c.k]) + '"' + (c.k === 'volum' ? ' style="width:110px"' : '') + '></label>'; }).join('') +
+      '<label class="camp" style="flex:1 1 100%"><span>Numele clienților în TMS — câte unul pe rând, în forma COD = Nume în TMS</span><textarea id="tsClienti" rows="' + Math.max(4, SC.config.clienti.length) + '" style="width:100%;resize:vertical;padding:6px 8px">' +
+      esc(SC.config.clienti.map(function (c) { return c + ' = ' + (tmsC[c] || ''); }).join('\n')) + '</textarea></label>' +
+      '<button class="btn" id="tsModel">Preia din fișierul model</button><button class="btn pri" id="tsSalveaza">Salvează</button></div></div>';
 
     var cand = candidatiArhivare(14).length;
     h += '<div class="card"><h2>Arhivare comenzi neîncărcate</h2><p>Comenzile Terminata fără confirmare de încărcare rămân „active” și se încarcă la fiecare deschidere a aplicației. Arhivarea le scoate din lista activă (rămân în istoric, neschimbate).</p>' +
@@ -2556,9 +2748,42 @@
       var kg = SC.parseNum($('cKg').value), tol = SC.parseNum($('cTol').value);
       if (!clienti.length || kg == null || tol == null) return toast('Verifică valorile.', 'rau');
       var cfg = Object.assign({}, SC.config, { clienti: clienti, clientGreutateAuto: $('cAuto').value.trim().toUpperCase(), kgPalet: kg, tolerantaPaleti: tol,
-        observatii: $('cObs').value.split(',').map(function (x) { return x.trim(); }).filter(Boolean),
-        cmrCatre: $('cCmrTo').value.trim(), cmrCopie: $('cCmrCc').value.trim() });
+        observatii: $('cObs').value.split(',').map(function (x) { return x.trim(); }).filter(Boolean) });
       SC.store.tx(function (t) { t.set('meta', 'config', cfg); t.log('Configurare: clienți / reguli modificate'); }).then(function () { toast('Salvat.', 'bun'); }, arataEroare);
+    } else if (b.id === 'ceSalveaza') {
+      var perClient = {}, implicit = { catre: '', copie: '' }, gresit = null;
+      Array.prototype.forEach.call($('ceTabel').querySelectorAll('input[data-ce]'), function (el) {
+        var lista = el.value.split(/[;,]/).map(function (x) { return x.trim(); }).filter(Boolean);
+        lista.forEach(function (adr) { if (!gresit && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adr)) gresit = { el: el, adr: adr }; });
+        var v = lista.join('; '), k = el.dataset.ce;
+        if (!k) implicit[el.dataset.f] = v; else if (v) (perClient[k] = perClient[k] || {})[el.dataset.f] = v;
+      });
+      if (gresit) { gresit.el.focus(); return toast('„' + gresit.adr + '” nu arată ca o adresă de email. Adresele se despart prin „;”.', 'rau'); }
+      var faraCatre = Object.keys(perClient).filter(function (k) { return !perClient[k].catre; });
+      if (faraCatre.length) return toast(faraCatre[0] + ' are adresă doar la CC. Completează și „Către” sau șterge CC-ul.', 'rau');
+      var cfg3 = Object.assign({}, SC.config, { cmrCatre: implicit.catre, cmrCopie: implicit.copie, cmrEmail: perClient });
+      SC.store.tx(function (t) { t.set('meta', 'config', cfg3); t.log('Configurare: adresele de email pentru CMR modificate'); }).then(function () { toast('Adresele au fost salvate.', 'bun'); }, arataEroare);
+    } else if (b.id === 'tsModel') {
+      alegeFisier().then(citesteFisier).then(function (wb) {
+        var v = L.tmsCitesteModel(wb), gasite = 0;
+        L.TMS_SETARI.forEach(function (c) { if (v[c.k] != null && v[c.k] !== '') { $('ts_' + c.k).value = v[c.k]; gasite++; } });
+        if (!gasite) return toast('Nu am găsit în fișier coloanele așteptate (FURNIZOR, TIP FURNIZOR…). Alege fișierul de import în TMS.', 'rau');
+        toast('Am preluat ' + gasite + ' din ' + L.TMS_SETARI.length + ' valori din fișier. Verifică-le și apasă Salvează.', 'bun');
+      }).catch(arataEroare);
+    } else if (b.id === 'tsSalveaza') {
+      var tms = {}, cl2 = {}, gresite = [];
+      L.TMS_SETARI.forEach(function (c) { var v = $('ts_' + c.k).value.trim(); if (v) tms[c.k] = v; });
+      $('tsClienti').value.split('\n').forEach(function (rand) {
+        if (!rand.trim()) return;
+        var i = rand.indexOf('=');
+        if (i < 0) { gresite.push(rand.trim()); return; }
+        var cod = rand.slice(0, i).trim().toUpperCase(), nume = rand.slice(i + 1).trim();
+        if (cod && nume) cl2[cod] = nume;
+      });
+      if (gresite.length) return toast('Rând fără „=”: ' + gresite[0] + '. Scrie COD = Nume în TMS.', 'rau');
+      if (tms.volum != null && SC.parseNum(tms.volum) == null) return toast('Volum paleți: „' + tms.volum + '” nu este un număr.', 'rau');
+      var cfg2 = Object.assign({}, SC.config, { tms: tms, tmsClienti: cl2 });
+      SC.store.tx(function (t) { t.set('meta', 'config', cfg2); t.log('Configurare: setările pentru exportul TMS modificate'); }).then(function () { toast('Salvat.', 'bun'); }, arataEroare);
     } else if (b.id === 'aArhiveaza') {
       var zile = SC.parseNum($('aZile').value);
       if (zile == null || zile < 1) return toast('Numărul de zile nu este valid.', 'rau');

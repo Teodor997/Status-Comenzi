@@ -45,7 +45,7 @@ Datele rămân doar în acel browser, deci este bun pentru probă, nu pentru luc
 | **Administrator** | Tot: utilizatori, migrare, arhivare, jurnal, plus tot ce pot celelalte roluri. |
 | **Operator date** | Toată partea de comenzi: adaugă manual, modifică orice câmp al comenzii, schimbă statusuri, importă borderoul Kandia, fișiere Excel și fișierul de transport din TMS; editează Adrese. Nu confirmă încărcări. |
 | **Încărcări** | Taburile *Încărcări* și *KPI's*: confirmă camioanele (stare camion, temperatură, semnătură) și tipărește borderoul. Vede și tabul *Comenzi*, doar pentru citit: poate căuta, filtra și exporta, dar comanda nu se deschide la click și nu poate modifica nimic acolo. |
-| **Transport** | Vede comenzile și încărcările; modifică doar **Nr AUTO**, direct în celulă (sau pe mai multe comenzi bifate), cât timp comanda nu e încărcată. Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
+| **Transport** | Face fișierul de import pentru TMS (*Export pentru TMS*). Vede comenzile și încărcările; modifică doar **Nr AUTO**, direct în celulă (sau pe mai multe comenzi bifate), cât timp comanda nu e încărcată. Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
 
 **Vezi ca alt rol (doar Administrator).** În bara de sus, lângă nume, administratorul are lista **Vezi ca**: alege
 *Operator date*, *Încărcări* sau *Transport* și aplicația se reface exact cum o vede acel rol (taburi, butoane, ce se
@@ -109,6 +109,34 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
   A doua opțiune a aceleiași ferestre șterge camioanele „Fără dată”: Nr AUTO de pe comenzile neîncărcate care nu au dată de
   transport (valoarea veche rămâne în jurnal).
 
+## Export pentru TMS (fișierul de import al comenzilor)
+
+Butonul **Export pentru TMS** din tabul Comenzi (Transport și Administrator) face fișierul de import în TMS direct din
+comenzile din status: foaia „SCHENKERDSV IMPORT”, cu aceleași 24 de coloane și aceleași formate ca fișierul completat
+până acum de mână. Comenzile „doar transport” se adaugă în continuare de mână în fișier.
+
+- **Ce se scrie**: număr comandă, data comenzii, client (numele din TMS), destinatar, adresă, oraș, județ (cu majuscule,
+  ca în fișierul vechi), paleți (amprente, altfel paleți reali, altfel estimarea rotunjită în sus), masă (greutatea
+  finală, altfel greutatea comenzii), livrare și expediere = *Livrare solicitată*, țara (ROMANIA; pentru comenzile
+  externe se ia din câmpul Județ), apoi valorile fixe ale furnizorului (depozitul) și „ESTE RETUR” = 0.
+- **Setări (o singură dată)**: Administrare → *Export pentru TMS*. Valorile fixe se pot prelua din fișierul de import
+  folosit acum („Preia din fișierul model”), iar numele clienților se scriu în forma `COD = Nume în TMS`. Se păstrează
+  în Firebase, nu în codul public.
+- **Filtre**: client și perioadă (după *Data comandă* sau *Livrare solicitată*). Fără perioadă intră toate comenzile
+  neexportate, din orice zi.
+- **Cheia de verificare**: fiecare comandă exportată primește un marcaj (când, de cine). O comandă este „de exportat”
+  dacă are nevoie de transport și nu are nici marcaj, nici număr de transport venit din raportul TMS. Numărul lor apare
+  pe buton tot timpul, iar fereastra spune, la fiecare export, câte comenzi neexportate rămân în afara filtrului ales.
+  Nu intră la numărătoare: comenzile anulate, cele încărcate, Self-Pick / „Ridicare client”.
+- **Date lipsă**: fără destinatar, oraș, județ sau dată de livrare comanda nu se exportă (rămâne la numărătoare până se
+  completează), decât dacă se bifează explicit. Fără greutate sau paleți se exportă cu celula goală și fereastra spune
+  câte sunt de completat în fișier înainte de import.
+- **Exporturi anterioare**: orice export se poate descărca din nou sau i se poate anula marcajul (dacă fișierul nu a
+  fost importat în TMS). „Marchează ca exportate, fără fișier” este pentru comenzile aflate deja în TMS — de folosit o
+  dată, la început, pentru comenzile introduse de mână înainte de această funcție.
+- O comandă marcată între timp de altcineva este sărită, deci nu poate ajunge în două fișiere. În jurnal rămâne o linie
+  pentru fiecare export.
+
 ## Cumul (comenzi legate)
 - Operatorul de date (și Administratorul) bifează două sau mai multe comenzi deschise și apasă **Cumulat**. Se pot lega doar
   comenzi cu același client și același destinatar. Comenzile legate au o dungă albastră pe celula Nr Crt (nu există coloană separată).
@@ -132,7 +160,9 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - Expeditorul, natura mărfii și instrucțiunile se țin minte pe client (ultimele folosite).
 - „Salvează și tipărește” scoate cele 4 copii (negru, roșu, albastru, verde) pe A4. CMR-urile rămân salvate (colecția `cmr`,
   un document pe lună) și se redeschid din **CMR-uri emise** sau bifând din nou aceleași comenzi.
-- „Email” deschide programul de email cu subiectul și textul standard; adresele se setează în Administrare → Clienți și reguli.
+- „Email” întreabă pentru ce client se trimite CMR-ul (este propus clientul comenzilor), arată adresele lui și deschide
+  programul de email cu subiectul și textul standard. Adresele se setează în Administrare → *CMR — adrese de email*:
+  câte un rând (Către / CC) pentru fiecare client, plus un rând „Implicit” pentru clienții fără adrese proprii.
 - Formularul tipărit este generat din foaia `CMR_Black` (`js/cmr-sablon.js`). Necesită regulile din `firestore.rules` (blocul `cmr`).
 
 ## Tabul KPI's

@@ -50,7 +50,7 @@
 
   /* Modifica una sau mai multe comenzi existente intr-o singura tranzactie.
      modificari: [{n, fn(o)}]; fn poate arunca eroare (tranzactia se anuleaza). */
-  var FARA_JURNAL = { ut: 1, uu: 1, ct: 1, cu: 1, n: 1, _h: 1, jd: 1, tr: 1, prm: 1, gfm: 1, _zi: 1, _k: 1 };
+  var FARA_JURNAL = { ut: 1, uu: 1, ct: 1, cu: 1, n: 1, _h: 1, jd: 1, tr: 1, prm: 1, gfm: 1, _zi: 1, _k: 1, tx: 1, txu: 1, txm: 1 };
   function scurt(v) { var s = String(v); return s.length > 60 ? s.slice(0, 57) + '…' : s; }
   /* "Camp: vechi → nou; ..." pentru jurnal; '' daca nu s-a schimbat nimic */
   L.diferente = function (a, b) {
@@ -763,6 +763,124 @@
   };
 
   /* ---------- export ---------- */
+  /* ================= export pentru TMS =================
+     Fisierul de import in TMS (foaia „SCHENKERDSV IMPORT”) se face din comenzile din status.
+     Cheia de verificare: fiecare comanda exportata primeste un marcaj (tx = momentul exportului, txu = cine, txm = 1 daca a fost
+     doar marcata, fara fisier). O comanda „de exportat” este una care are nevoie de transport si nu are nici marcaj,
+     nici numar de transport venit din TMS - deci numarul lor arata oricand ce a ramas neexportat, indiferent de perioada aleasa. */
+  L.TMS_FOAIE = 'SCHENKERDSV IMPORT';
+  L.TMS_ANTET = ['NUMAR COMANDA', 'DATA COMANDA', 'CLIENT', 'BENEFICIAR', 'ADRESA BENEFICIAR', 'LOCALITATE BENEFICIAR', 'JUDET BENEFICIAR',
+    'NUMAR PALETI', 'MASA PALETI', 'VOLUM PALETI', 'LIVRARE DE LA', 'LIVRARE PANA LA', 'Expediere de la', 'Expediere pana la', 'TARA BENEFICIAR',
+    'TIP FURNIZOR', 'FURNIZOR', 'TARA FURNIZOR', 'LOCALITATE FURNIZOR', 'ADRESA FURNIZOR', 'JUDET FURNIZOR', 'TIP BENEFICIAR', 'ESTE RETUR', 'UDF_FLOAT_6'];
+  /* valorile fixe ale fisierului (furnizorul = depozitul): se tin in configurare, nu in cod; a = antetul coloanei din fisierul model */
+  L.TMS_SETARI = [
+    { k: 'tipF', t: 'Tip furnizor', a: 'tip furnizor' }, { k: 'furn', t: 'Furnizor', a: 'furnizor', lat: 1 },
+    { k: 'taraF', t: 'Țara furnizor', a: 'tara furnizor' }, { k: 'locF', t: 'Localitate furnizor', a: 'localitate furnizor' },
+    { k: 'adrF', t: 'Adresa furnizor', a: 'adresa furnizor', lat: 1 }, { k: 'judF', t: 'Județ furnizor', a: 'judet furnizor' },
+    { k: 'tipB', t: 'Tip beneficiar', a: 'tip beneficiar' }, { k: 'volum', t: 'Volum paleți', a: 'volum paleti' }];
+  var TMS_TARI = ['germania', 'polonia', 'italia', 'spania', 'grecia', 'ungaria', 'croatia', 'irlanda', 'marea britanie', 'canada', 'sua', 'bulgaria',
+    'belgia', 'franta', 'estonia', 'letonia', 'lituania', 'republica moldova', 'moldova', 'austria', 'olanda', 'cehia', 'slovacia', 'slovenia',
+    'serbia', 'portugalia', 'suedia', 'danemarca', 'elvetia', 'turcia', 'ucraina', 'finlanda', 'norvegia', 'luxemburg', 'cipru', 'malta'];
+  L.tmsSetariComplete = function () { var s = SC.config.tms || {}; return L.TMS_SETARI.every(function (c) { return !SC.gol(s[c.k]); }); };
+  /* 'anulata' | 'exportata' (marcaj) | 'inTms' (are numar de transport) | 'incheiata' (incarcata / arhivata) | 'faraTransport' | 'deExportat' */
+  L.tmsStare = function (o) {
+    if (o.st === ST.ANU) return 'anulata';
+    if (o.tx) return 'exportata';
+    if (o.nt) return 'inTms';
+    if (o.inc === 'DA' || o.ar) return 'incheiata';
+    if (o.st === ST.SELF || /ridica(re)? (client|personal)/.test(SC.normText([o.ob, o.ju, o.or].join(' | ')))) return 'faraTransport';
+    return 'deExportat';
+  };
+  /* paleti pentru transport: amprente, altfel paleti reali, altfel estimarea rotunjita in sus;  masa: greutatea finala, altfel greutatea comenzii */
+  L.tmsPaleti = function (o) {
+    if (SC.esteNum(o.am) && o.am > 0) return o.am;
+    if (SC.esteNum(o.pr) && o.pr > 0) return o.pr;
+    return SC.esteNum(o.pe) && o.pe > 0 ? Math.ceil(SC.rotunjeste(o.pe, 3)) : null;
+  };
+  L.tmsMasa = function (o) {
+    if (SC.esteNum(o.gf) && o.gf > 0) return SC.rotunjeste(o.gf, 2);
+    return SC.esteNum(o.g) && o.g > 0 ? SC.rotunjeste(o.g, 2) : null;
+  };
+  L.tmsTara = function (o) { return TMS_TARI.indexOf(SC.normText(o.ju)) >= 0 ? String(o.ju).trim().toLocaleUpperCase('ro-RO') : ''; };
+  /* date fara de care linia nu are cum sa fie importata in TMS (se completeaza in comanda); [] = in regula */
+  L.tmsLipsa = function (o) {
+    var l = [];
+    if (SC.gol(o.nc)) l.push('număr comandă');
+    if (SC.gol(o.de)) l.push('destinatar');
+    if (SC.gol(o.or)) l.push('oraș');
+    if (SC.gol(o.ju)) l.push('județ');
+    if (SC.gol(o.dl)) l.push('livrare solicitată');
+    return l;
+  };
+  /* valori pe care statusul nu le are inca (la unii clienti greutatea se afla abia la terminare): celula ramane goala
+     si se completeaza in fisier, inainte de import */
+  L.tmsDeCompletat = function (o) {
+    var l = [];
+    if (L.tmsPaleti(o) == null) l.push('paleți');
+    if (L.tmsMasa(o) == null) l.push('greutate');
+    return l;
+  };
+  L.TMS_PALETI_MULTI = 66;      /* peste doua camioane pline: aproape sigur o greseala de scriere in status */
+  function tmsData(v) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || ''));
+    return m ? { t: 'n', v: Math.round(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000) + 25569, z: 'm/d/yy' } : null;
+  }
+  L.tmsRand = function (o) {
+    var s = SC.config.tms || {}, cl = (SC.config.tmsClienti || {})[String(o.cl || '').toUpperCase()] || o.cl || '', tara = L.tmsTara(o);
+    var vol = SC.parseNum(s.volum);
+    return [o.nc != null ? String(o.nc) : null, tmsData(o.dc), cl, o.de || null, o.ad || null, o.or || null,
+      o.ju ? String(o.ju).toLocaleUpperCase('ro-RO') : null, L.tmsPaleti(o), L.tmsMasa(o), vol != null ? vol : (s.volum || null),
+      tmsData(o.dl), tmsData(o.dl), tmsData(o.dl), tmsData(o.dl), tara || 'ROMANIA',
+      s.tipF || null, s.furn || null, s.taraF || null, s.locF || null, s.adrF || null, s.judF || null, s.tipB || null, 0, null];
+  };
+  L.tmsFisier = function (comenzi, numeFisier) {
+    var aoa = [L.TMS_ANTET].concat(comenzi.slice().sort(function (a, b) { return a.n - b.n; }).map(L.tmsRand));
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    for (var r = 1; r < aoa.length; r++) { var c = ws[XLSX.utils.encode_cell({ r: r, c: 8 })]; if (c && c.t === 'n') c.z = '#,##0.00'; }
+    ws['!cols'] = [16, 13, 22, 38, 40, 22, 16, 13, 12, 13, 13, 15, 14, 16, 16, 13, 36, 14, 20, 50, 15, 14, 11, 12].map(function (w) { return { wch: w }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, L.TMS_FOAIE);
+    XLSX.writeFile(wb, numeFisier);
+  };
+  /* valorile fixe citite din randul 2 al fisierului de import folosit acum (dupa antet, nu dupa pozitia coloanei) */
+  L.tmsCitesteModel = function (wb) {
+    var ws = wb.Sheets[L.TMS_FOAIE] || wb.Sheets[wb.SheetNames[0]], z = zona(ws), col = {}, rez = {};
+    for (var c = z.s.c; c <= z.e.c; c++) { var a = SC.normText(vText(cel(ws, z.s.r, c))); if (a && col[a] == null) col[a] = c; }
+    L.TMS_SETARI.forEach(function (s) {
+      if (col[s.a] == null) return;
+      for (var r = z.s.r + 1; r <= Math.min(z.e.r, z.s.r + 50); r++) { var v = vText(cel(ws, r, col[s.a])); if (v) { rez[s.k] = v; break; } }
+    });
+    return rez;
+  };
+  /* Marcheaza comenzile ca exportate, in transe mici (cate 8 grupe pe tranzactie). O comanda marcata intre timp de altcineva
+     este sarita, deci nu poate ajunge in doua fisiere. Intoarce { ts, eroare? }; comenzile marcate sunt cele cu tx === ts. */
+  L.tmsMarcheaza = function (numere, faraFisier, text) {
+    var ts = Date.now(), user = SC.store.user ? SC.store.user.nume : '?', peGrupa = {};
+    numere.forEach(function (n) { var id = SC.idGrupa(n); (peGrupa[id] = peGrupa[id] || []).push(n); });
+    var ids = Object.keys(peGrupa).sort(), loturi = [];
+    for (var i = 0; i < ids.length; i += 8) loturi.push(ids.slice(i, i + 8).reduce(function (a, id) { return a.concat(peGrupa[id]); }, []));
+    function pas(k) {
+      if (k >= loturi.length) return Promise.resolve();
+      return L.modifica(loturi[k].map(function (n) {
+        return { n: n, fn: function (x) { if (x.tx || x.st === ST.ANU) return; x.tx = ts; x.txu = user; if (faraFisier) x.txm = 1; else delete x.txm; } };
+      }), k === 0 ? text : '', { faraDetalii: true }).then(function () { return pas(k + 1); });
+    }
+    return pas(0).then(function () { return { ts: ts }; }, function (e) { return { ts: ts, eroare: e }; });
+  };
+  L.tmsExportate = function (ts) { return SC.comenzi.filter(function (o) { return o.tx === ts; }); };
+  /* anuleaza marcajul unui export: comenzile lui redevin „de exportat” */
+  L.tmsAnuleaza = function (ts, text) {
+    var numere = L.tmsExportate(ts).map(function (o) { return o.n; }), loturi = [];
+    for (var i = 0; i < numere.length; i += 60) loturi.push(numere.slice(i, i + 60));
+    function pas(k) {
+      if (k >= loturi.length) return Promise.resolve(numere.length);
+      return L.modifica(loturi[k].map(function (n) {
+        return { n: n, fn: function (x) { if (x.tx !== ts) return; delete x.tx; delete x.txu; delete x.txm; } };
+      }), k === 0 ? text : '', { faraDetalii: true }).then(function () { return pas(k + 1); });
+    }
+    return pas(0);
+  };
+
   L.exportExcel = function (comenzi, numeFisier) {
     var cols = SC.COLS.concat(SC.COLS_INC);
     var aoa = [cols.map(function (c) { return c.x; })];
