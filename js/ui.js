@@ -1119,6 +1119,7 @@
 
   /* ================= COMENZI: formular ================= */
   var CAMPURI_FORM = ['cl', 'nc', 'cc', 'dc', 'dl', 'de', 'ad', 'or', 'ju', 'g', 'ca', 'pe', 'fpp', 'pk', 'gf', 'pr', 'am', 'dp', 'op', 'na', 'nt', 'dtr', 'inc', 'di', 'ob', 'co', 'sc', 'te', 'se', 'so', 're'];
+  var CAMPURI_FARA_OPERATOR = { sc: 1, te: 1, se: 1, so: 1, re: 1 };      /* Stare camion, Temperatura, Semnatura, Sofer, Remorca */
   var CAMPURI_NOI = ['cl', 'nc', 'cc', 'dc', 'dl', 'de', 'ad', 'or', 'ju', 'g', 'ca', 'pe', 'fpp', 'pk', 'na', 'ob', 'co'];
   var LATE = { de: 1, ad: 1, ob: 1, co: 1 };
   function campHtml(k, val, editabil) {
@@ -1588,8 +1589,10 @@
     var html = '<div class="nota">Nr Crt <b>' + o.n + '</b> · Status <b>' + esc(o.st) + '</b> · Import: ' + esc(o.im || '—') +
       (o.cu ? '<br><span class="mic">Introdusă de ' + esc(o.cu) + (o.uu ? ' · ultima modificare: ' + esc(o.uu) + ', ' + esc(SC.fmtDT(SC.ymd(new Date(o.ut)) + ' ' + SC.p2(new Date(o.ut).getHours()) + ':' + SC.p2(new Date(o.ut).getMinutes()))) : '') + '</span>' : '') +
       (o.ar ? '<br><span class="mic">Comandă arhivată (terminată, fără confirmare de încărcare).</span>' : '') + '</div><div class="grila">';
+    /* Operatorul de date nu are in fereastra comenzii campurile camionului (se completeaza la incarcare / vin din TMS) */
+    var ascunse = r === 'operator' ? CAMPURI_FARA_OPERATOR : {};
     CAMPURI_FORM.forEach(function (k) {
-      html += campHtml(k, o[k], editabil(k));
+      if (!ascunse[k]) html += campHtml(k, o[k], editabil(k));
     });
     html += '</div>' + bifaSelfPick(o.sp === 'DA', poate()) + (r === 'operator' ? '<div class="mic">Statusul se schimbă din lista de comenzi, iar câmpurile de încărcare din tabul Încărcări. Fiecare modificare rămâne în jurnal, cu valoarea veche și cea nouă.</div>' :
       (r === 'transport' ? '<div class="mic">Poți modifica doar Nr AUTO, cât timp comanda nu este încărcată.</div>' : ''));
