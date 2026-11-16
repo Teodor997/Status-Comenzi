@@ -41,6 +41,7 @@
       var o = SC.grupe[id].o || {};
       /* judetul apare peste tot in forma „Bucuresti”, si la comenzile salvate mai demult cu majuscule (fara nicio scriere in baza de date) */
       Object.keys(o).forEach(function (n) { var c = o[n]; c.n = +n; if (c.ju) c.ju = SC.fmtJudet(c.ju); toate.push(c); idx[+n] = c; });
+      SC.rev = (SC.rev || 0) + 1;
     });
     toate.sort(function (a, b) { return a.n - b.n; });
     SC.comenzi = toate; SC.dupaNr = idx;
@@ -673,8 +674,41 @@
     var cam = {};
     docs.forEach(function (d) { var c = d.data.c || {}; Object.keys(c).forEach(function (k) { cam[d.id + '|' + k] = c[k]; }); });
     SC.camInfo = cam;
+    SC.areOrdine = Object.keys(cam).some(function (k) { return cam[k].o > 0; });
+    SC.rev = (SC.rev || 0) + 1;
   };
   SC.camInfo = {};
+  /* Ordinea in care se incarca masinile unei zile, pusa de Transport: c[cheie].o = 1, 2, 3...
+     Camionul este asezat pe locul cerut, iar celelalte se renumeroteaza singure (fara locuri duble sau goluri).
+     pozitie = null scoate camionul din ordine. cheiZi = camioanele care exista acum in ziua respectiva:
+     ordinea ramasa pe camioane disparute (dupa un nou import TMS) este curatata. */
+  L.seteazaOrdine = function (x, pozitie, cheiZi) {
+    var zi = x.data || 'fara-data', k = L.cheieCamion(x);
+    return SC.store.tx(function (t) {
+      return t.get('extra', zi).then(function (d) {
+        d = d || { l: {} };
+        d.c = d.c || {};
+        var exista = {}, loc = null;
+        (cheiZi || []).forEach(function (c) { exista[c] = 1; });
+        exista[k] = 1;
+        Object.keys(d.c).forEach(function (c) { if (!exista[c] && d.c[c].o != null) delete d.c[c].o; });
+        var ordonate = Object.keys(d.c).filter(function (c) { return c !== k && d.c[c].o > 0; }).sort(function (a, b) { return d.c[a].o - d.c[b].o; });
+        if (pozitie != null) {
+          loc = Math.max(1, Math.min(Math.round(pozitie), ordonate.length + 1));
+          ordonate.splice(loc - 1, 0, k);
+          d.c[k] = d.c[k] || {};
+        } else if (d.c[k]) {
+          delete d.c[k].o;
+          if (!Object.keys(d.c[k]).length) delete d.c[k];
+        }
+        ordonate.forEach(function (c, i) { d.c[c].o = i + 1; });
+        d.upd = Date.now();
+        t.set('extra', zi, d);
+        t.log('Ordine la încărcare, ' + (x.data ? SC.fmtDataLunga(x.data) : 'fără dată') + ': ' + x.na + (x.nt ? ' / transport ' + x.nt : '') + (loc ? ' pe locul ' + loc : ' scos din ordine'));
+        return loc;
+      });
+    });
+  };
   L.cheieCamion = function (x) { return String(x.cheie || '').replace(/[.\/\[\]*`~]/g, '_') || '_'; };
   L.infoCamion = function (x) { return SC.camInfo[(x.data || 'fara-data') + '|' + L.cheieCamion(x)] || null; };
   /* La tiparirea borderoului: prima tiparire = inceputul incarcarii (ramane fixa), plus ultima tiparire si numarul de tipariri. */

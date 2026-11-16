@@ -45,7 +45,7 @@ Datele rămân doar în acel browser, deci este bun pentru probă, nu pentru luc
 | **Administrator** | Tot: utilizatori, migrare, arhivare, jurnal, plus tot ce pot celelalte roluri. |
 | **Operator date** | Toată partea de comenzi: adaugă manual, modifică orice câmp al comenzii, schimbă statusuri, importă borderoul Kandia, fișiere Excel și fișierul de transport din TMS; editează Adrese. Nu confirmă încărcări. |
 | **Încărcări** | Taburile *Încărcări* și *KPI's*: confirmă camioanele (stare camion, temperatură, semnătură) și tipărește borderoul. Vede și tabul *Comenzi*, doar pentru citit: poate căuta, filtra și exporta, dar comanda nu se deschide la click și nu poate modifica nimic acolo. |
-| **Transport** | Face fișierul de import pentru TMS (*Export pentru TMS*). Vede comenzile și încărcările; modifică doar **Nr AUTO**, direct în celulă (sau pe mai multe comenzi bifate), cât timp comanda nu e încărcată. Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
+| **Transport** | Face fișierul de import pentru TMS (*Export pentru TMS*) și stabilește ordinea în care se încarcă mașinile. Vede comenzile și încărcările; modifică doar **Nr AUTO**, direct în celulă (sau pe mai multe comenzi bifate), cât timp comanda nu e încărcată. Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
 
 **Vezi ca alt rol (doar Administrator).** În bara de sus, lângă nume, administratorul are lista **Vezi ca**: alege
 *Operator date*, *Încărcări* sau *Transport* și aplicația se reface exact cum o vede acel rol (taburi, butoane, ce se
@@ -108,6 +108,17 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
   ca următorul import să pornească de la zero. Nr AUTO și comenzile deja încărcate rămân.
   A doua opțiune a aceleiași ferestre șterge camioanele „Fără dată”: Nr AUTO de pe comenzile neîncărcate care nu au dată de
   transport (valoarea veche rămâne în jurnal).
+
+## Ordinea la încărcare
+
+În tabul Încărcări, prima coloană („Ordine”) arată în ce ordine se încarcă mașinile unei zile. O stabilește **Transportul**
+(și Administratorul): scrie locul direct în celulă — Enter salvează, Esc renunță, săgețile sus / jos trec la camionul
+vecin. Camionul este așezat pe locul cerut, iar celelalte se renumerotează singure (fără locuri duble sau goluri); celula
+golită scoate camionul din ordine. Lista se sortează după această ordine, în cadrul fiecărei zile.
+
+**Încărcări** și **Operatorul de date** văd ordinea, fără să o poată modifica: în tabul Încărcări, pe borderou („Locul la
+încărcare”) și în lista de comenzi, ca o bulină cu numărul în fața Nr AUTO. Ordinea se ține pe zi, în documentul zilei
+din colecția `extra` (o scriere la fiecare modificare), iar fiecare modificare rămâne în jurnal.
 
 ## Export pentru TMS (fișierul de import al comenzilor)
 
