@@ -45,7 +45,7 @@ Datele rămân doar în acel browser, deci este bun pentru probă, nu pentru luc
 | **Administrator** | Tot: utilizatori, migrare, arhivare, jurnal, plus tot ce pot celelalte roluri. |
 | **Operator date** | Toată partea de comenzi: adaugă manual, modifică orice câmp al comenzii, schimbă statusuri, importă borderoul Kandia, fișiere Excel și fișierul de transport din TMS; editează Adrese. Nu confirmă încărcări. |
 | **Încărcări** | Taburile *Încărcări* și *KPI's*: confirmă camioanele (stare camion, temperatură, semnătură) și tipărește borderoul. Vede și tabul *Comenzi*, doar pentru citit: poate căuta, filtra și exporta, dar comanda nu se deschide la click și nu poate modifica nimic acolo. |
-| **Transport** | Face fișierul de import pentru TMS (*Export pentru TMS*) și stabilește ordinea în care se încarcă mașinile. Vede comenzile și încărcările; modifică doar **Nr AUTO**, direct în celulă (sau pe mai multe comenzi bifate), cât timp comanda nu e încărcată. Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
+| **Transport** | Face fișierul de import pentru TMS (*Export pentru TMS*) și stabilește ordinea în care se încarcă mașinile. Un click pe celula *Observații* sau *Comentarii* deschide tot textul într-o fereastră (se închide cu Esc sau cu un click în afara ei). Vede comenzile și încărcările; modifică doar **Nr AUTO**, direct în celulă (sau pe mai multe comenzi bifate), cât timp comanda nu e încărcată. Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
 
 **Vezi ca alt rol (doar Administrator).** În bara de sus, lângă nume, administratorul are lista **Vezi ca**: alege
 *Operator date*, *Încărcări* sau *Transport* și aplicația se reface exact cum o vede acel rol (taburi, butoane, ce se
@@ -144,6 +144,10 @@ până acum de mână. Comenzile „doar transport” se adaugă în continuare 
   dacă are nevoie de transport și nu are nici marcaj, nici număr de transport venit din raportul TMS. Numărul lor apare
   pe buton tot timpul, iar fereastra spune, la fiecare export, câte comenzi neexportate rămân în afara filtrului ales.
   Nu intră la numărătoare: comenzile anulate, cele încărcate, Self-Pick / „Ridicare client”.
+- **Bifa „Comandă Self-Pick”**: Operatorul de date (și Administratorul) o pune în fereastra comenzii, la introducere
+  sau la modificare. Comanda bifată nu intră în exportul pentru TMS și apare în listă cu eticheta „Self-Pick” în celula
+  Nr AUTO. Dacă bifa se pune după ce comanda a fost deja exportată sau are număr de transport, aplicația avertizează că
+  trebuie anunțat Transportul. Bifa este separată de statusul „Self-Pick”, care se pune la închiderea comenzii.
 - **Date lipsă**: fără destinatar, oraș, județ sau dată de livrare comanda nu se exportă (rămâne la numărătoare până se
   completează), decât dacă se bifează explicit. Fără greutate sau paleți se exportă cu celula goală și fereastra spune
   câte sunt de completat în fișier înainte de import.

@@ -51,6 +51,11 @@
         };
         jos.appendChild(el);
       });
+      /* ferestrele doar de citit (opt.usor) se inchid si cu Esc sau cu un click in afara lor */
+      if (opt.usor) {
+        fundal.addEventListener('pointerdown', function (e) { if (e.target === fundal) inchide(null); });
+        fundal.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); inchide(null); } });
+      }
       document.body.appendChild(fundal);
       if (opt.laDeschidere) opt.laDeschidere(rad);
       var primul = rad.querySelector('input:not([readonly]):not([type=checkbox]), select:not(:disabled), textarea:not([readonly])');
@@ -403,7 +408,8 @@
         var oc = ordineComanda(o);
         if (oc) { inainte = '<span class="ordM">' + oc.o + '</span>'; titlu = ' title="' + esc(v) + ' — locul ' + oc.o + ' la încărcare' + (oc.data ? ', ' + esc(SC.fmtDataLunga(oc.data)) : '') + '"'; }
       }
-      h += '<div' + (cc ? ' class="' + cc + '"' : '') + (c.k === 'na' || c.k === 'fpp' || c.k === 'pk' || c.k === 'am' || c.k === 'dl' ? ' data-k="' + c.k + '"' : '') + titlu + '>' + inainte + esc(v) + '</div>';
+      if (c.k === 'na' && o.sp === 'DA') { inainte = SP_ETICHETA + inainte; titlu = ' title="Self-Pick: o ridică clientul, nu intră în exportul pentru TMS' + (v ? ' — ' + esc(v) : '') + '"'; }
+      h += '<div' + (cc ? ' class="' + cc + '"' : '') + (c.k === 'na' || c.k === 'fpp' || c.k === 'pk' || c.k === 'am' || c.k === 'dl' || c.k === 'ob' || c.k === 'co' ? ' data-k="' + c.k + '"' : '') + titlu + '>' + inainte + esc(v) + '</div>';
     }
     return h + '</div>';
   }
@@ -557,12 +563,23 @@
     if (rol() === 'transport') {
       var cel = e.target.closest('[data-k=na]'), celDl = e.target.closest('[data-k=dl]');
       if (cel) editeazaNaInLinie(o, cel); else if (celDl) editeazaDlInLinie(o, celDl);
+      /* click pe Observatii sau Comentarii: tot textul, intr-o fereastra (in lista este taiat de latimea coloanei) */
+      else if (e.target.closest('[data-k=ob],[data-k=co]') && (!SC.gol(o.ob) || !SC.gol(o.co))) arataTextComanda(o);
       return;
     }
     if (poate() && o.st !== ST.ANU && e.target.closest('[data-k=fpp],[data-k=pk]')) editeazaFppPick(o);
     else if (poate() && (o.st === ST.TER || o.st === ST.SELF) && e.target.closest('[data-k=am]')) editeazaAmprente(o);
     else deschideComanda(o);
   });
+
+  /* Observatiile si comentariile unei comenzi, intregi (doar de citit) */
+  function arataTextComanda(o) {
+    var h = '<div class="mic" style="margin-bottom:10px">' + esc([o.de, o.or, o.dl ? 'livrare ' + SC.fmtDataLunga(o.dl) : ''].filter(Boolean).join(' · ')) + '</div>';
+    [['ob', 'Observații'], ['co', 'Comentarii']].forEach(function (c) {
+      if (!SC.gol(o[c[0]])) h += '<div class="text-titlu">' + c[1] + '</div><div class="text-lung">' + esc(String(o[c[0]]).trim()) + '</div>';
+    });
+    return modal({ titlu: ((o.cl || '') + ' ' + (o.nc || '')).trim() + ' — observații și comentarii', html: h, usor: true, butoane: [{ t: 'Închide', cls: 'pri', v: null }] });
+  }
 
   /* ---- filtru pe coloana, ca in Excel: sortare, cautare in valori, bife ---- */
   var popFiltru = null;
@@ -1145,6 +1162,10 @@
     if (!e.target.matches || !e.target.matches('.ob-rand [data-k=ob]')) return;
     var s = e.target.parentNode.querySelector('.ob-sel'); if (s) s.innerHTML = obOptiuni(e.target.value);
   });
+  /* bifa Self-Pick din formularul comenzii */
+  function bifaSelfPick(bifat, activ) {
+    return '<label class="bifa sp-bifa"><input type="checkbox" id="spBifa"' + (bifat ? ' checked' : '') + (activ ? '' : ' disabled') + '> <span><b>Comandă Self-Pick</b> — o ridică clientul; nu intră în exportul pentru TMS</span></label>';
+  }
   function citesteCampuri(rad) {
     var val = {}, greseala = null;
     Array.prototype.forEach.call(rad.querySelectorAll('[data-k]'), function (el) {
@@ -1159,6 +1180,8 @@
       val[k] = v;
     });
     if (greseala) { toast(greseala, 'rau'); return null; }
+    var sp = rad.querySelector('#spBifa');
+    if (sp && !sp.disabled) val.sp = sp.checked ? 'DA' : '';
     return val;
   }
   /* la schimbarea codului de client: Destinatar / Adresa / Oras / Judet din Adrese (dupa Client + Cod) */
@@ -1398,6 +1421,7 @@
       cel.textContent = salveaza ? v : vechi;
       /* la renuntare ramane acelasi camion: se pune la loc si locul lui la incarcare */
       if (!salveaza && SC.areOrdine && vechi) { var ocv = ordineComanda(o); if (ocv) cel.insertAdjacentHTML('afterbegin', '<span class="ordM">' + ocv.o + '</span>'); }
+      if (o.sp === 'DA') cel.insertAdjacentHTML('afterbegin', SP_ETICHETA);
       if (salveaza && v !== vechi) {
         L.modifica([{
           n: n, fn: function (x) {
@@ -1567,7 +1591,7 @@
     CAMPURI_FORM.forEach(function (k) {
       html += campHtml(k, o[k], editabil(k));
     });
-    html += '</div>' + (r === 'operator' ? '<div class="mic">Statusul se schimbă din lista de comenzi, iar câmpurile de încărcare din tabul Încărcări. Fiecare modificare rămâne în jurnal, cu valoarea veche și cea nouă.</div>' :
+    html += '</div>' + bifaSelfPick(o.sp === 'DA', poate()) + (r === 'operator' ? '<div class="mic">Statusul se schimbă din lista de comenzi, iar câmpurile de încărcare din tabul Încărcări. Fiecare modificare rămâne în jurnal, cu valoarea veche și cea nouă.</div>' :
       (r === 'transport' ? '<div class="mic">Poți modifica doar Nr AUTO, cât timp comanda nu este încărcată.</div>' : ''));
     var butoane = [{ t: 'Închide', v: null }];
     if (edit) {
@@ -1601,7 +1625,11 @@
                 });
                 if ('fpp' in schimbari || 'pk' in schimbari) L.sincPaleti(x);
               }
-            }], o.nc + ': modificat ' + chei.map(function (k) { return SC.COL[k].t; }).join(', ')).then(function () { toast('Comanda ' + o.nc + ' a fost salvată.', 'bun'); redeseneaza(); });
+            }], o.nc + ': modificat ' + chei.map(function (k) { return SC.COL[k].t; }).join(', ')).then(function () {
+              toast('Comanda ' + o.nc + ' a fost salvată.', 'bun'); redeseneaza();
+              /* bifata Self-Pick dupa ce a plecat deja spre TMS: Transportul trebuie sa stie */
+              if (schimbari.sp === 'DA' && (o.tx || o.nt)) alerta('Comanda ' + o.nc + ' este acum Self-Pick, dar ' + (o.nt ? 'are deja număr de transport (' + o.nt + ')' : 'a fost deja exportată pentru TMS') + '.\n\nAnunță Transportul, ca să o scoată din TMS.', 'Self-Pick');
+            });
           });
         }
       });
@@ -1609,7 +1637,7 @@
     return modal({ titlu: 'Comanda ' + o.nc + (o.cl ? ' — ' + o.cl : ''), html: html, lat: true, butoane: butoane, laDeschidere: leagaCodClient });
   }
   $('btnNoua').onclick = function () {
-    var html = '<div class="grila">' + CAMPURI_NOI.map(function (k) { return campHtml(k, k === 'dc' ? SC.azi() : '', true); }).join('') + '</div>' +
+    var html = '<div class="grila">' + CAMPURI_NOI.map(function (k) { return campHtml(k, k === 'dc' ? SC.azi() : '', true); }).join('') + '</div>' + bifaSelfPick(false, true) +
       '<div class="mic">Comanda primește statusul Initiata, următorul Nr Crt și eticheta „MANUAL: data ora”. Cu Cod Client completat, destinatarul și adresa vin din Adrese.</div>';
     modal({
       titlu: 'Comandă nouă', html: html, lat: true, laDeschidere: leagaCodClient,
@@ -1848,6 +1876,7 @@
       return x;
     }).filter(function (x) { return x.toate.length; });   /* un camion doar cu retururi nu are nimic de incarcat */
   }
+  var SP_ETICHETA = '<span class="spM">Self-Pick</span>';
   /* locul camionului la incarcare, pentru o comanda (aratat langa Nr AUTO); se recalculeaza doar cand se schimba datele */
   var ordCache = { rev: -1, peNr: {} };
   function ordineComanda(o) {

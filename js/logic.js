@@ -822,7 +822,7 @@
     if (o.tx) return 'exportata';
     if (o.nt) return 'inTms';
     if (o.inc === 'DA' || o.ar) return 'incheiata';
-    if (o.st === ST.SELF || /ridica(re)? (client|personal)/.test(SC.normText([o.ob, o.ju, o.or].join(' | ')))) return 'faraTransport';
+    if (o.st === ST.SELF || o.sp === 'DA' || /ridica(re)? (client|personal)/.test(SC.normText([o.ob, o.ju, o.or].join(' | ')))) return 'faraTransport';
     return 'deExportat';
   };
   /* paleti pentru transport: amprente, altfel paleti reali, altfel estimarea rotunjita in sus;  masa: greutatea finala, altfel greutatea comenzii */

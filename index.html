@@ -161,6 +161,9 @@
   .rand .st-lucru { background: var(--galben); }
   .rand .st-term { background: var(--verde); }
   .doarCitire .rand { cursor: default; }
+  /* textul intreg al observatiilor / comentariilor */
+  .text-titlu { font-size: 12px; font-weight: 700; color: var(--muted, #5b6472); text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 4px; }
+  .text-lung { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15.5px; line-height: 1.45; padding: 10px 12px; border: 1px solid var(--line2); border-radius: 8px; background: #f7f9fc; user-select: text; }
   /* ordinea la incarcare */
   td.ordC { width: 70px; text-align: center; }
   .ordIn { width: 58px; height: 30px; padding: 0 4px; text-align: center; font: inherit; font-weight: 700; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text); }
@@ -168,6 +171,9 @@
   .ordB, .ordM { display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 11px; background: var(--navy); color: #fff; font-weight: 700; text-align: center; }
   .ordB { font-size: 14px; min-width: 28px; padding: 3px 8px; }
   .ordM { font-size: 11px; margin-right: 5px; }
+  /* comanda Self-Pick */
+  .spM { display: inline-block; padding: 1px 7px; margin-right: 5px; border-radius: 11px; background: #fde9c8; color: #7a4700; border: 1px solid #e8c68a; font-size: 11px; font-weight: 700; }
+  label.bifa.sp-bifa { display: flex; align-items: center; gap: 8px; margin: 12px 0 6px; padding: 9px 12px; border: 1px solid var(--line2); border-radius: 8px; background: #fffaf0; }
   .rand select.stSel { width: 100%; border: 0; background: transparent; padding: 0; height: 28px; font-size: 12.5px; cursor: pointer; color: var(--text); }
   .rand .da { color: var(--ok); font-weight: 700; }
   .rand > div[data-k=fpp], .rand > div[data-k=pk] { cursor: cell; }
