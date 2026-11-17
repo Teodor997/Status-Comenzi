@@ -838,13 +838,15 @@
       '<label class="camp"><span>De la</span><input type="date" id="txDe"></label>' +
       '<label class="camp"><span>Până la</span><input type="date" id="txPana"></label></div>' +
       '<div class="mic" style="margin-top:6px">În fișier intră toate comenzile din perioada aleasă care au nevoie de transport, chiar dacă au mai fost exportate. Fără perioadă intră comenzile din orice zi.</div>' +
-      '<label class="bifa" style="margin-top:8px"><input type="checkbox" id="txCuExp" checked> Include și comenzile care au mai fost exportate</label>' +
+      '<fieldset class="tms-ce"><legend>Ce comenzi intră în fișier</legend>' +
+      '<label class="bifa"><input type="radio" name="txCe" value="toate" checked> <span><b>Toate comenzile</b> din filtru, și cele care au mai fost exportate <span class="tms-nr" id="txNrToate"></span></span></label>' +
+      '<label class="bifa"><input type="radio" name="txCe" value="noi"> <span><b>Doar comenzile care nu au mai fost exportate</b> <span class="tms-nr" id="txNrNoi"></span></span></label></fieldset>' +
       '<div class="tms-rez" id="txRez" role="status"></div>' +
       '<label class="bifa"><input type="checkbox" id="txCuLipsa"> Exportă și comenzile fără destinatar, oraș, județ sau dată de livrare (celulele rămân goale)</label>' +
       '<div class="tms-vechi" id="txVechi"></div>';
     var sel = { deExportat: [], lipsa: [] };
     function citeste(rad) {
-      var f = { cl: rad.querySelector('#txCl').value, dupa: rad.querySelector('#txDupa').value, a: rad.querySelector('#txDe').value, b: rad.querySelector('#txPana').value, cuLipsa: rad.querySelector('#txCuLipsa').checked, cuExp: rad.querySelector('#txCuExp').checked };
+      var f = { cl: rad.querySelector('#txCl').value, dupa: rad.querySelector('#txDupa').value, a: rad.querySelector('#txDe').value, b: rad.querySelector('#txPana').value, cuLipsa: rad.querySelector('#txCuLipsa').checked, cuExp: rad.querySelector('input[name=txCe]:checked').value === 'toate' };
       f.gresit = !!(f.a && f.b && f.b < f.a);
       return f;
     }
@@ -856,23 +858,25 @@
       return (!f.a || d >= f.a) && (!f.b || d <= f.b);
     }
     function calculeaza(rad) {
-      var f = citeste(rad), numar = { exportata: 0, inTms: 0, faraTransport: 0 }, inF = [], afara = [], dinNou = 0;
+      var f = citeste(rad), numar = { exportata: 0, inTms: 0, faraTransport: 0 }, noi = [], vechi = [], afara = [];
       SC.comenzi.forEach(function (o) {
         var s = L.tmsStare(o), a = !f.gresit && inFiltru(o, f);
-        if (s === 'deExportat') (a ? inF : afara).push(o);      /* nu a ajuns inca in niciun fisier */
+        if (s === 'deExportat') (a ? noi : afara).push(o);      /* nu a ajuns inca in niciun fisier */
         else if (!a) return;
         else if (s === 'exportata') {
-          /* a mai fost exportata: intra din nou in fisier daca inca are nevoie de transport si nu are numar de transport */
+          /* a mai fost exportata: poate intra din nou in fisier daca inca are nevoie de transport si nu are numar de transport */
           var s2 = L.tmsStare(o, true);
-          if (s2 !== 'deExportat') { if (numar[s2] != null) numar[s2]++; }
-          else if (f.cuExp) { inF.push(o); dinNou++; }
-          else numar.exportata++;
+          if (s2 === 'deExportat') vechi.push(o); else if (numar[s2] != null) numar[s2]++;
         } else if (numar[s] != null) numar[s]++;
       });
-      var complete = [], lipsa = [];
+      function bune(lista) { return f.cuLipsa ? lista : lista.filter(function (o) { return !L.tmsLipsa(o).length; }); }
+      var inF = f.cuExp ? noi.concat(vechi) : noi, complete = [], lipsa = [];
+      if (!f.cuExp) numar.exportata = vechi.length;
       inF.forEach(function (o) { var l = L.tmsLipsa(o); if (l.length) lipsa.push({ o: o, l: l }); else complete.push(o); });
       sel = { f: f, complete: complete, lipsa: lipsa, afara: afara, numar: numar, deExportat: f.cuLipsa ? inF : complete };
       sel.dinNou = sel.deExportat.filter(function (o) { return o.tx; }).length;
+      /* cate comenzi ar intra cu fiecare dintre cele doua variante (aratat langa ele) */
+      sel.nrToate = bune(noi.concat(vechi)).length; sel.nrNoi = bune(noi).length;
       return sel;
     }
     function deseneaza(rad) {
@@ -907,6 +911,8 @@
         h += '<div class="nota bun"><b>Verificare:</b> ' + (l.length || ramaseLipsa ? 'după acest export nu mai rămâne nicio comandă neexportată' + (ramaseLipsa ? ', în afară de ' + (ramaseLipsa === 1 ? 'cea' : 'cele ' + ramaseLipsa) + ' cu date de livrare lipsă.' : '.') : 'toate comenzile care au nevoie de transport au fost exportate.') + '</div>';
       }
       rad.querySelector('#txRez').innerHTML = h;
+      rad.querySelector('#txNrToate').textContent = '— ' + nCom(s.nrToate);
+      rad.querySelector('#txNrNoi').textContent = '— ' + nCom(s.nrNoi);
       var ex = tmsExporturi();
       rad.querySelector('#txVechi').innerHTML = ex.length ? '<div class="rand-form"><label class="camp" style="flex:1;min-width:260px"><span>Marcaje de export (pe loturi)</span><select id="txLot">' +
         ex.map(function (e) { return '<option value="' + e.ts + '">' + esc(tmsMoment(e.ts) + ' · ' + e.u + ' · ' + nCom(e.n) + (e.manual ? ' · marcate fără fișier' : ' la primul export')) + '</option>'; }).join('') + '</select></label>' +

@@ -140,8 +140,8 @@ până acum de mână. Comenzile „doar transport” se adaugă în continuare 
   în Firebase, nu în codul public.
 - **Filtre**: client și perioadă (după *Data comandă* sau *Livrare solicitată*). În fișier intră toate comenzile din
   filtru care au nevoie de transport, **chiar dacă au mai fost exportate** — o comandă poate fi exportată de câte ori
-  este nevoie. Bifa „Include și comenzile care au mai fost exportate” este pusă implicit; fără ea intră doar comenzile
-  aflate la primul export. Fereastra arată câte dintre comenzi au mai fost exportate.
+  este nevoie. În fereastră se alege una dintre două variante, fiecare cu numărul ei de comenzi: **Toate comenzile**
+  din filtru (aleasă implicit) sau **Doar comenzile care nu au mai fost exportate**.
 - **Ce nu intră niciodată**: comenzile anulate, cele încărcate, cele care au deja număr de transport din raportul TMS și
   cele Self-Pick / „Ridicare client”.
 - **Verificare**: aplicația ține minte, cu un marcaj pe comandă (când și de cine), care comenzi au ajuns deja într-un
