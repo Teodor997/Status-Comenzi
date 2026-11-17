@@ -1157,6 +1157,59 @@
     }
     return urm(0).then(function () { return SC.store.tx(function (t) { t.log(text); }); });
   };
+  /* ---- registrul in Excel, pe modelul „Status Comenzi” ----
+     Se scrie langa fiecare copie din folder, doar pentru consultat (restaurarea se face din fisierul .json).
+     Foaia „Sheet1”: primele 25 de coloane sunt exact cele din registrul Excel, in aceeasi ordine, cu date, ore si numere
+     adevarate (se pot sorta si filtra); in dreapta lor vin coloanele pe care le are doar aplicatia. Foaia „Adrese” ca in registru.
+     Fisierul poate fi citit inapoi cu „Migrare din Excel”. */
+  L.REGISTRU_MODEL = ['n', 'cl', 'st', 'nc', 'cc', 'dc', 'dl', 'de', 'ad', 'or', 'ju', 'g', 'ca', 'pe', 'gf', 'pr', 'am', 'dp', 'op', 'ob', 'co', 'inc', 'di', 'na', 'im'];
+  L.REGISTRU_IN_PLUS = ['fpp', 'pk', 'nt', 'dtr', 'sc', 'te', 'se', 'so', 're', 'sp', 'cum'];
+  var FMT_REGISTRU = { date: 'dd.mm.yyyy', dt: 'dd.mm.yyyy hh:mm', time: 'hh:mm' };
+  function serialZi(ymd) { return Date.UTC(+ymd.slice(0, 4), +ymd.slice(5, 7) - 1, +ymd.slice(8, 10)) / 86400000 + 25569; }
+  function serialOra(hm) { var m = /^(\d{1,2})[:.](\d{2})/.exec(hm); return m && +m[1] < 24 && +m[2] < 60 ? (+m[1] * 60 + +m[2]) / 1440 : null; }
+  /* toate comenzile dintr-o copie (sau din grupele date), in ordinea Nr Crt */
+  L.comenziDinGrupe = function (grupe) {
+    var l = [];
+    Object.keys(grupe || {}).forEach(function (id) {
+      var o = (grupe[id] || {}).o || {};
+      Object.keys(o).forEach(function (n) { var c = Object.assign({}, o[n]); c.n = +n; if (c.ju) c.ju = SC.fmtJudet(c.ju); l.push(c); });
+    });
+    return l.sort(function (a, b) { return a.n - b.n; });
+  };
+  L.registruExcel = function (comenzi, adreseDocs) {
+    var cols = L.REGISTRU_MODEL.concat(L.REGISTRU_IN_PLUS).map(function (k) { return SC.COL[k]; });
+    var aoa = [cols.map(function (c) { return c.x; })], cuFormat = [];
+    comenzi.forEach(function (o, r) {
+      aoa.push(cols.map(function (c, ci) {
+        var v = o[c.k], s;
+        if (v == null || v === '') return null;
+        if (c.typ === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(v)) { cuFormat.push([r + 1, ci, FMT_REGISTRU.date]); return serialZi(v); }
+        if (c.typ === 'dt' && /^\d{4}-\d{2}-\d{2}( \d{1,2}[:.]\d{2})?$/.test(v)) {
+          s = String(v).length > 10 ? serialOra(String(v).slice(11)) : 0;
+          if (s != null) { cuFormat.push([r + 1, ci, String(v).length > 10 ? FMT_REGISTRU.dt : FMT_REGISTRU.date]); return serialZi(v) + s; }
+        }
+        if (c.typ === 'time' && typeof v === 'string') { s = serialOra(v); if (s != null) { cuFormat.push([r + 1, ci, FMT_REGISTRU.time]); return s; } }
+        if (c.k === 'nc' && /^[1-9]\d{0,14}$/.test(v)) return +v;
+        return v;
+      }));
+    });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    cuFormat.forEach(function (x) { var cel = ws[XLSX.utils.encode_cell({ r: x[0], c: x[1] })]; if (cel) cel.z = x[2]; });
+    ws['!cols'] = cols.map(function (c) { return { wch: Math.max(10, Math.round((c.w || 90) / 7)) }; });
+    if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    var adr = [['Client', 'Cod', 'Nume 1', 'Stradă', 'Localitate', 'Judet']];
+    Object.keys(adreseDocs || {}).sort().forEach(function (id) {
+      ((adreseDocs[id] || {}).r || []).forEach(function (a) { adr.push([a.cl || null, a.cod || null, a.nume || null, a.str || null, a.loc || null, a.jud ? SC.fmtJudet(a.jud) : null]); });
+    });
+    var wsA = XLSX.utils.aoa_to_sheet(adr);
+    wsA['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 40 }, { wch: 40 }, { wch: 22 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, wsA, 'Adrese');
+    return wb;
+  };
+  L.registruOcteti = function (wb) { return XLSX.write(wb, { bookType: 'xlsx', type: 'array', compression: true, bookSST: true }); };
+
   /* evidenta copiilor (meta/backup): ultima copie automata, ultima manuala, ultima eroare. Un document mic, citit o data la pornire. */
   L.backupNoteaza = function (camp, date, textJurnal) {
     return SC.store.tx(function (t) {

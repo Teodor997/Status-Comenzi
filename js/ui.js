@@ -3404,6 +3404,8 @@
   var BK_JURNAL_ZILE = 35;       // copiile automate facute de un Administrator iau jurnalul din ultimele zile; copia manuala il ia pe tot
   var BK_PREFIX = 'Backup Status Comenzi ', BK_PREFIX_INAINTE = 'Inainte de restaurare Status Comenzi ';
   var BK_RE = /^Backup Status Comenzi \d{4}-\d{2}-\d{2} \d{4}( manual)?\.json$/;
+  /* langa fiecare copie din folder se scrie si registrul in Excel, pe modelul „Status Comenzi” (doar pentru consultat) */
+  var BK_PREFIX_XLSX = 'Status Comenzi ', BK_RE_XLSX = /^Status Comenzi \d{4}-\d{2}-\d{2} \d{4}( manual)?\.xlsx$/;
   var bk = { info: undefined, cfgSosit: false, lucreaza: false, incercari: 0, avertizat: false, intarziere: BK_INTARZIERE };
 
   function bkSuportat() { return typeof window.showDirectoryPicker === 'function' && !!window.indexedDB; }
@@ -3459,31 +3461,41 @@
       });
     }, function (e) { if (e && e.name === 'AbortError') return null; throw e; });
   }
-  function bkScrieInFolder(h, nume, text) {
-    var marime = new Blob([text]).size;
+  /* continut = text (JSON) sau octeti (Excel) */
+  function bkScrieInFolder(h, nume, continut) {
+    var blob = new Blob([continut], { type: typeof continut === 'string' ? 'application/json' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), marime = blob.size;
     return h.getFileHandle(nume, { create: true }).then(function (fh) {
       return fh.createWritable().then(function (w) {
-        return w.write(new Blob([text], { type: 'application/json' })).then(function () { return w.close(); });
+        return w.write(blob).then(function () { return w.close(); });
       }).then(function () { return fh.getFile(); });
     }).then(function (f) {
       if (f.size !== marime) throw L.eroare('Fișierul de backup nu a fost scris complet (' + f.size + ' din ' + marime + ' octeți).');
       return f.size;
     });
   }
-  /* pastreaza in folder doar ultimele BK_PASTREAZA copii (dupa numele fisierului, care incepe cu data) */
+  /* pastreaza in folder doar ultimele BK_PASTREAZA copii si ultimele BK_PASTREAZA registre Excel (dupa numele fisierului, care incepe cu data) */
   function bkCurata(h) {
-    var nume = [], it = h.entries();
+    var liste = [[], []], it = h.entries();
     function urm() {
       return it.next().then(function (r) {
         if (r.done) return;
-        if (r.value[1].kind === 'file' && BK_RE.test(r.value[0])) nume.push(r.value[0]);
+        if (r.value[1].kind === 'file') { if (BK_RE.test(r.value[0])) liste[0].push(r.value[0]); else if (BK_RE_XLSX.test(r.value[0])) liste[1].push(r.value[0]); }
         return urm();
       });
     }
     return urm().then(function () {
-      nume.sort();
-      return nume.slice(0, Math.max(0, nume.length - BK_PASTREAZA)).reduce(function (p, n) { return p.then(function () { return h.removeEntry(n); }); }, Promise.resolve());
+      var deSters = [];
+      liste.forEach(function (nume) { nume.sort(); deSters = deSters.concat(nume.slice(0, Math.max(0, nume.length - BK_PASTREAZA))); });
+      return deSters.reduce(function (p, n) { return p.then(function () { return h.removeEntry(n); }); }, Promise.resolve());
     });
+  }
+  /* registrul Excel din aceeasi copie (fara nicio citire in plus); daca nu reuseste, copia .json ramane buna */
+  function bkScrieExcel(copie, folder, manual, rez) {
+    return new Promise(function (ok) { setTimeout(ok, 30); }).then(function () {
+      var nume = bkNumeFisier(BK_PREFIX_XLSX, copie.t, manual).replace(/\.json$/, '.xlsx');
+      var octeti = L.registruOcteti(L.registruExcel(L.comenziDinGrupe(copie.col.comenzi), copie.col.adrese));
+      return bkScrieInFolder(folder, nume, octeti).then(function (marime) { rez.excel = nume; rez.excelKb = Math.round(marime / 1024); });
+    }).catch(function (e) { rez.excelEr = (e && e.message ? e.message : String(e)).slice(0, 200); }).then(function () { return rez; });
   }
   function bkDescarca(nume, text) {
     var a = document.createElement('a'), url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
@@ -3507,13 +3519,17 @@
     var jurnal = rolReal() !== 'admin' ? false : opt.manual ? true : { a: SC.ziPlus(SC.azi(), -BK_JURNAL_ZILE) };
     return L.backupCiteste(jurnal, function (ce) { $('syncText').textContent = 'copie de siguranță: ' + ce.toLowerCase(); }).then(function (copie) {
       return bkSalveaza(copie, bkNumeFisier(BK_PREFIX, copie.t, opt.manual), opt.folder).then(function (rez) {
-        return opt.folder ? bkCurata(opt.folder).then(function () { return rez; }, function () { return rez; }) : rez;
+        if (!opt.folder) return rez;
+        $('syncText').textContent = 'copie de siguranță: registrul excel';
+        return bkScrieExcel(copie, opt.folder, opt.manual, rez).then(function () { return bkCurata(opt.folder); }).then(function () { return rez; }, function () { return rez; });
       });
     }).then(function (rez) { marcheazaSync(); return rez; }, function (e) { marcheazaSync(); throw e; });
   }
   function bkDateEvidenta(rez) {
     var c = bkCfg(), d = { t: rez.t, u: SC.store.user.nume, fisier: rez.fisier, comenzi: rez.comenzi, doc: rez.doc, kb: rez.kb, cuJurnal: rez.cuJurnal, loc: rez.loc };
     if (rez.jurnalDela) d.jurnalDela = rez.jurnalDela;
+    if (rez.excel) d.excel = rez.excel;
+    if (rez.excelEr) d.excelEr = rez.excelEr;
     if (rez.folder) d.folder = rez.folder;
     if (rez.loc === 'folder' && c) d.nume = c.nume;
     return d;
@@ -3551,7 +3567,8 @@
         bk.incercari++;
         return bkFa({ folder: h }).then(function (rez) {
           return L.backupNoteaza('auto', bkDateEvidenta(rez), 'Copie de siguranță automată: ' + rez.fisier + ' (' + rez.comenzi + ' comenzi, ' + rez.doc + ' documente)').then(function () {
-            toast('Copia de siguranță de azi a fost salvată în folderul „' + rez.folder + '” (' + bkNr(rez.comenzi) + ' comenzi).', 'bun');
+            toast('Copia de siguranță de azi a fost salvată în folderul „' + rez.folder + '” (' + bkNr(rez.comenzi) + ' comenzi' + (rez.excel ? ', cu registrul Excel' : '') + ').', 'bun');
+            if (rez.excelEr) toast('Registrul Excel nu a putut fi scris lângă copie: ' + rez.excelEr + ' Copia .json este în regulă.', 'rau');
           });
         });
       });
@@ -3590,7 +3607,8 @@
     var c = bkCfg(), info = bk.info || {}, auto = info.auto, man = info.manual, aici = bkAici();
     var zile = auto ? (Date.now() - auto.t) / 86400000 : null, vechi = zile != null && zile > BK_ZILE_AVERTIZARE;
     var h = '<div class="card"><h2>Copie de siguranță (backup)</h2><p>O copie pe zi a tuturor datelor, făcută automat pe <b>un singur calculator</b> (calculatorul de backup), într-un folder ales de pe el — ' +
-      'de exemplu un folder OneDrive. Se păstrează ultimele ' + BK_PASTREAZA + ' de fișiere. Copia conține comenzile, adresele, încărcările, CMR-urile, notificările și setările; ' +
+      'de exemplu un folder OneDrive. Lângă fiecare copie (.json, din care se face restaurarea) se scrie și registrul în Excel, pe modelul „Status Comenzi”, doar pentru consultat. ' +
+      'Se păstrează ultimele ' + BK_PASTREAZA + ' de fișiere de fiecare fel. Copia conține comenzile, adresele, încărcările, CMR-urile, notificările și setările; ' +
       'jurnalul de modificări intră doar când copia este făcută de un Administrator (ultimele ' + BK_JURNAL_ZILE + ' de zile la copia automată, tot la „Copie de siguranță acum”). ' +
       'O copie consumă câte o citire pentru fiecare document (câteva sute din cele 50.000 zilnice).</p>';
     if (bk.info === undefined) h += '<div class="mic" role="status">Se citește evidența copiilor…</div>';
@@ -3598,10 +3616,11 @@
     else if (!auto) h += '<div class="nota atentie">Calculatorul de backup este setat, dar încă nu s-a făcut nicio copie automată.</div>';
     else h += '<div class="nota ' + (vechi ? 'rau' : 'bun') + '">Ultima copie automată: <b>' + esc(bkCand(auto.t)) + '</b> · ' + esc(auto.nume || '') + ' · ' + esc(auto.u || '') + ' · ' + bkNr(auto.comenzi) + ' comenzi · ' +
       bkNr(auto.doc) + ' documente · ' + bkNr(auto.kb) + ' KB · ' + esc(bkJurnalText(auto)) + '<br>Fișier: ' + esc(auto.fisier) + (auto.folder ? ' în folderul „' + esc(auto.folder) + '”' : '') +
+      (auto.excel ? '<br>Registru Excel: ' + esc(auto.excel) : auto.excelEr ? '<br><b>Registrul Excel nu a putut fi scris:</b> ' + esc(auto.excelEr) : '') +
       (vechi ? '<br><b>Este mai veche de ' + BK_ZILE_AVERTIZARE + ' zile.</b> Verifică dacă aplicația este deschisă zilnic pe calculatorul de backup, cu un Operator date sau un Administrator.' : '') + '</div>';
     if (info.er && (!auto || info.er.t > auto.t)) h += '<div class="nota rau" style="margin-top:6px">Ultima încercare automată (' + esc(bkCand(info.er.t)) + ', ' + esc(info.er.u || '') + ') nu a reușit: ' + esc(info.er.msg || '') + '</div>';
     if (man) h += '<div class="mic" style="margin-top:6px">Ultima copie manuală: ' + esc(bkCand(man.t)) + ' · ' + esc(man.u || '') + ' · ' + esc(man.fisier) +
-      (man.loc === 'folder' ? ' în folderul „' + esc(man.folder || '') + '”' : ' (descărcată)') + ' · ' + esc(bkJurnalText(man)) + '</div>';
+      (man.loc === 'folder' ? ' în folderul „' + esc(man.folder || '') + '”' + (man.excel ? ' + ' + esc(man.excel) : '') : ' (descărcată)') + ' · ' + esc(bkJurnalText(man)) + '</div>';
     h += '<table class="simplu bk-tabel" style="margin-top:10px"><tr><td>Calculatorul de backup</td><td>' + (c ? '<b>' + esc(c.nume) + '</b> — ' + (aici ? 'acest calculator' : 'alt calculator') +
       ' <span class="mic">(setat de ' + esc(c.de || '') + (c.t ? ' la ' + esc(bkCand(c.t)) : '') + ')</span>' : 'nesetat') + '</td></tr>' +
       (aici ? '<tr><td>Folderul de pe acest calculator</td><td id="bkFolder">…</td></tr>' : '') + '</table>';
@@ -3645,7 +3664,8 @@
         return bkFa({ manual: true, folder: h });
       }).then(function (rez) {
         return L.backupNoteaza('manual', bkDateEvidenta(rez), 'Copie de siguranță manuală: ' + rez.fisier + ' (' + rez.comenzi + ' comenzi, ' + rez.doc + ' documente)').then(function () {
-          toast(rez.loc === 'folder' ? 'Copie salvată în folderul „' + rez.folder + '”: ' + rez.fisier : 'Copie descărcată: ' + rez.fisier + '. Mut-o într-un loc sigur.', 'bun');
+          toast(rez.loc === 'folder' ? 'Copie salvată în folderul „' + rez.folder + '”: ' + rez.fisier + (rez.excel ? ' și ' + rez.excel : '') : 'Copie descărcată: ' + rez.fisier + '. Mut-o într-un loc sigur.', 'bun');
+          if (rez.excelEr) toast('Registrul Excel nu a putut fi scris lângă copie: ' + rez.excelEr + ' Copia .json este în regulă.', 'rau');
         });
       }).catch(arataEroare).then(function () { b.disabled = false; });
     } else if (b.id === 'bkRestaureaza') bkRestaureaza();

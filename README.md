@@ -229,6 +229,13 @@ backup propriu, așa că aplicația își face singură copii într-un folder de
 - **Copia automată**: o dată pe zi, la scurt timp după ce aplicația este deschisă pe calculatorul de backup de un Operator
   date sau de un Administrator (și din 30 în 30 de minute se verifică dacă a început o zi nouă). Fișierul se numește
   `Backup Status Comenzi AAAA-LL-ZZ OOMM.json`; în folder se păstrează ultimele 30 de copii, restul se șterg singure.
+- **Registrul în Excel.** Lângă fiecare copie scrisă în folder apare și `Status Comenzi AAAA-LL-ZZ OOMM.xlsx`, făcut din aceeași
+  copie (fără citiri în plus): foaia `Sheet1` cu toate comenzile, cu primele 25 de coloane exact ca în registrul Excel
+  „Status Comenzi” (aceeași ordine și aceleași nume; datele, orele și numerele sunt valori adevărate, se pot sorta și filtra),
+  urmate de coloanele pe care le are doar aplicația (FPP, Pick, Numar Transport, Data Transport, Stare Camion, Temperatura,
+  Semnatura, Sofer, Remorca, Self-Pick, Cumul), și foaia `Adrese`. Este doar pentru consultat: restaurarea se face din `.json`.
+  La nevoie poate fi citit și cu „Migrare din Excel”. Se păstrează tot ultimele 30. Dacă Excelul nu poate fi scris, copia
+  `.json` rămâne bună, iar Administrare arată eroarea.
 - **Acordul browserului.** După ce browserul a fost închis, poate cere din nou acordul de a scrie în folder: apare o bandă
   galbenă cu butonul „Permite și fă copia”. Alege „Permite la fiecare vizită” (dacă browserul oferă varianta) ca să nu mai întrebe.
 - **Ce conține**: grupele de comenzi, adresele, camioanele și liniile din transport, notificările, CMR-urile, setările și
