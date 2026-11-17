@@ -81,6 +81,11 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
   rămân neschimbate, o celulă goală din borderou nu șterge nimic, iar valorile vechi rămân în jurnal. La o comandă
   Terminata cu greutate finală calculată automat, greutatea finală se recalculează după noua greutate.
 - Încărcată = DA doar pentru comenzi Terminata.
+- **Sugestie de județ în fereastra comenzii** (comandă nouă sau modificare): când orașul are un județ cunoscut și în
+  câmpul Județ este altceva (gol, numele orașului, alt județ), lângă eticheta „Județ” apare sugestia („sugestie: Vrancea”,
+  sau „corect: Vrancea” când în câmp nu este scris un județ). Un click o completează; nu blochează salvarea. Sugestia
+  vine dintr-o listă a județelor cu orașele lor mai mari (din cod), iar pentru celelalte localități din Adrese — de acolo
+  doar dacă rezultatul este un nume de județ adevărat.
 - Județul se scrie peste tot în forma „Bucuresti”, nu „BUCURESTI” (prima literă a fiecărui cuvânt mare: „Satu Mare”,
   „Caras-Severin”), indiferent de unde vine: scris de mână, Adrese, borderou, Excel, fișierul TMS. Rămân cu majuscule
   prescurtările (SUA) și codurile de 1–2 litere scrise singure (MH, B). Comenzile salvate mai demult cu majuscule apar
@@ -180,6 +185,10 @@ până acum de mână. Comenzile „doar transport” se adaugă în continuare 
 - Destinatarul, adresa, orașul, țara (coloana Județ), cartoanele, greutatea și paleții reali vin din comenzi. Se completează
   factura fiecărei comenzi, transportatorul, codul UIT și mențiunile. Toate câmpurile pot fi corectate înainte de tipărire.
 - Expeditorul, natura mărfii și instrucțiunile se țin minte pe client (ultimele folosite).
+- **Greutatea cu 3 zecimale.** Dacă în „Greutate brută” nu sunt scrise exact 3 zecimale (ex. `556,59`), sub câmp apare un
+  avertisment, iar la „Salvează”, „Salvează și tipărește” și „Email” aplicația întreabă „Corectez / Continuă oricum”. Nu blochează.
+  În tabelul cu documente, comenzile a căror greutate nu are 3 zecimale sunt marcate cu ⚠ (greutatea se arată cu zecimalele ei reale).
+  Se numără ce este scris în câmp, deci `556,590` este corect; zecimalele scrise se țin minte la salvare (`gz`).
 - „Salvează și tipărește” scoate cele 4 copii (negru, roșu, albastru, verde) pe A4. CMR-urile rămân salvate (colecția `cmr`,
   un document pe lună) și se redeschid din **CMR-uri emise** sau bifând din nou aceleași comenzi.
 - „Email” întreabă pentru ce client se trimite CMR-ul (este propus clientul comenzilor), arată adresele lui și deschide

@@ -381,6 +381,70 @@
     function top(m) { var b = '', mx = 0; Object.keys(m).forEach(function (k) { if (m[k] > mx) { mx = m[k]; b = k; } }); return b; }
     return top(exact) || top(partial) || top(inAdr);
   };
+  /* ---- sugestia de judet dupa oras ----
+     Lista judetelor (scrise fara diacritice, ca in registru) si orasele fiecaruia: resedintele, municipiile si localitatile
+     mari din jurul lor. Numele care exista in mai multe judete (Floresti, Domnesti, Magurele...) lipsesc intentionat:
+     pentru ele, ca si pentru orice localitate care nu este in lista, sugestia vine din Adrese. */
+  var JUDETE_ORASE = {
+    'Alba': 'Alba Iulia, Aiud, Blaj, Sebes, Cugir, Ocna Mures, Campeni, Zlatna, Abrud, Teius',
+    'Arad': 'Arad, Lipova, Pecica, Santana, Curtici, Nadlac, Chisineu Cris',
+    'Arges': 'Pitesti, Mioveni, Campulung, Campulung Muscel, Curtea de Arges, Topoloveni',
+    'Bacau': 'Bacau, Onesti, Moinesti, Comanesti, Buhusi, Targu Ocna',
+    'Bihor': 'Oradea, Salonta, Marghita, Beius, Alesd, Stei',
+    'Bistrita-Nasaud': 'Bistrita, Beclean, Nasaud, Sangeorz Bai',
+    'Botosani': 'Botosani, Dorohoi, Darabani, Flamanzi',
+    'Braila': 'Braila, Ianca, Insuratei, Faurei',
+    'Brasov': 'Brasov, Fagaras, Zarnesti, Codlea, Rasnov, Predeal, Ghimbav, Rupea',
+    'Bucuresti': 'Bucuresti, Bucharest, Sector',
+    'Buzau': 'Buzau, Ramnicu Sarat, Rm Sarat, Nehoiu',
+    'Calarasi': 'Calarasi, Oltenita, Fundulea, Lehliu Gara',
+    'Caras-Severin': 'Resita, Caransebes, Bocsa, Oravita, Moldova Noua, Otelu Rosu, Baile Herculane',
+    'Cluj': 'Cluj Napoca, Cluj, Turda, Dej, Campia Turzii, Gherla, Huedin, Apahida',
+    'Constanta': 'Constanta, Mangalia, Medgidia, Navodari, Cernavoda, Ovidiu, Eforie, Eforie Nord, Eforie Sud, Harsova, Murfatlar, Techirghiol, Valu lui Traian, Agigea, Cumpana',
+    'Covasna': 'Sfantu Gheorghe, Sf Gheorghe, Targu Secuiesc, Covasna, Baraolt, Intorsura Buzaului',
+    'Dambovita': 'Targoviste, Moreni, Pucioasa, Gaesti, Titu, Fieni, Racari',
+    'Dolj': 'Craiova, Bailesti, Calafat, Filiasi, Segarcea, Dabuleni',
+    'Galati': 'Galati, Tecuci, Targu Bujor, Beresti',
+    'Giurgiu': 'Giurgiu, Bolintin Vale, Bolintin Deal',
+    'Gorj': 'Targu Jiu, Tg Jiu, Motru, Rovinari, Bumbesti Jiu, Targu Carbunesti, Novaci, Turceni, Tismana, Ticleni',
+    'Harghita': 'Miercurea Ciuc, Odorheiu Secuiesc, Gheorgheni, Toplita, Cristuru Secuiesc, Vlahita, Borsec',
+    'Hunedoara': 'Deva, Hunedoara, Petrosani, Petrila, Orastie, Simeria, Hateg, Calan, Uricani',
+    'Ialomita': 'Slobozia, Fetesti, Urziceni, Tandarei, Amara',
+    'Iasi': 'Iasi, Pascani, Harlau, Targu Frumos, Podu Iloaiei',
+    'Ilfov': 'Voluntari, Buftea, Popesti Leordeni, Bragadiru, Chitila, Otopeni, Chiajna, Mogosoaia, Stefanestii de Jos, Tunari, Dragomiresti Vale, Jilava, Cernica, Balotesti, Snagov, Corbeanca, Clinceni, Glina, Dobroesti',
+    'Maramures': 'Baia Mare, Sighetu Marmatiei, Sighet, Baia Sprie, Viseu de Sus, Targu Lapus, Seini, Somcuta Mare, Cavnic',
+    'Mehedinti': 'Drobeta Turnu Severin, Turnu Severin, Orsova, Strehaia, Vanju Mare, Baia de Arama',
+    'Mures': 'Targu Mures, Tg Mures, Reghin, Sighisoara, Tarnaveni, Ludus, Sovata, Iernut',
+    'Neamt': 'Piatra Neamt, Roman, Targu Neamt, Tg Neamt, Roznov',
+    'Olt': 'Slatina, Caracal, Bals, Corabia, Scornicesti, Draganesti Olt',
+    'Prahova': 'Ploiesti, Campina, Baicoi, Mizil, Comarnic, Valenii de Munte, Boldesti Scaeni, Sinaia, Busteni, Azuga, Urlati, Plopeni',
+    'Salaj': 'Zalau, Simleu Silvaniei, Jibou, Cehu Silvaniei',
+    'Satu Mare': 'Satu Mare, Carei, Negresti Oas, Tasnad',
+    'Sibiu': 'Sibiu, Medias, Cisnadie, Avrig, Agnita, Selimbar, Copsa Mica, Talmaciu',
+    'Suceava': 'Suceava, Falticeni, Radauti, Campulung Moldovenesc, Vatra Dornei, Gura Humorului, Siret',
+    'Teleorman': 'Alexandria, Rosiorii de Vede, Rosiori de Vede, Turnu Magurele, Zimnicea, Videle',
+    'Timis': 'Timisoara, Lugoj, Sannicolau Mare, Jimbolia, Recas, Faget, Deta, Buzias, Giroc, Ghiroda, Mosnita Noua',
+    'Tulcea': 'Tulcea, Babadag, Macin, Isaccea, Sulina',
+    'Valcea': 'Ramnicu Valcea, Rm Valcea, Dragasani, Calimanesti, Horezu, Brezoi, Baile Olanesti, Baile Govora, Ocnele Mari',
+    'Vaslui': 'Vaslui, Barlad, Husi',
+    'Vrancea': 'Focsani, Adjud, Marasesti, Panciu'
+  };
+  var judeteN = {}, oraseN = {};
+  Object.keys(JUDETE_ORASE).forEach(function (j) {
+    judeteN[SC.normLoc(j)] = j;
+    JUDETE_ORASE[j].split(',').forEach(function (o) { oraseN[SC.normLoc(o)] = j; });
+  });
+  /* numele corect al judetului daca textul este un judet (oricum ar fi scris), altfel '' */
+  L.numeJudet = function (v) { return judeteN[SC.normLoc(v)] || ''; };
+  /* judetul sugerat pentru un oras: intai lista de orase, apoi Adrese (doar daca de acolo iese un judet adevarat) */
+  L.sugestieJudet = function (oras) {
+    var n = SC.normLoc(oras);
+    if (!n) return '';
+    if (oraseN[n]) return oraseN[n];
+    if (n.indexOf('bucuresti') >= 0) return 'Bucuresti';
+    return L.numeJudet(L.judetDupaLocalitate(oras));
+  };
+
   var MARIME_ADRESE = 400;
   /* salveaza (adauga / modifica / sterge) un rand din Adrese */
   L.salveazaAdresa = function (rand, sterge) {

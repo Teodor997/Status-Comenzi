@@ -1164,7 +1164,36 @@
     } else {
       inp = '<input type="text" data-k="' + k + '" value="' + esc(v) + '"' + ro + '>';
     }
+    if (k === 'ju' && editabil) {
+      /* eticheta si campul sunt legate prin id (nu prin imbricare), ca butonul de sugestie sa poata sta langa eticheta */
+      var id = 'fJu' + (++nrCampJu);
+      return '<div class="camp camp-ju"><span class="camp-sus"><label for="' + id + '">' + esc(c.t) + '</label><button type="button" class="sug-ju ascuns" data-sug-ju></button></span>' +
+        inp.replace('<input ', '<input id="' + id + '" ') + '</div>';
+    }
     return '<label class="camp' + (LATE[k] ? ' lat2' : '') + '"><span>' + esc(c.t) + '</span>' + inp + '</label>';
+  }
+  var nrCampJu = 0;
+  /* Sugestia de judet din formularul comenzii: apare langa eticheta „Județ” cand orasul are un judet cunoscut si
+     in camp este altceva (gol, numele orasului, o greseala). Un click pe ea completeaza campul. */
+  function leagaSugestieJudet(rad) {
+    var ju = rad.querySelector('[data-k=ju]'), or = rad.querySelector('[data-k=or]'), b = rad.querySelector('[data-sug-ju]');
+    if (!ju || !or || !b || ju.readOnly) return;
+    function arata() {
+      var sug = L.sugestieJudet(or.value), acum = ju.value.trim();
+      if (!sug || SC.normLoc(acum) === SC.normLoc(sug)) { b.classList.add('ascuns'); b.textContent = ''; return; }
+      /* in camp este scris altceva decat un judet (de exemplu numele orasului): sugestia iese in evidenta */
+      var gresit = !!acum && !L.numeJudet(acum);
+      b.textContent = (gresit ? 'corect: ' : 'sugestie: ') + sug;
+      b.dataset.v = sug;
+      b.classList.toggle('tare', gresit);
+      b.setAttribute('aria-label', 'Completează județul cu ' + sug + (acum ? ' în loc de ' + acum : ''));
+      b.title = 'Pentru orașul ' + or.value.trim() + ' județul este ' + sug + '. Click pentru a-l completa.';
+      b.classList.remove('ascuns');
+    }
+    b.addEventListener('click', function () { ju.value = b.dataset.v || ''; arata(); ju.focus(); });
+    or.addEventListener('input', arata); ju.addEventListener('input', arata);
+    rad.addEventListener('sugestie-judet', arata);      /* dupa completarea din Adrese (cod client) */
+    arata();
   }
   function obParti(text) { return String(text || '').split('/').map(function (x) { return x.trim(); }).filter(Boolean); }
   function obOptiuni(text) {
@@ -1209,6 +1238,7 @@
   }
   /* la schimbarea codului de client: Destinatar / Adresa / Oras / Judet din Adrese (dupa Client + Cod) */
   function leagaCodClient(rad) {
+    leagaSugestieJudet(rad);
     var inF = rad.querySelector('[data-k=fpp]'), inP = rad.querySelector('[data-k=pk]');
     if (inF && inP && !inF.readOnly && !inP.readOnly) {
       inF.addEventListener('input', function () {
@@ -1228,6 +1258,7 @@
         var el = rad.querySelector('[data-k=' + p[0] + ']');
         if (el && !el.readOnly) el.value = p[1] || '';
       });
+      rad.dispatchEvent(new Event('sugestie-judet'));
     });
   }
   function verificaDublura(nc, cl, exceptN) {
@@ -2823,6 +2854,44 @@
     var salvat = !!c.id;
     function camp(id, eticheta, val, cls, extra) { return '<label class="camp ' + (cls || '') + '"><span>' + eticheta + '</span><input type="text" id="' + id + '" value="' + esc(val == null ? '' : val) + '"' + (extra || '') + '></label>'; }
     function numar(v) { return SC.esteNum(v) ? String(v).replace('.', ',') : ''; }
+    /* ---- greutatea de pe CMR se scrie cu 3 zecimale ----
+       Avertismentul se da dupa textul din campul „Greutate brută”, unde se vad si zerourile de la coada (556,590).
+       Intr-un numar zerourile nu se pastreaza, asa ca se tine minte cu cate zecimale a fost scrisa greutatea (c.gz),
+       iar suma unor greutati care au toate 3 zecimale se arata tot cu 3. */
+    var randuri = c.nc.map(function (nc, i) { var x = (c.rand || [])[i] || {}; return { nc: nc, g: x.g, z: SC.zecimale(x.g) }; });
+    var randFara = randuri.filter(function (x) { return x.z != null && x.z !== 3; });
+    function greutateText() {
+      if (!SC.esteNum(c.g)) return '';
+      var cuTrei = c.gz === 3 || (!salvat && randuri.length > 0 && randuri.every(function (x) { return x.z === 3; }));
+      return (cuTrei && SC.zecimale(c.g) <= 3 ? c.g.toFixed(3) : String(c.g)).replace('.', ',');
+    }
+    function zecCuvinte(z) { return z === 0 ? 'nu are zecimale' : 'are ' + z + (z === 1 ? ' zecimală' : ' zecimale') + ', nu 3'; }
+    function zecStare(rad) {
+      var t = rad.querySelector('#cmG').value.trim(), z = SC.zecimale(t);
+      return { text: t, z: z, lipsa: z != null && z !== 3 };
+    }
+    function zecArata(rad) {
+      var s = zecStare(rad), nota = rad.querySelector('#cmZec'), buc = [];
+      var lista = randFara.map(function (x) { return x.nc + ' (' + SC.fmtKg(x.g) + ' kg)'; }).join(', ');
+      if (s.lipsa) {
+        buc.push('<b>Greutatea brută „' + esc(s.text) + '” ' + zecCuvinte(s.z) + '.</b> Verifică greutatea cu documentul și scrie-o cu 3 zecimale' +
+          (s.z < 3 ? ' (de exemplu ' + esc(SC.parseNum(s.text).toFixed(3).replace('.', ',')) + ', dacă aceasta este greutatea exactă)' : '') + '.');
+        if (randFara.length) buc.push((randFara.length === 1 ? 'Comanda cu greutatea fără 3 zecimale: ' : 'Comenzi cu greutatea fără 3 zecimale: ') + esc(lista) + '.');
+      } else if (randFara.length && randuri.length > 1) {
+        buc.push('Atenție: în comenzi, greutatea nu are 3 zecimale la ' + esc(lista) + '. Verifică dacă totalul este cel exact.');
+      }
+      nota.innerHTML = buc.join('<br>'); nota.hidden = !buc.length;
+      rad.querySelector('#cmG').classList.toggle('zec-lipsa', s.lipsa);
+    }
+    function zecConfirma(rad) {
+      var s = zecStare(rad);
+      if (!s.lipsa) return Promise.resolve(true);
+      return confirma('Greutatea brută „' + s.text + '” ' + zecCuvinte(s.z) + '.\nPe CMR se tipărește ' + SC.parseNum(s.text).toFixed(3) + ' kg.\n\n' +
+        'Verifică greutatea cu documentul. Continui cu această greutate?', { titlu: 'Greutate fără 3 zecimale', da: 'Continuă oricum', nu: 'Corectez' }).then(function (ok) {
+        if (!ok) { var el = rad.querySelector('#cmG'); el.focus(); el.select(); }
+        return ok;
+      });
+    }
     var nepregatite = (comenzi || []).filter(function (o) { return o.st !== ST.TER && o.st !== ST.SELF; });
     var html = (salvat ? '<div class="nota">CMR salvat la ' + esc(SC.fmtDT(SC.ymd(new Date(c.t)) + ' ' + SC.p2(new Date(c.t).getHours()) + ':' + SC.p2(new Date(c.t).getMinutes()))) + ' de ' + esc(c.u || '') +
         (c.uu ? ', modificat ultima dată de ' + esc(c.uu) : '') + '. Valorile de mai jos sunt cele salvate.</div>' : '') +
@@ -2836,12 +2905,15 @@
       '<h4>5 · Documente atașate</h4><div class="l4 derulare-x"><table class="simplu"><tr><th>Nr. Comandă</th><th class="nr">Greutate</th><th class="nr">Cartoane</th><th class="nr">Paleți reali</th><th>Factură (Invoice)</th></tr>' +
       c.nc.map(function (nc, i) {
         var x = (c.rand || [])[i] || {};
-        return '<tr><td><b>' + esc(nc) + '</b></td><td class="nr">' + SC.fmtNum(x.g, 'num') + '</td><td class="nr">' + SC.fmtNum(x.ca, 'int') + '</td><td class="nr">' + SC.fmtNum(x.pr, 'int') +
+        var fara = randuri[i].z != null && randuri[i].z !== 3;
+        return '<tr><td><b>' + esc(nc) + '</b></td><td class="nr' + (fara ? ' zec-lipsa" title="Greutatea comenzii nu are 3 zecimale' : '') + '">' +
+          (fara ? '<span aria-hidden="true">⚠ </span>' : '') + SC.fmtKg(x.g) + '</td><td class="nr">' + SC.fmtNum(x.ca, 'int') + '</td><td class="nr">' + SC.fmtNum(x.pr, 'int') +
           '</td><td><input type="text" data-fa="' + i + '" value="' + esc((c.fa || [])[i] || '') + '" aria-label="Factura pentru comanda ' + esc(nc) + '"></td></tr>';
       }).join('') + '</table></div>' + camp('cmDoc2', 'Alte documente (al doilea rând, ex. „Factura : 1900050959”)', c.doc2, 'l4') +
       '<h4>6–11 · Marfa</h4>' + camp('cmMarfa', 'Natura mărfii — se ține minte pentru client', c.marfa, 'l4') +
-      camp('cmCart', 'Cartoane (CAR.)', numar(c.cart), '', ' inputmode="numeric"') + camp('cmG', 'Greutate brută (kg)', numar(c.g), '', ' inputmode="decimal"') +
+      camp('cmCart', 'Cartoane (CAR.)', numar(c.cart), '', ' inputmode="numeric"') + camp('cmG', 'Greutate brută (kg)', greutateText(), '', ' inputmode="decimal"') +
       camp('cmPal', 'Paleți (BUC.)', numar(c.pal), '', ' inputmode="numeric"') + camp('cmKg', 'Kg pe palet', numar(c.kg), '', ' inputmode="decimal"') +
+      '<div class="nota atentie l4" id="cmZec" role="status" hidden></div>' +
       '<label class="bifa l4"><input type="checkbox" id="cmArataPal"' + (c.arataPal ? ' checked' : '') + '> <span>Paleții apar pe CMR (debifează la clienții cu vamă)</span></label>' +
       '<h4>16 · Transportator</h4>' + camp('cmCar1', 'Rândul 1 (nume)', c.car[0], 'l2') + camp('cmCar2', 'Rândul 2 (nr. auto)', c.car[1]) + camp('cmCar3', 'Rândul 3 (remorcă)', c.car[2]) +
       '<h4>18 · Rezervările și observațiile transportatorului</h4>' + camp('cmUit', 'Cod UIT (se tipărește „COD UIT: …”)', c.uit, 'l2') + camp('cmRez1', 'Alte mențiuni', c.rez[0], 'l2') + camp('cmRez2', 'Alte mențiuni', c.rez[1], 'l2') + camp('cmRez3', 'Alte mențiuni', c.rez[2], 'l2') +
@@ -2858,6 +2930,7 @@
       x.doc2 = t('cmDoc2'); x.marfa = t('cmMarfa');
       x.cart = nr('cmCart', 'Cartoane'); x.g = nr('cmG', 'Greutate'); x.pal = nr('cmPal', 'Paleți'); x.kg = nr('cmKg', 'Kg pe palet');
       if (x.cart === undefined || x.g === undefined || x.pal === undefined || x.kg === undefined) return null;
+      if (x.g != null) x.gz = SC.zecimale(t('cmG')); else delete x.gz;
       x.arataPal = rad.querySelector('#cmArataPal').checked;
       x.car = [t('cmCar1'), t('cmCar2'), t('cmCar3')]; x.uit = t('cmUit').replace(/^cod\s*uit\s*:?\s*/i, ''); x.rez = [t('cmRez1'), t('cmRez2'), t('cmRez3')];
       x.instr = rad.querySelector('#cmInstr').value.trim(); x.instr2 = rad.querySelector('#cmInstr2').value.trim();
@@ -2867,14 +2940,18 @@
     }
     function salveaza(rad, apoi) {
       var x = citeste(rad); if (!x) return false;
-      return L.salveazaCmr(x).then(function (s) { c = s; salvat = true; toast('CMR salvat: ' + s.de + ' (' + s.nc.join(', ') + ').', 'bun'); if (apoi) apoi(s); return apoi ? null : false; }, function (e) {
-        /* tiparirea nu se blocheaza daca salvarea nu merge (ex. regulile Firebase nepublicate) */
-        if (!apoi) throw e;
-        toast('CMR-ul nu a putut fi salvat (' + (e && e.message ? e.message : 'eroare') + '). Îl tipăresc oricum.', 'rau'); apoi(x); return null;
+      return zecConfirma(rad).then(function (ok) {
+        if (!ok) return false;
+        return L.salveazaCmr(x).then(function (s) { c = s; salvat = true; toast('CMR salvat: ' + s.de + ' (' + s.nc.join(', ') + ').', 'bun'); if (apoi) apoi(s); return apoi ? null : false; }, function (e) {
+          /* tiparirea nu se blocheaza daca salvarea nu merge (ex. regulile Firebase nepublicate) */
+          if (!apoi) throw e;
+          toast('CMR-ul nu a putut fi salvat (' + (e && e.message ? e.message : 'eroare') + '). Îl tipăresc oricum.', 'rau'); apoi(x); return null;
+        });
       });
     }
     modal({
       titlu: 'CMR — ' + c.cl + ' → ' + (c.de || '') + ' · ' + nCom(c.nc.length), lat: true, html: html,
+      laDeschidere: function (rad) { rad.querySelector('#cmG').addEventListener('input', function () { zecArata(rad); }); zecArata(rad); },
       butoane: (salvat && poate() ? [{ t: 'Șterge CMR', fn: function () {
         return confirma('Ștergi CMR-ul salvat pentru ' + c.de + ' (' + c.nc.join(', ') + ')?\nComenzile nu sunt afectate.').then(function (ok) {
           if (!ok) return false;
@@ -2883,7 +2960,7 @@
       } }] : []).concat([{ t: 'Renunță', v: null }, {
         t: 'Email', fn: function (rad) {
           var x = citeste(rad); if (!x) return false;
-          return emailCmr(x).then(function () { return false; });
+          return zecConfirma(rad).then(function (ok) { return ok ? emailCmr(x) : null; }).then(function () { return false; });
         }
       }, { t: 'Salvează', fn: function (rad) { return salveaza(rad, null); } },
       { t: 'Salvează și tipărește', cls: 'pri', fn: function (rad) { return salveaza(rad, function (s) { setTimeout(function () { tiparesteCmr(s); }, 50); }); } }])

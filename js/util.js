@@ -3,7 +3,7 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '2.32';
+  SC.VERSIUNE = '2.34';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
   SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
@@ -168,6 +168,23 @@
     return typ === 'int' ? (Math.round(v) === v ? nf0.format(v) : nf2.format(v)) : nf2.format(v);
   };
   SC.rotunjeste = function (v, zec) { var p = Math.pow(10, zec == null ? 3 : zec); return Math.round(v * p) / p; };
+  /* Cate zecimale are un numar (556.59 -> 2) sau un text scris de utilizator ("556,590" -> 3); null daca nu este numar.
+     La text se numara si zerourile de la coada, care intr-un numar nu se pastreaza. */
+  SC.zecimale = function (v) {
+    var s, i;
+    if (typeof v === 'number') {
+      if (!isFinite(v)) return null;
+      s = String(SC.rotunjeste(v, 6)); i = s.indexOf('.');
+      return i < 0 || s.indexOf('e') >= 0 ? 0 : s.length - i - 1;
+    }
+    s = String(v == null ? '' : v).replace(/\s/g, '');
+    if (s === '' || SC.parseNum(s) == null) return null;
+    i = s.indexOf(',') >= 0 ? s.lastIndexOf(',') : s.lastIndexOf('.');
+    return i < 0 ? 0 : s.length - i - 1;
+  };
+  /* greutate cu zecimalele ei reale (cel putin 2, cel mult 3): 556.59 -> 556,59 ; 556.587 -> 556,587 */
+  var nf23 = new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+  SC.fmtKg = function (v) { return SC.esteNum(v) ? nf23.format(v) : ''; };
 
   /* ---------- date ---------- */
   function p2(n) { return (n < 10 ? '0' : '') + n; }
