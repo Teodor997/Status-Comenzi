@@ -165,7 +165,7 @@
   function opresteTot() {
     stare.opriri.forEach(function (f) { try { f(); } catch (e) { /* ignor */ } });
     stare.opriri = []; stare.pornit = false;
-    L.golesteCache();
+    L.golesteCache(); kpUitaArhiva();
   }
   function urmaresteComenzile() {
     var prag = Date.now() - SC.ZILE_RECENTE * 86400000;
@@ -2425,10 +2425,192 @@
   }
   function nr(v) { return SC.fmtNum(v, 'int') || '0'; }
   function proc(a, b) { return b ? Math.round(a * 100 / b) : 0; }
+
+  /* ---- KPI: pregatirea comenzilor, dupa data de livrare (Livrare solicitata) ----
+     Pentru zilele trecute arata ce s-a pregatit; pentru azi si viitor, ce este de pregatit (chiar daca nu are masina).
+     Pregatita = Terminata sau Self-Pick (paleti reali); de pregatit = Initiata / In lucru (paleti estimati, rotunjiti in sus).
+     Aplicatia tine in memorie doar comenzile active si recente, asa ca pentru zile mai vechi comenzile se citesc o data
+     din arhiva (cautate dupa momentul introducerii) si raman in memorie pana la inchiderea paginii. */
+  var kpInt = null;          // { a, b } = livrare de la / pana la; '' = fara limita
+  var KP_ZILE = ['du', 'lu', 'ma', 'mi', 'jo', 'vi', 'sâ'];
+  var KP_ZILE_INAINTE = 14;  // o comanda este cautata in arhiva daca a fost introdusa cu cel mult atatea zile inainte de livrare
+  var KP_AUTO_MAX = 80;      // intervale de arhiva mai lungi de atatea zile se citesc doar la cerere (planul gratuit)
+  var kpIst = { acoperit: [], stare: '', cheie: '', cerut: '', grupe: 0, eroare: '' };
+  /* cand memoria comenzilor este golita (iesire, schimbarea rolului, migrare), arhiva citita pentru KPI trebuie recitita */
+  function kpUitaArhiva() { kpIst.acoperit = []; kpIst.stare = ''; kpIst.cerut = ''; kpIst.eroare = ''; }
+  function kpZiText(d) { var x = new Date(d + 'T12:00:00'); return KP_ZILE[x.getDay()] + ' ' + SC.fmtDataLunga(d); }
+  function kpData(o) { var d = String(o.dl || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : ''; }
+  function kpAreMasina(o) { return !!o.na && !!SC.normNrAuto(o.na).replace(/0/g, ''); }
+  function kpAduna(l) {
+    var s = { n: 0, gata: 0, self: 0, palGata: 0, fppGata: 0, pkGata: 0, amGata: 0, kgGata: 0, incGata: 0,
+      nRam: 0, ini: 0, luc: 0, palRam: 0, kgRam: 0, fppRam: 0, pkRam: 0, faraRam: 0, faraEst: 0, faraMasina: 0, palFaraMasina: 0 };
+    l.forEach(function (o) {
+      s.n++;
+      if (kGata(o)) {
+        s.gata++; s.palGata += kPal(o); s.kgGata += kGreu(o);
+        if (SC.esteNum(o.fpp)) s.fppGata += o.fpp;
+        if (SC.esteNum(o.pk)) s.pkGata += o.pk;
+        if (SC.esteNum(o.am)) s.amGata += o.am;
+        if (o.st === ST.SELF) s.self++;
+        if (o.inc === 'DA') s.incGata++;
+        return;
+      }
+      var pal = kPal(o), f = SC.esteNum(o.fpp) ? o.fpp : null, k = kPick(o);
+      s.nRam++; if (o.st === ST.LUC) s.luc++; else s.ini++;
+      s.palRam += pal; s.kgRam += kGreu(o);
+      if (!(SC.esteNum(o.pe) && o.pe > 0)) s.faraEst++;
+      if (f == null && k == null) s.faraRam += pal; else { s.fppRam += f || 0; s.pkRam += k || 0; }
+      if (!kpAreMasina(o)) { s.faraMasina++; s.palFaraMasina += pal; }
+    });
+    return s;
+  }
+  function kpPresetari(azi) {
+    var luna = azi.slice(0, 8) + '01', sfLuna = SC.ziPlus(SC.ziPlus(luna, 32).slice(0, 8) + '01', -1), sfTrecuta = SC.ziPlus(luna, -1);
+    return [{ t: 'Azi', a: azi, b: azi, nr: 1 }, { t: 'Mâine', a: SC.ziPlus(azi, 1), b: SC.ziPlus(azi, 1), nr: 1 }, { t: 'Azi + mâine', a: azi, b: SC.ziPlus(azi, 1), nr: 1 },
+      { t: 'Următoarele 7 zile', a: azi, b: SC.ziPlus(azi, 6), nr: 1 }, { t: 'Ieri', a: SC.ziPlus(azi, -1), b: SC.ziPlus(azi, -1) },
+      { t: 'Luna aceasta', a: luna, b: sfLuna }, { t: 'Luna trecută', a: sfTrecuta.slice(0, 8) + '01', b: sfTrecuta },
+      { t: 'Restanțe', a: '', b: SC.ziPlus(azi, -1), nr: 1, rest: true }];
+  }
+  /* ce trebuie citit din arhiva pentru intervalul ales: [ms de la, ms pana la] dupa momentul introducerii comenzilor; null = nimic */
+  function kpNevoie(a, b, azi) {
+    if (!a || a >= SC.ziPlus(azi, -1)) return null;
+    var sus = b && b < azi ? b : azi;
+    return [SC.msDin(SC.ziPlus(a, -KP_ZILE_INAINTE), '00:00'), SC.msDin(SC.ziPlus(sus, 2), '00:00')];
+  }
+  /* bucatile din r care nu au fost citite inca */
+  function kpLipsa(r) {
+    var rest = [r.slice()];
+    kpIst.acoperit.forEach(function (c) {
+      var urm = [];
+      rest.forEach(function (x) {
+        if (c[1] <= x[0] || c[0] >= x[1]) { urm.push(x); return; }
+        if (c[0] > x[0]) urm.push([x[0], c[0]]);
+        if (c[1] < x[1]) urm.push([c[1], x[1]]);
+      });
+      rest = urm;
+    });
+    return rest;
+  }
+  function kpCiteste(lipsa, cheie) {
+    kpIst.stare = 'incarc'; kpIst.cheie = cheie; kpIst.eroare = '';
+    Promise.all(lipsa.map(function (x) { return SC.store.cautaGrupe(x[0], x[1]); })).then(function (rez) {
+      var grupe = [].concat.apply([], rez);
+      L.aplicaGrupe(grupe.filter(function (d) { return !SC.grupe[d.id] || (SC.grupe[d.id].upd || 0) <= (d.data.upd || 0); }));
+      lipsa.forEach(function (x) { kpIst.acoperit.push(x); });
+      kpIst.grupe += grupe.length; kpIst.stare = '';
+    }, function (e) { kpIst.stare = 'eroare'; kpIst.eroare = (e && e.message) || String(e); }).then(function () { if (stare.tab === 'kpi') deseneazaKpi(); });
+  }
+  function deseneazaKpiPregatire(client) {
+    var azi = SC.azi();
+    if (!kpInt) kpInt = { a: azi, b: SC.ziPlus(azi, 1) };
+    var a = kpInt.a, b = kpInt.b, gresit = !!(a && b && b < a);
+    if (document.activeElement !== $('kpPa')) $('kpPa').value = a;
+    if (document.activeElement !== $('kpPb')) $('kpPb').value = b;
+    /* comenzile din status care se pregatesc: fara anulate; retururile si liniile „doar transport” nu se pregatesc */
+    var toate = SC.comenzi.filter(function (o) { return o.st !== ST.ANU && (!client || o.cl === client); });
+    function inInt(o, x, y) { var d = kpData(o); return !!d && (!x || d >= x) && (!y || d <= y); }
+    $('kpCipuri').innerHTML = kpPresetari(azi).map(function (pz, i) {
+      var deFacut = pz.nr ? toate.filter(function (o) { return !kGata(o) && inInt(o, pz.a, pz.b); }).length : null;
+      return '<button type="button" class="cip' + (pz.a === a && pz.b === b ? ' activ' : '') + '" data-kp="' + i + '"' + (pz.nr ? ' title="' + (pz.rest ? 'Comenzi nepregătite cu livrarea înainte de azi' : 'Comenzi de pregătit') + '"' : '') + '>' + pz.t + (pz.nr ? '<b>' + deFacut + '</b>' : '') + '</button>';
+    }).join('');
+    if (gresit) { $('kpCorp').innerHTML = '<div class="card"><div class="nota rau">„Până la” este înaintea zilei de început. Corectează intervalul.</div></div>'; return; }
+
+    /* zile mai vechi: comenzile pregatite atunci se citesc din arhiva, o singura data */
+    var nevoie = kpNevoie(a, b, azi), lipsa = nevoie ? kpLipsa(nevoie) : [], cheie = a + '|' + b, nota = '';
+    if (lipsa.length) {
+      var zileArh = Math.round(lipsa.reduce(function (t, x) { return t + (x[1] - x[0]); }, 0) / 86400000);
+      if (kpIst.stare === 'incarc') { $('kpCorp').innerHTML = '<div class="card"><div class="mic" role="status">Se citesc din arhivă comenzile din perioada aleasă…</div></div>'; return; }
+      if (kpIst.stare === 'eroare' && kpIst.cheie === cheie) {
+        nota = '<div class="nota rau">Comenzile mai vechi nu au putut fi citite din arhivă (' + esc(kpIst.eroare) + '). Cifrele de mai jos pot fi incomplete. <button type="button" class="legatura" data-kp-ist="1">Încearcă din nou</button></div>';
+      } else if (zileArh > KP_AUTO_MAX && kpIst.cerut !== cheie) {
+        nota = '<div class="nota atentie">Intervalul cere citirea din arhivă a comenzilor din aproximativ ' + zileArh + ' de zile (un document pentru fiecare 25 de comenzi). Până atunci, cifrele pentru zilele vechi pot fi incomplete. ' +
+          '<button type="button" class="legatura" data-kp-ist="1">Citește din arhivă</button></div>';
+      } else { kpCiteste(lipsa, cheie); $('kpCorp').innerHTML = '<div class="card"><div class="mic" role="status">Se citesc din arhivă comenzile din perioada aleasă…</div></div>'; return; }
+    }
+
+    var l = toate.filter(function (o) { return inInt(o, a, b); }), s = kpAduna(l), h = nota;
+    var intText = a && b ? (a === b ? kpZiText(a) : SC.fmtDataLunga(a) + ' – ' + SC.fmtDataLunga(b)) : (a ? 'de la ' + SC.fmtDataLunga(a) : (b ? 'până la ' + SC.fmtDataLunga(b) : 'orice dată'));
+    /* ce se pune in fata: zile trecute -> ce s-a pregatit; azi si viitor -> ce este de pregatit; fara inceput (restante) -> doar nepregatite */
+    var trecut = !!a && !!b && b < azi, incepeInTrecut = !!a && a < azi, doarRam = !a;
+    function tile(t, v, sub, cls) { return '<div class="kpi' + (cls ? ' ' + cls : '') + '"><div class="t">' + t + '</div><div class="v">' + v + '</div><div class="s">' + sub + '</div></div>'; }
+    if (!l.length) {
+      h += '<div class="card"><div class="mic">Nicio comandă cu livrarea ' + esc(intText) + (client ? ' pentru ' + esc(client) : '') + '.</div></div>';
+    } else {
+      var total = s.palGata + s.palRam, comenzi = function (n) { return n === 1 ? 'comandă' : 'comenzi'; };
+      var pregatit = [
+        tile('Paleți pregătiți', nr(s.palGata), '<b>' + s.gata + '</b> din ' + s.n + ' comenzi' + (s.self ? ' · Self-Pick <b>' + s.self + '</b>' : '') + (s.nRam ? ' · <b>' + proc(s.palGata, total) + '%</b> din paleți' +
+          '<div class="bara-p" role="img" aria-label="Pregătit ' + proc(s.palGata, total) + '% din paleți"><i class="c-ok" style="width:' + proc(s.palGata, total) + '%"></i></div>' : '<br>paleți reali'), incepeInTrecut ? 'accent' : ''),
+        (s.fppGata || s.pkGata ? tile('FPP / Pick pregătiți', nr(s.fppGata) + ' <small>/</small> ' + nr(s.pkGata), 'paleți full / paleți din picking') : ''),
+        tile('Amprente și greutate', nr(s.amGata), 'amprente pe comenzile pregătite<br>greutate: <b>' + SC.fmtNum(Math.round(s.kgGata), 'int') + ' kg</b> · încărcate: <b>' + s.incGata + '</b> din ' + s.gata)
+      ];
+      var dePregatit = [
+        tile(trecut ? 'Rămase nepregătite' : 'Paleți de pregătit', '~' + nr(s.palRam), '<b>' + s.nRam + '</b> ' + comenzi(s.nRam) + ': Inițiate <b>' + s.ini + '</b> · În lucru <b>' + s.luc + '</b><br>estimare, rotunjită în sus pe fiecare comandă' +
+          (s.faraEst ? '<br><b>' + s.faraEst + '</b> fără paleți estimați (nu intră în total)' : ''), trecut || doarRam ? (s.nRam ? 'atentie' : '') : (incepeInTrecut ? '' : 'accent')),
+        /* impartirea FPP / Pick apare doar daca este completata macar pe o comanda nepregatita (altfel ar arata un 0 / 0 inselator) */
+        (s.fppRam || s.pkRam ? tile('FPP / Pick de pregătit', nr(s.fppRam) + ' <small>/</small> ' + nr(s.pkRam), 'paleți full / paleți din picking' + (s.faraRam ? '<br>fără FPP / Pick completat: <b>~' + nr(s.faraRam) + '</b>' : '')) : ''),
+        tile('De pregătit, fără mașină', '~' + nr(s.palFaraMasina), '<b>' + s.faraMasina + '</b> ' + comenzi(s.faraMasina) + ' fără Nr AUTO<br>cu mașină planificată: <b>~' + nr(s.palRam - s.palFaraMasina) + '</b> paleți'),
+        tile('Greutate de pregătit', SC.fmtNum(Math.round(s.kgRam), 'int') + ' <small>kg</small>', 'greutatea comenzilor încă nepregătite')
+      ];
+      var placute;
+      if (doarRam) placute = dePregatit;
+      else if (trecut) placute = pregatit.concat(s.nRam ? [dePregatit[0]] : []);
+      else if (incepeInTrecut) placute = pregatit.concat(dePregatit);
+      else placute = [dePregatit[0], pregatit[0]].concat(dePregatit.slice(1));
+      /* restante: nepregatite, cu livrarea inaintea intervalului ales (doar cand intervalul incepe azi sau in viitor) */
+      if (a && !incepeInTrecut) {
+        var rest = toate.filter(function (o) { return !kGata(o) && inInt(o, '', SC.ziPlus(a, -1)); }), sr = kpAduna(rest);
+        placute.push(tile('Restanțe', rest.length, rest.length ? '~<b>' + nr(sr.palRam) + '</b> paleți nepregătiți, cu livrarea înainte de ' + esc(SC.fmtDataLunga(a)) + '<br><button type="button" class="legatura" data-kp-rest="1">arată-le</button>' :
+          'nicio comandă nepregătită cu livrarea înainte de ' + esc(SC.fmtDataLunga(a)), rest.length ? 'atentie' : ''));
+      }
+      h += '<div class="kpi-grila">' + placute.join('') + '</div>';
+      /* pe zile de livrare + pe clienti */
+      var peZi = {}, peCl = {};
+      l.forEach(function (o) { var d = kpData(o); (peZi[d] = peZi[d] || []).push(o); (peCl[o.cl || '—'] = peCl[o.cl || '—'] || []).push(o); });
+      var zile = Object.keys(peZi).sort(), sz = {}, maxZi = 1;
+      zile.forEach(function (d) { sz[d] = kpAduna(peZi[d]); maxZi = Math.max(maxZi, sz[d].palGata + sz[d].palRam); });
+      function sauLinie(v, pre) { return v ? (pre || '') + nr(v) : '—'; }
+      var cuFpp = !!(s.fppGata || s.pkGata);      /* coloanele FPP / Pick apar doar daca exista valori */
+      h += '<div class="kpi-doua"><div class="card"><h2>Pe zile de livrare</h2><div class="derulare-x"><table class="simplu"><tr><th>Livrare</th><th class="nr">Comenzi</th><th class="nr">Pregătite</th>' +
+        '<th class="nr">Paleți pregătiți</th>' + (cuFpp ? '<th class="nr">FPP</th><th class="nr">Pick</th>' : '') + '<th class="nr">De pregătit</th><th>Pregătit / de pregătit</th><th class="nr">Fără mașină</th></tr>' +
+        zile.map(function (d) {
+          var k = sz[d];
+          return '<tr class="clic" data-kp-zi="' + d + '" title="Arată doar ' + esc(kpZiText(d)) + '"><td><b>' + esc(kpZiText(d)) + '</b>' + (d === azi ? ' <span class="mic">azi</span>' : '') + '</td><td class="nr">' + k.n + '</td><td class="nr">' + k.gata + '</td>' +
+            '<td class="nr"><b>' + nr(k.palGata) + '</b></td>' + (cuFpp ? '<td class="nr">' + sauLinie(k.fppGata) + '</td><td class="nr">' + sauLinie(k.pkGata) + '</td>' : '') + '<td class="nr">' + (k.palRam ? '<b>~' + nr(k.palRam) + '</b>' : '—') + '</td>' +
+            '<td class="kp-bara"><div class="bara-p" role="img" aria-label="Pregătiți ' + k.palGata + ', de pregătit ' + k.palRam + ' paleți" title="pregătiți ' + nr(k.palGata) + ' · de pregătit ~' + nr(k.palRam) + '">' +
+            (k.palGata ? '<i class="c-ok" style="width:' + (k.palGata * 100 / maxZi) + '%"></i>' : '') + (k.palRam ? '<i class="c-ram" style="width:' + (k.palRam * 100 / maxZi) + '%"></i>' : '') + '</div></td>' +
+            '<td class="nr">' + sauLinie(k.palFaraMasina, '~') + '</td></tr>';
+        }).join('') +
+        '<tr><th>Total</th><th class="nr">' + s.n + '</th><th class="nr">' + s.gata + '</th><th class="nr">' + nr(s.palGata) + '</th>' + (cuFpp ? '<th class="nr">' + sauLinie(s.fppGata) + '</th><th class="nr">' + sauLinie(s.pkGata) + '</th>' : '') + '<th class="nr">' + sauLinie(s.palRam, '~') + '</th><th></th><th class="nr">' + sauLinie(s.palFaraMasina, '~') + '</th></tr></table></div>' +
+        '<div class="legenda"><span style="--c:var(--ok)">paleți pregătiți (reali)</span><span style="--c:#4a7fe0">paleți de pregătit (estimați)</span></div></div>' +
+        '<div class="card"><h2>Pe clienți</h2><div class="derulare-x"><table class="simplu"><tr><th>Client</th><th class="nr">Comenzi</th><th class="nr">Paleți pregătiți</th><th class="nr">De pregătit</th></tr>' +
+        Object.keys(peCl).map(function (c) { return { c: c, k: kpAduna(peCl[c]) }; }).sort(function (x, y) { return (y.k.palGata + y.k.palRam) - (x.k.palGata + x.k.palRam); }).map(function (x) {
+          return '<tr><td><b>' + esc(x.c) + '</b></td><td class="nr">' + x.k.n + '</td><td class="nr">' + nr(x.k.palGata) + '</td><td class="nr">' + (x.k.palRam ? '<b>~' + nr(x.k.palRam) + '</b> <span class="mic">(' + x.k.nRam + ')</span>' : '—') + '</td></tr>';
+        }).join('') + '</table></div></div></div>';
+    }
+    /* ce nu are cum sa apara in niciun interval / de unde vin cifrele vechi */
+    var faraData = toate.filter(function (o) { return !kGata(o) && !kpData(o); }).length, note = [];
+    if (faraData) note.push('<b>' + faraData + '</b> ' + (faraData === 1 ? 'comandă nepregătită nu are' : 'comenzi nepregătite nu au') + ' dată de livrare, deci nu ' + (faraData === 1 ? 'apare' : 'apar') + ' în niciun interval.');
+    if (nevoie && !lipsa.length) note.push('Zilele mai vechi sunt citite din arhivă (comenzile introduse cu cel mult ' + KP_ZILE_INAINTE + ' zile înainte de livrare)' + (kpIst.grupe ? '; de la deschiderea paginii s-au citit ' + kpIst.grupe + ' documente' : '') + '.');
+    if (doarRam) note.push('Fără dată de început sunt arătate doar comenzile nepregătite.');
+    if (note.length) h += '<div class="mic">' + note.join(' ') + '</div>';
+    $('kpCorp').innerHTML = h;
+  }
+  function kpAlege(a, b) { kpInt = { a: a || '', b: b || '' }; deseneazaKpi(); }
+  $('kpPa').onchange = function () { kpAlege(this.value, kpInt && kpInt.b && this.value && kpInt.b < this.value ? this.value : (kpInt ? kpInt.b : this.value)); };
+  $('kpPb').onchange = function () { kpAlege(kpInt ? kpInt.a : this.value, this.value); };
+  $('kpCipuri').addEventListener('click', function (e) { var c = e.target.closest('[data-kp]'); if (!c) return; var pz = kpPresetari(SC.azi())[+c.dataset.kp]; kpAlege(pz.a, pz.b); });
+  $('kpCorp').addEventListener('click', function (e) {
+    var z = e.target.closest('[data-kp-zi]');
+    if (e.target.closest('[data-kp-rest]')) kpAlege('', SC.ziPlus(kpInt.a, -1));
+    else if (e.target.closest('[data-kp-ist]')) { kpIst.cerut = kpInt.a + '|' + kpInt.b; kpIst.stare = ''; deseneazaKpi(); }
+    else if (z) kpAlege(z.dataset.kpZi, z.dataset.kpZi);
+  });
+
   function deseneazaKpi() {
     var azi = SC.azi(), client = $('kpiClient').value;
     var opt = '<option value="">Toți clienții</option>' + SC.config.clienti.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('');
     if ($('kpiClient').dataset.opt !== opt) { $('kpiClient').innerHTML = opt; $('kpiClient').dataset.opt = opt; $('kpiClient').value = client; }
+    deseneazaKpiPregatire(client);
     var toate = toateCamioanele();
     if (client) {
       toate = toate.map(function (x) {
@@ -3109,7 +3291,7 @@
           t.log('Migrare din ' + fisier.name + ': ' + m.stat.total + ' comenzi, ' + p.adrese.length + ' adrese');
         });
       }).then(function () {
-        L.golesteCache(); stare.primaData = true;
+        L.golesteCache(); kpUitaArhiva(); stare.primaData = true;
         repornesteUrmarireaComenzilor();
         return alerta('Migrare terminată.\n\nComenzi: ' + m.stat.total + '\nUltimul Nr Crt: ' + m.stat.ultimNr + '\nAdrese: ' + p.adrese.length);
       }, function (e) { repornesteUrmarireaComenzilor(); throw e; });

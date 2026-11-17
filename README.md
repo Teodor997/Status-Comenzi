@@ -188,7 +188,21 @@ până acum de mână. Comenzile „doar transport” se adaugă în continuare 
 - Formularul tipărit este generat din foaia `CMR_Black` (`js/cmr-sablon.js`). Necesită regulile din `firestore.rules` (blocul `cmr`).
 
 ## Tabul KPI's
-- Vizibil pentru toate rolurile, doar pentru citire. Pe ziua de încărcare aleasă arată: paleții de încărcat (reali la comenzile
+- **Pregătire comenzi** (partea de sus), după **livrare solicitată**, pe ziua sau intervalul ales (două date sau butoanele
+  rapide: Azi, Mâine, Azi + mâine, Următoarele 7 zile, Ieri, Luna aceasta, Luna trecută, Restanțe):
+  - pentru **zile trecute** arată ce s-a pregătit: paleți pregătiți (reali), FPP / Pick, amprente, greutate, câte comenzi
+    au fost încărcate, plus ce a rămas nepregătit;
+  - pentru **azi și viitor** arată ce este de pregătit, chiar dacă nu are mașină: paleți estimați (rotunjiți în sus pe
+    fiecare comandă), câți sunt fără mașină, greutatea și restanțele;
+  - un interval care le cuprinde pe amândouă (de exemplu luna întreagă) le arată pe amândouă, cu tabelul pe zile de livrare
+    (click pe o zi = doar acea zi) și pe clienți.
+  *Pregătit* = Terminata / Self-Pick; *de pregătit* = Inițiată / În lucru. Nu intră comenzile anulate, retururile și liniile
+  „doar transport”; comenzile fără paleți estimați sau fără dată de livrare sunt numărate separat.
+  **Zilele mai vechi se citesc din arhivă** (aplicația ține în memorie doar comenzile active și recente): o singură dată
+  pentru fiecare perioadă, până la închiderea paginii, cam un document pentru fiecare 25 de comenzi — o lună întreagă
+  înseamnă câteva sute de citiri. Sunt căutate comenzile introduse cu cel mult 14 zile înainte de livrare. Intervalele
+  care cer mai mult de 80 de zile de arhivă se citesc doar la cerere („Citește din arhivă”).
+- **Încărcări** (partea de jos), ca până acum. Pe ziua de încărcare aleasă arată: paleții de încărcat (reali la comenzile
   pregătite, estimați la celelalte), împărțirea FPP / Pick, camioanele pe stări și paleții fiecăruia, comenzile pe statusuri,
   greutatea, durata medie de încărcare, abaterea estimării față de real și comenzile active fără camion alocat.
 - Se calculează din datele aflate deja în aplicație: nu face citiri suplimentare din Firebase.

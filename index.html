@@ -289,7 +289,14 @@
     .kpi-sus { display: flex; flex-direction: column; gap: 10px; }
     .kpi-rand { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .kpi-rand h2 { margin: 0 10px 0 0; }
-    #kpiCorp { display: flex; flex-direction: column; gap: 14px; }
+    #kpiCorp, #kpCorp { display: flex; flex-direction: column; gap: 14px; }
+    .kpi-eti { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+    .kpi-sec { margin-top: 10px; }
+    .kpi .bara-p { margin-top: 6px; }
+    td.kp-bara { min-width: 150px; }
+    .bara-p .c-ram { background: #4a7fe0; }
+    td.kp-bara .bara-p i + i { margin-left: 2px; }
+    .kpi.atentie { border-color: #d9a400; background: #fffaf0; }
     .kpi-grila { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 12px; }
     .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
     .kpi .t { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
@@ -420,12 +427,22 @@
     <section class="pagina derulabila ascuns" id="pag-kpi">
       <div class="card kpi-sus">
         <div class="kpi-rand">
-          <h2>KPI's încărcări</h2>
+          <h2>Pregătire comenzi</h2>
+          <label class="kpi-eti">Livrare de la <input type="date" id="kpPa"></label>
+          <label class="kpi-eti">până la <input type="date" id="kpPb"></label>
+          <select id="kpiClient" aria-label="Client"><option value="">Toți clienții</option></select>
+          <span class="mic" id="kpiOra"></span>
+        </div>
+        <div class="cipuri" id="kpCipuri"></div>
+      </div>
+      <div id="kpCorp"></div>
+      <div class="card kpi-sus kpi-sec">
+        <div class="kpi-rand">
+          <h2>Încărcări</h2>
           <button class="btn mic" id="kpiPrev" aria-label="Ziua anterioară">‹</button>
           <input type="date" id="kpiData" aria-label="Ziua de încărcare">
           <button class="btn mic" id="kpiNext" aria-label="Ziua următoare">›</button>
-          <select id="kpiClient" aria-label="Client"><option value="">Toți clienții</option></select>
-          <span class="mic" id="kpiOra"></span>
+          <span class="mic">după data de încărcare din fișierul de transport</span>
         </div>
         <div class="cipuri" id="kpiZile"></div>
       </div>
