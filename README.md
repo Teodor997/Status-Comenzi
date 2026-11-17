@@ -138,12 +138,15 @@ până acum de mână. Comenzile „doar transport” se adaugă în continuare 
 - **Setări (o singură dată)**: Administrare → *Export pentru TMS*. Valorile fixe se pot prelua din fișierul de import
   folosit acum („Preia din fișierul model”), iar numele clienților se scriu în forma `COD = Nume în TMS`. Se păstrează
   în Firebase, nu în codul public.
-- **Filtre**: client și perioadă (după *Data comandă* sau *Livrare solicitată*). Fără perioadă intră toate comenzile
-  neexportate, din orice zi.
-- **Cheia de verificare**: fiecare comandă exportată primește un marcaj (când, de cine). O comandă este „de exportat”
-  dacă are nevoie de transport și nu are nici marcaj, nici număr de transport venit din raportul TMS. Numărul lor apare
-  pe buton tot timpul, iar fereastra spune, la fiecare export, câte comenzi neexportate rămân în afara filtrului ales.
-  Nu intră la numărătoare: comenzile anulate, cele încărcate, Self-Pick / „Ridicare client”.
+- **Filtre**: client și perioadă (după *Data comandă* sau *Livrare solicitată*). În fișier intră toate comenzile din
+  filtru care au nevoie de transport, **chiar dacă au mai fost exportate** — o comandă poate fi exportată de câte ori
+  este nevoie. Bifa „Include și comenzile care au mai fost exportate” este pusă implicit; fără ea intră doar comenzile
+  aflate la primul export. Fereastra arată câte dintre comenzi au mai fost exportate.
+- **Ce nu intră niciodată**: comenzile anulate, cele încărcate, cele care au deja număr de transport din raportul TMS și
+  cele Self-Pick / „Ridicare client”.
+- **Verificare**: aplicația ține minte, cu un marcaj pe comandă (când și de cine), care comenzi au ajuns deja într-un
+  fișier. Numărul de pe buton arată câte comenzi care au nevoie de transport nu au fost exportate niciodată, iar
+  fereastra spune câte astfel de comenzi rămân în afara filtrului ales. Marcajul nu oprește exportul repetat.
 - **Bifa „Comandă Self-Pick”**: Operatorul de date (și Administratorul) o pune în fereastra comenzii, la introducere
   sau la modificare. Comanda bifată nu intră în exportul pentru TMS și apare în listă cu eticheta „Self-Pick” în celula
   Nr AUTO. Dacă bifa se pune după ce comanda a fost deja exportată sau are număr de transport, aplicația avertizează că
@@ -151,11 +154,10 @@ până acum de mână. Comenzile „doar transport” se adaugă în continuare 
 - **Date lipsă**: fără destinatar, oraș, județ sau dată de livrare comanda nu se exportă (rămâne la numărătoare până se
   completează), decât dacă se bifează explicit. Fără greutate sau paleți se exportă cu celula goală și fereastra spune
   câte sunt de completat în fișier înainte de import.
-- **Exporturi anterioare**: orice export se poate descărca din nou sau i se poate anula marcajul (dacă fișierul nu a
-  fost importat în TMS). „Marchează ca exportate, fără fișier” este pentru comenzile aflate deja în TMS — de folosit o
-  dată, la început, pentru comenzile introduse de mână înainte de această funcție.
-- O comandă marcată între timp de altcineva este sărită, deci nu poate ajunge în două fișiere. În jurnal rămâne o linie
-  pentru fiecare export.
+- **Marcaje de export**: lista de jos arată loturile de comenzi aflate la primul export; un lot se poate descărca din
+  nou sau i se poate anula marcajul (comenzile lui revin la numărătoarea de pe buton). „Marchează ca exportate, fără
+  fișier” este pentru comenzile aflate deja în TMS, ca să nu mai apară la numărătoare.
+- În jurnal rămâne o linie pentru fiecare export, cu numărul de comenzi și câte erau la primul export.
 
 ## Cumul (comenzi legate)
 - Operatorul de date (și Administratorul) bifează două sau mai multe comenzi deschise și apasă **Cumulat**. Se pot lega doar

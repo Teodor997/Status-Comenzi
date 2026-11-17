@@ -821,7 +821,7 @@
     b.textContent = n || ''; b.classList.toggle('are', n > 0);
     $('btnTmsExport').title = n ? nCom(n) + ' din status nu ' + (n === 1 ? 'a fost exportată' : 'au fost exportate') + ' încă pentru TMS' : 'Toate comenzile care au nevoie de transport au fost exportate pentru TMS';
   }
-  function tmsNumeFisier(ts) { var d = new Date(ts); return 'Import TMS ' + SC.ymd(d) + ' ' + SC.p2(d.getHours()) + SC.p2(d.getMinutes()) + '.xlsx'; }
+  function tmsNumeFisier(ts) { var d = new Date(ts); return 'Import TMS ' + SC.ymd(d) + ' ' + SC.p2(d.getHours()) + SC.p2(d.getMinutes()) + SC.p2(d.getSeconds()) + '.xlsx'; }      /* cu secunde: doua exporturi in acelasi minut au nume diferite */
   function tmsMoment(ts) { var d = new Date(ts); return SC.p2(d.getDate()) + '.' + SC.p2(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + SC.p2(d.getHours()) + ':' + SC.p2(d.getMinutes()); }
   function tmsEticheta(o) { return ((o.cl || '') + ' ' + (o.nc || '')).trim() + ' (Nr Crt ' + o.n + ')'; }
   /* exporturile facute pana acum, din marcajele de pe comenzile incarcate: [{ts, u, n, manual}] cele mai noi primele */
@@ -837,13 +837,14 @@
       '<label class="camp"><span>Perioada după</span><select id="txDupa"><option value="dc">Data comandă</option><option value="dl">Livrare solicitată</option></select></label>' +
       '<label class="camp"><span>De la</span><input type="date" id="txDe"></label>' +
       '<label class="camp"><span>Până la</span><input type="date" id="txPana"></label></div>' +
-      '<div class="mic" style="margin-top:6px">Fără perioadă aleasă intră toate comenzile neexportate, din orice zi. Comenzile exportate se marchează, deci nu ajung a doua oară în fișier.</div>' +
+      '<div class="mic" style="margin-top:6px">În fișier intră toate comenzile din perioada aleasă care au nevoie de transport, chiar dacă au mai fost exportate. Fără perioadă intră comenzile din orice zi.</div>' +
+      '<label class="bifa" style="margin-top:8px"><input type="checkbox" id="txCuExp" checked> Include și comenzile care au mai fost exportate</label>' +
       '<div class="tms-rez" id="txRez" role="status"></div>' +
       '<label class="bifa"><input type="checkbox" id="txCuLipsa"> Exportă și comenzile fără destinatar, oraș, județ sau dată de livrare (celulele rămân goale)</label>' +
       '<div class="tms-vechi" id="txVechi"></div>';
     var sel = { deExportat: [], lipsa: [] };
     function citeste(rad) {
-      var f = { cl: rad.querySelector('#txCl').value, dupa: rad.querySelector('#txDupa').value, a: rad.querySelector('#txDe').value, b: rad.querySelector('#txPana').value, cuLipsa: rad.querySelector('#txCuLipsa').checked };
+      var f = { cl: rad.querySelector('#txCl').value, dupa: rad.querySelector('#txDupa').value, a: rad.querySelector('#txDe').value, b: rad.querySelector('#txPana').value, cuLipsa: rad.querySelector('#txCuLipsa').checked, cuExp: rad.querySelector('#txCuExp').checked };
       f.gresit = !!(f.a && f.b && f.b < f.a);
       return f;
     }
@@ -855,15 +856,23 @@
       return (!f.a || d >= f.a) && (!f.b || d <= f.b);
     }
     function calculeaza(rad) {
-      var f = citeste(rad), numar = { exportata: 0, inTms: 0, faraTransport: 0 }, inF = [], afara = [];
+      var f = citeste(rad), numar = { exportata: 0, inTms: 0, faraTransport: 0 }, inF = [], afara = [], dinNou = 0;
       SC.comenzi.forEach(function (o) {
         var s = L.tmsStare(o), a = !f.gresit && inFiltru(o, f);
-        if (s === 'deExportat') (a ? inF : afara).push(o);
-        else if (a && numar[s] != null) numar[s]++;
+        if (s === 'deExportat') (a ? inF : afara).push(o);      /* nu a ajuns inca in niciun fisier */
+        else if (!a) return;
+        else if (s === 'exportata') {
+          /* a mai fost exportata: intra din nou in fisier daca inca are nevoie de transport si nu are numar de transport */
+          var s2 = L.tmsStare(o, true);
+          if (s2 !== 'deExportat') { if (numar[s2] != null) numar[s2]++; }
+          else if (f.cuExp) { inF.push(o); dinNou++; }
+          else numar.exportata++;
+        } else if (numar[s] != null) numar[s]++;
       });
       var complete = [], lipsa = [];
       inF.forEach(function (o) { var l = L.tmsLipsa(o); if (l.length) lipsa.push({ o: o, l: l }); else complete.push(o); });
       sel = { f: f, complete: complete, lipsa: lipsa, afara: afara, numar: numar, deExportat: f.cuLipsa ? inF : complete };
+      sel.dinNou = sel.deExportat.filter(function (o) { return o.tx; }).length;
       return sel;
     }
     function deseneaza(rad) {
@@ -873,9 +882,10 @@
       if (f.gresit) h += '<div class="nota rau">„Până la” este înaintea zilei de început. Corectează perioada.</div>';
       var pal = 0, kg = 0; l.forEach(function (o) { pal += L.tmsPaleti(o) || 0; kg += L.tmsMasa(o) || 0; });
       h += '<div class="nota"><span class="mare"><b>' + nCom(l.length) + '</b> de exportat acum</span>' + (l.length ? ' · ' + SC.fmtNum(pal, 'int') + ' paleți · ' + SC.fmtNum(kg, 'num') + ' kg' : '') +
-        '<div class="mic">Nu intră în fișier, din ce se potrivește filtrului: ' + s.numar.exportata + ' deja exportate · ' + s.numar.inTms + ' deja în TMS (au număr de transport) · ' + s.numar.faraTransport + ' fără transport (Self-Pick / Ridicare client).</div></div>';
+        (s.dinNou ? '<div>Din ele, <b>' + s.dinNou + '</b> ' + (s.dinNou === 1 ? 'a mai fost exportată' : 'au mai fost exportate') + ' și <b>' + (l.length - s.dinNou) + '</b> ' + (l.length - s.dinNou === 1 ? 'este' : 'sunt') + ' la primul export.</div>' : '') +
+        '<div class="mic">Nu intră în fișier, din ce se potrivește filtrului: ' + (f.cuExp ? '' : s.numar.exportata + ' deja exportate · ') + s.numar.inTms + ' deja în TMS (au număr de transport) · ' + s.numar.faraTransport + ' fără transport (Self-Pick / Ridicare client).</div></div>';
       if (s.lipsa.length) {
-        h += '<div class="nota atentie"><b>' + nCom(s.lipsa.length) + ' cu date de livrare lipsă</b> — ' + (f.cuLipsa ? 'se exportă cu celulele goale; verifică-le în fișier.' : (s.lipsa.length === 1 ? 'rămâne neexportată' : 'rămân neexportate') + ' până completezi datele în comandă:') +
+        h += '<div class="nota atentie"><b>' + nCom(s.lipsa.length) + ' cu date de livrare lipsă</b> — ' + (f.cuLipsa ? 'se exportă cu celulele goale; verifică-le în fișier.' : 'nu intră în fișier până completezi datele în comandă:') +
           '<ul>' + s.lipsa.slice(0, 8).map(function (x) { return '<li>' + esc(tmsEticheta(x.o)) + ' — lipsește: ' + esc(x.l.join(', ')) + '</li>'; }).join('') + (s.lipsa.length > 8 ? '<li>… și încă ' + (s.lipsa.length - 8) + '</li>' : '') + '</ul></div>';
       }
       var faraPal = 0, faraKg = 0, multi = [];
@@ -891,35 +901,41 @@
       var ramaseLipsa = f.cuLipsa ? 0 : s.lipsa.length;
       if (s.afara.length) {
         var vechi = s.afara.map(function (o) { return String(o.dc || '').slice(0, 10); }).filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); }).sort()[0];
-        h += '<div class="nota atentie"><b>Verificare:</b> în afara filtrului ales mai ' + (s.afara.length === 1 ? 'rămâne 1 comandă neexportată' : 'rămân ' + s.afara.length + ' comenzi neexportate') +
+        h += '<div class="nota atentie"><b>Verificare:</b> în afara filtrului ales mai ' + (s.afara.length === 1 ? 'rămâne 1 comandă care nu a fost exportată niciodată' : 'rămân ' + s.afara.length + ' comenzi care nu au fost exportate niciodată') +
           (vechi ? ' (cea mai veche are data comenzii ' + esc(SC.fmtDataLunga(vechi)) + ')' : '') + '. <button type="button" class="legatura" id="txToate">Arată-le pe toate</button></div>';
       } else if (!f.gresit) {
         h += '<div class="nota bun"><b>Verificare:</b> ' + (l.length || ramaseLipsa ? 'după acest export nu mai rămâne nicio comandă neexportată' + (ramaseLipsa ? ', în afară de ' + (ramaseLipsa === 1 ? 'cea' : 'cele ' + ramaseLipsa) + ' cu date de livrare lipsă.' : '.') : 'toate comenzile care au nevoie de transport au fost exportate.') + '</div>';
       }
       rad.querySelector('#txRez').innerHTML = h;
       var ex = tmsExporturi();
-      rad.querySelector('#txVechi').innerHTML = ex.length ? '<div class="rand-form"><label class="camp" style="flex:1;min-width:260px"><span>Exporturi anterioare</span><select id="txLot">' +
-        ex.map(function (e) { return '<option value="' + e.ts + '">' + esc(tmsMoment(e.ts) + ' · ' + e.u + ' · ' + nCom(e.n) + (e.manual ? ' · marcate fără fișier' : '')) + '</option>'; }).join('') + '</select></label>' +
+      rad.querySelector('#txVechi').innerHTML = ex.length ? '<div class="rand-form"><label class="camp" style="flex:1;min-width:260px"><span>Marcaje de export (pe loturi)</span><select id="txLot">' +
+        ex.map(function (e) { return '<option value="' + e.ts + '">' + esc(tmsMoment(e.ts) + ' · ' + e.u + ' · ' + nCom(e.n) + (e.manual ? ' · marcate fără fișier' : ' la primul export')) + '</option>'; }).join('') + '</select></label>' +
         '<button type="button" class="btn" id="txDinNou">Descarcă din nou</button><button type="button" class="btn" id="txAnuleaza">Anulează marcajul</button></div>' : '<div class="mic">Încă nu s-a făcut niciun export.</div>';
     }
+    /* Fisierul contine toate comenzile din filtru (si pe cele exportate inainte). Marcajul se pune doar pe cele aflate la
+       primul export si serveste numai la verificare: numarul de pe buton = comenzi care n-au ajuns inca in niciun fisier. */
     function marcheaza(rad, faraFisier) {
       var s = calculeaza(rad), l = s.deExportat;
       if (s.f.gresit) { toast('Corectează perioada.', 'rau'); return Promise.resolve(false); }
       if (!faraFisier && !L.tmsSetariComplete()) { toast('Setările pentru TMS nu sunt completate.', 'rau'); return Promise.resolve(false); }
       if (!l.length) { toast('Nu este nicio comandă de exportat cu filtrul ales.', 'rau'); return Promise.resolve(false); }
-      var intreb = faraFisier ? confirma('Marchezi ' + nCom(l.length) + ' ca exportate, fără să se facă fișier?\n\nFolosește asta doar pentru comenzile care sunt deja în TMS (introduse de mână sau cu fișierul vechi). Marcajul se poate anula din „Exporturi anterioare”.', { da: 'Marchează', nu: 'Renunță' }) : Promise.resolve(true);
+      var noi = l.filter(function (o) { return !o.tx; }), numere = noi.map(function (o) { return o.n; });
+      if (faraFisier && !noi.length) { toast('Toate comenzile din filtru sunt deja marcate ca exportate.', 'rau'); return Promise.resolve(false); }
+      var intreb = faraFisier ? confirma('Marchezi ' + nCom(noi.length) + ' ca exportate, fără să se facă fișier?\n\nFolosește asta pentru comenzile care sunt deja în TMS (introduse de mână sau cu fișierul vechi), ca să nu mai apară la numărătoarea de pe buton. Marcajul se poate anula din „Marcaje de export”.', { da: 'Marchează', nu: 'Renunță' }) : Promise.resolve(true);
       return intreb.then(function (da) {
         if (!da) return false;
-        var numere = l.map(function (o) { return o.n; });
-        return L.tmsMarcheaza(numere, faraFisier, (faraFisier ? 'Export TMS — marcate fără fișier: ' : 'Export TMS: ') + nCom(numere.length)).then(function (r) {
-          var facute = L.tmsExportate(r.ts);
-          if (facute.length && !faraFisier) L.tmsFisier(facute, tmsNumeFisier(r.ts));
+        var ts = Date.now(), nume = tmsNumeFisier(ts);
+        if (!faraFisier) L.tmsFisier(l, nume);
+        var text = faraFisier ? 'Export TMS — marcate fără fișier: ' + nCom(noi.length) :
+          'Export TMS: ' + nCom(l.length) + (noi.length === l.length ? '' : (noi.length ? ', din care ' + noi.length + ' la primul export' : ', toate exportate și înainte'));
+        var scrie = numere.length ? L.tmsMarcheaza(numere, faraFisier, text) : SC.store.tx(function (t) { t.log(text); }).then(function () { return {}; }, function (e) { return { eroare: e }; });
+        return scrie.then(function (r) {
           redeseneaza(); deseneaza(rad);
-          if (r.eroare || facute.length !== numere.length) {
-            return alerta((faraFisier ? 'Au fost marcate' : 'Au fost exportate') + ' doar ' + facute.length + ' din ' + numere.length + ' comenzi' + (r.eroare ? ' (' + (r.eroare.message || r.eroare) + ')' : ' — restul au fost exportate între timp de altcineva') + '.\n\n' +
-              (facute.length && !faraFisier ? 'Fișierul descărcat conține exact comenzile marcate. ' : '') + 'Cele rămase apar în continuare ca neexportate: apasă din nou pe Exportă.', 'Export pentru TMS').then(function () { return false; });
+          if (r.eroare) {
+            return alerta((faraFisier ? 'Marcajul nu s-a salvat' : 'Fișierul „' + nume + '” a fost descărcat, dar marcajul de export nu s-a salvat') + ' (' + (r.eroare.message || r.eroare) + ').\n\n' +
+              (faraFisier ? 'Încearcă din nou.' : 'Fișierul este complet. Doar numărătoarea de pe buton poate arăta în continuare aceste comenzi ca neexportate.'), 'Export pentru TMS').then(function () { return false; });
           }
-          toast(faraFisier ? nCom(facute.length) + ' marcate ca exportate.' : 'Exportat: ' + nCom(facute.length) + ' în „' + tmsNumeFisier(r.ts) + '”.', 'bun');
+          toast(faraFisier ? nCom(noi.length) + ' marcate ca exportate.' : 'Exportat: ' + nCom(l.length) + ' în „' + nume + '”.', 'bun');
           return false;
         });
       });
@@ -939,7 +955,7 @@
               if (!L.tmsSetariComplete()) return toast('Setările pentru TMS nu sunt completate.', 'rau');
               L.tmsFisier(lot, tmsNumeFisier(ts)); toast('Descărcat din nou: ' + nCom(lot.length) + '.', 'bun');
             } else {
-              confirma('Anulezi marcajul exportului din ' + tmsMoment(ts) + '?\n\n' + nCom(lot.length) + ' ' + (lot.length === 1 ? 'redevine neexportată' : 'redevin neexportate') + ' și intră în următorul fișier. Fă asta doar dacă fișierul nu a fost importat în TMS.', { da: 'Anulează marcajul', nu: 'Renunță' }).then(function (da) {
+              confirma('Anulezi marcajul exportului din ' + tmsMoment(ts) + '?\n\n' + nCom(lot.length) + ' ' + (lot.length === 1 ? 'redevine neexportată' : 'redevin neexportate') + ' la numărătoarea de pe buton. În fișier intră oricum, după perioada aleasă.', { da: 'Anulează marcajul', nu: 'Renunță' }).then(function (da) {
                 if (!da) return;
                 return L.tmsAnuleaza(ts, 'Export TMS din ' + tmsMoment(ts) + ' anulat: ' + nCom(lot.length) + (lot.length === 1 ? ' redevine neexportată' : ' redevin neexportate')).then(function () { redeseneaza(); deseneaza(rad); toast('Marcaj anulat pentru ' + nCom(lot.length) + '.', 'bun'); });
               }).catch(arataEroare);

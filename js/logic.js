@@ -817,9 +817,11 @@
     'serbia', 'portugalia', 'suedia', 'danemarca', 'elvetia', 'turcia', 'ucraina', 'finlanda', 'norvegia', 'luxemburg', 'cipru', 'malta'];
   L.tmsSetariComplete = function () { var s = SC.config.tms || {}; return L.TMS_SETARI.every(function (c) { return !SC.gol(s[c.k]); }); };
   /* 'anulata' | 'exportata' (marcaj) | 'inTms' (are numar de transport) | 'incheiata' (incarcata / arhivata) | 'faraTransport' | 'deExportat' */
-  L.tmsStare = function (o) {
+  /* faraMarcaj = true: starea ca si cum comanda n-ar fi fost exportata niciodata (o comanda poate fi exportata de mai multe ori;
+     marcajul arata doar care comenzi nu au ajuns inca in niciun fisier) */
+  L.tmsStare = function (o, faraMarcaj) {
     if (o.st === ST.ANU) return 'anulata';
-    if (o.tx) return 'exportata';
+    if (o.tx && !faraMarcaj) return 'exportata';
     if (o.nt) return 'inTms';
     if (o.inc === 'DA' || o.ar) return 'incheiata';
     if (o.st === ST.SELF || o.sp === 'DA' || /ridica(re)? (client|personal)/.test(SC.normText([o.ob, o.ju, o.or].join(' | ')))) return 'faraTransport';
