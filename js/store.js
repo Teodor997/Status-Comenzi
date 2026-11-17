@@ -171,6 +171,15 @@
     this._scrie(chei); this._anunta(chei);
     return Promise.resolve(chei.length);
   };
+  /* copia de siguranta: toate documentele unei colectii; stergerea unor documente dupa id */
+  StoreDemo.prototype.citesteColectie = function (col) { return Promise.resolve(this._colectie(col)); };
+  StoreDemo.prototype.stergeMulte = function (col, ids, progres) {
+    var self = this, chei = ids.map(function (id) { return col + '/' + id; });
+    chei.forEach(function (k) { delete self.docs[k]; });
+    this._scrie(chei); this._anunta(chei);
+    if (progres) progres(ids.length, ids.length);
+    return Promise.resolve();
+  };
   StoreDemo.prototype.citesteDoc = function (col, id) { return Promise.resolve(clona(this.docs[col + '/' + id]) || null); };
   StoreDemo.prototype.urmaresteDoc = function (col, id, cb) {
     var a = { tip: 'doc', col: col, id: id, cb: cb }, self = this;
@@ -368,6 +377,18 @@
       });
     }
     return pas().catch(function (e) { throw traduce(e); });
+  };
+  /* copia de siguranta: toate documentele unei colectii (o citire pentru fiecare document); stergerea unor documente dupa id */
+  StoreFirebase.prototype.citesteColectie = function (col) {
+    return this.F.getDocs(this.F.collection(this.db, col)).then(function (qs) {
+      var l = []; qs.forEach(function (d) { l.push({ id: d.id, data: d.data() }); });
+      l.sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+      return l;
+    }).catch(function (e) { throw traduce(e); });
+  };
+  StoreFirebase.prototype.stergeMulte = function (col, ids, progres) {
+    var self = this;
+    return this._inTranse(ids, function (b, id) { b.delete(self._ref(col, id)); }, 10, progres).catch(function (e) { throw traduce(e); });
   };
   StoreFirebase.prototype.citesteDoc = function (col, id) {
     return this.F.getDoc(this._ref(col, id)).then(function (s) { return s.exists() ? s.data() : null; });

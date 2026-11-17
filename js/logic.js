@@ -1041,4 +1041,132 @@
     XLSX.utils.book_append_sheet(wb, ws, 'Comenzi');
     XLSX.writeFile(wb, numeFisier);
   };
+
+  /* =====================================================================
+     COPIA DE SIGURANTA (backup) SI RESTAURAREA
+     Copia este un singur fisier JSON cu toate documentele din Firebase, asa cum sunt ele (grupele de comenzi, adresele,
+     camioanele si liniile din transport, notificarile, CMR-urile, setarile si contorul; jurnalul doar daca cel care face
+     copia este Administrator, fiindca regulile il lasa doar pe el sa-l citeasca).
+     Costul unei copii: o citire pentru fiecare document (cateva sute), fara nicio scriere in afara de „ultima copie”.
+     ===================================================================== */
+  L.BACKUP_TIP = 'status-comenzi-backup';
+  L.BACKUP_COLECTII = ['comenzi', 'adrese', 'extra', 'notificari', 'cmr', 'meta'];
+  L.BACKUP_NUME = { comenzi: 'Grupe de comenzi', adrese: 'Adrese', extra: 'Camioane și linii din transport (zile)', notificari: 'Notificări (luni)', cmr: 'CMR-uri (luni + setări)', meta: 'Setări și contoare', jurnal: 'Jurnal de modificări (ore)' };
+  /* documentele din meta care nu se restaureaza: marcajul de configurare si evidenta copiilor */
+  var META_FARA_RESTAURARE = { setup: 1, backup: 1 };
+
+  function numaraComenzi(grupe) {
+    var n = 0;
+    Object.keys(grupe || {}).forEach(function (id) { n += Object.keys((grupe[id] || {}).o || {}).length; });
+    return n;
+  }
+  /* Citeste tot ce intra in copie. Jurnalul (doar Administratorul il poate citi) creste cu un document pe ora, asa ca:
+     jurnal = false: fara jurnal; true: tot jurnalul; { a, b }: doar orele dintre zilele / id-urile a si b (b poate lipsi). */
+  L.backupCiteste = function (jurnal, progres) {
+    var cuJurnal = !!jurnal, interval = jurnal && typeof jurnal === 'object' ? jurnal : null;
+    var colectii = L.BACKUP_COLECTII.concat(cuJurnal ? ['jurnal'] : []), rez = {}, i = 0, documente = 0;
+    function urm() {
+      if (i >= colectii.length) return Promise.resolve();
+      var col = colectii[i++];
+      if (progres) progres(L.BACKUP_NUME[col] || col, i, colectii.length);
+      return (col === 'jurnal' && interval ? SC.store.citesteInterval('jurnal', interval.a, interval.b || '9999-99-99_99~') : SC.store.citesteColectie(col)).then(function (docs) {
+        var o = {};
+        docs.forEach(function (d) { o[d.id] = d.data; });
+        rez[col] = o; documente += docs.length;
+        return urm();
+      });
+    }
+    return urm().then(function () {
+      var u = SC.store.user || {}, acum = new Date();
+      return {
+        tip: L.BACKUP_TIP, v: 1, t: acum.getTime(), cand: SC.ymd(acum) + ' ' + SC.p2(acum.getHours()) + ':' + SC.p2(acum.getMinutes()),
+        aplicatie: SC.VERSIUNE, mod: SC.store.mod, proiect: (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.projectId) || '',
+        user: u.nume || '', rol: u.rolReal || u.rol || '', cuJurnal: cuJurnal, jurnalDela: interval ? interval.a : '',
+        nr: { comenzi: numaraComenzi(rez.comenzi), documente: documente }, col: rez
+      };
+    });
+  };
+  /* verifica un fisier citit; intoarce textul erorii sau '' */
+  L.backupVerifica = function (b) {
+    if (!b || typeof b !== 'object' || b.tip !== L.BACKUP_TIP) return 'Fișierul nu este o copie de siguranță Status Comenzi.';
+    if (b.v !== 1) return 'Copia a fost făcută cu o versiune mai nouă a aplicației (format ' + b.v + '). Actualizează aplicația și încearcă din nou.';
+    if (!b.col || typeof b.col.comenzi !== 'object' || !b.col.meta) return 'Copia este incompletă: lipsesc comenzile sau setările.';
+    var rau = Object.keys(b.col.comenzi).filter(function (id) { var g = b.col.comenzi[id]; return !/^g\d+$/.test(id) || !g || typeof g.o !== 'object'; });
+    if (rau.length) return 'Copia conține grupe de comenzi stricate (' + rau.slice(0, 3).join(', ') + ').';
+    return '';
+  };
+  L.backupNumaraComenzi = numaraComenzi;
+  /* ce parte din jurnalul de acum trebuie citita ca sa se vada ce ore lipsesc fata de copie: doar intervalul copiei */
+  L.backupIntervalJurnal = function (copie) {
+    var ids = Object.keys((copie.col || {}).jurnal || {}).sort();
+    return ids.length ? { a: ids[0], b: ids[ids.length - 1] + '~' } : false;
+  };
+  /* text cu cheile ordonate, ca doua documente identice sa dea acelasi text oricum le-ar intoarce baza de date */
+  function stabil(x) {
+    if (x === null || typeof x !== 'object') return JSON.stringify(x === undefined ? null : x);
+    if (Array.isArray(x)) return '[' + x.map(stabil).join(',') + ']';
+    return '{' + Object.keys(x).sort().filter(function (k) { return x[k] !== undefined; }).map(function (k) { return JSON.stringify(k) + ':' + stabil(x[k]); }).join(',') + '}';
+  }
+  L.backupStabil = stabil;
+  /* Planul de restaurare: ce documente se rescriu, ce se sterge si ce ramane neatins, comparand copia cu starea de acum
+     (acum = tot o copie, citita chiar inainte). Se scriu doar documentele care difera, ca sa se consume cat mai putine scrieri.
+     - comenzi, adrese, extra, notificari, cmr: devin exact ca in copie (ce nu este in copie se sterge);
+     - meta: contorul si evidenta importurilor mereu; setarile (config) doar la cerere, pastrand calculatorul de backup de acum;
+     - jurnal: nu se rescrie si nu se sterge nimic; se adauga doar orele care lipsesc acum. */
+  L.backupPlan = function (copie, acum, cuSetari) {
+    var plan = { scrie: {}, sterge: {}, nrScrie: 0, nrSterge: 0, nrLaFel: 0, pe: {} };
+    function pune(col, id, data) { (plan.scrie[col] = plan.scrie[col] || []).push({ id: id, data: data }); plan.nrScrie++; plan.pe[col].scrie++; }
+    ['comenzi', 'adrese', 'extra', 'notificari', 'cmr'].forEach(function (col) {
+      var c = copie.col[col], a = acum.col[col] || {};
+      plan.pe[col] = { scrie: 0, sterge: 0, laFel: 0 };
+      if (!c) return;                                   // colectia lipseste din copie (copie veche): nu o atingem
+      Object.keys(c).forEach(function (id) {
+        if (a[id] && stabil(a[id]) === stabil(c[id])) { plan.nrLaFel++; plan.pe[col].laFel++; } else pune(col, id, c[id]);
+      });
+      var deSters = Object.keys(a).filter(function (id) { return !c[id]; });
+      if (deSters.length) { plan.sterge[col] = deSters; plan.nrSterge += deSters.length; plan.pe[col].sterge = deSters.length; }
+    });
+    plan.pe.meta = { scrie: 0, sterge: 0, laFel: 0 };
+    Object.keys(copie.col.meta || {}).forEach(function (id) {
+      if (META_FARA_RESTAURARE[id]) return;
+      var data = copie.col.meta[id], a = (acum.col.meta || {})[id];
+      if (id === 'config') {
+        if (!cuSetari) return;
+        data = JSON.parse(JSON.stringify(data));
+        if (a && a.backup) data.backup = a.backup; else delete data.backup;
+      }
+      if (a && stabil(a) === stabil(data)) { plan.nrLaFel++; plan.pe.meta.laFel++; } else pune('meta', id, data);
+    });
+    /* acum.col.jurnal contine macar orele din intervalul copiei (vezi L.backupIntervalJurnal) */
+    plan.pe.jurnal = { scrie: 0, sterge: 0, laFel: 0 };
+    if (copie.col.jurnal && acum.col.jurnal) {
+      Object.keys(copie.col.jurnal).forEach(function (id) { if (!acum.col.jurnal[id]) pune('jurnal', id, copie.col.jurnal[id]); });
+    }
+    return plan;
+  };
+  /* aplica planul: intai stergerile, apoi scrierile, colectie cu colectie; la sfarsit o linie in jurnal */
+  L.backupAplica = function (plan, text, progres) {
+    var pasi = [], facut = 0, total = plan.nrScrie + plan.nrSterge;
+    Object.keys(plan.sterge).forEach(function (col) { pasi.push({ col: col, sterge: plan.sterge[col] }); });
+    ['meta', 'adrese', 'extra', 'notificari', 'cmr', 'jurnal', 'comenzi'].forEach(function (col) { if (plan.scrie[col]) pasi.push({ col: col, scrie: plan.scrie[col] }); });
+    function urm(i) {
+      if (i >= pasi.length) return Promise.resolve();
+      var pas = pasi[i], baza = facut, n = (pas.sterge || pas.scrie).length;
+      function prog(a) { if (progres) progres(baza + a, total); }
+      return (pas.sterge ? SC.store.stergeMulte(pas.col, pas.sterge, prog) : SC.store.setMulte(pas.col, pas.scrie, prog)).then(function () { facut = baza + n; return urm(i + 1); });
+    }
+    return urm(0).then(function () { return SC.store.tx(function (t) { t.log(text); }); });
+  };
+  /* evidenta copiilor (meta/backup): ultima copie automata, ultima manuala, ultima eroare. Un document mic, citit o data la pornire. */
+  L.backupNoteaza = function (camp, date, textJurnal) {
+    return SC.store.tx(function (t) {
+      return t.get('meta', 'backup').then(function (d) {
+        d = d || {};
+        if (date === null) delete d[camp]; else d[camp] = date;
+        if (camp === 'auto' && date) delete d.er;
+        t.set('meta', 'backup', d);
+        if (textJurnal) t.log(textJurnal);
+      });
+    });
+  };
 })();

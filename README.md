@@ -217,6 +217,42 @@ până acum de mână. Comenzile „doar transport” se adaugă în continuare 
 - Se calculează din datele aflate deja în aplicație: nu face citiri suplimentare din Firebase.
 - Paleți reali = FPP + Pick la comenzile pregătite; amprentele pornesc de la aceeași sumă și pot fi corectate.
 
+## Copie de siguranță (backup) și restaurare
+Codul aplicației este pe GitHub (cu istoricul fiecărei versiuni). **Datele** stau doar în Firebase, iar planul gratuit nu are
+backup propriu, așa că aplicația își face singură copii într-un folder de pe un calculator (de exemplu un folder OneDrive).
+
+- **Un singur calculator de backup.** Administratorul intră în aplicație chiar de pe calculatorul care va face copiile (de
+  regulă cel al Operatorului de date), în Chrome sau Edge, și apasă Administrare → *Copie de siguranță* → „Setează acest
+  calculator ca și calculator de backup…”: îi dă un nume și alege folderul. Calculatorul este recunoscut după un cod ținut în
+  browser, deci același utilizator intrat de pe alt calculator (sau din alt browser) nu face copii. Mutarea pe alt calculator
+  și oprirea le poate face doar Administratorul.
+- **Copia automată**: o dată pe zi, la scurt timp după ce aplicația este deschisă pe calculatorul de backup de un Operator
+  date sau de un Administrator (și din 30 în 30 de minute se verifică dacă a început o zi nouă). Fișierul se numește
+  `Backup Status Comenzi AAAA-LL-ZZ OOMM.json`; în folder se păstrează ultimele 30 de copii, restul se șterg singure.
+- **Acordul browserului.** După ce browserul a fost închis, poate cere din nou acordul de a scrie în folder: apare o bandă
+  galbenă cu butonul „Permite și fă copia”. Alege „Permite la fiecare vizită” (dacă browserul oferă varianta) ca să nu mai întrebe.
+- **Ce conține**: grupele de comenzi, adresele, camioanele și liniile din transport, notificările, CMR-urile, setările și
+  contorul Nr Crt. Jurnalul de modificări intră doar când copia este făcută de un Administrator (regulile îl lasă doar pe el
+  să-l citească): ultimele 35 de zile la copia automată, tot jurnalul la „Copie de siguranță acum”. Utilizatorii și PIN-urile
+  nu intră în copie.
+- **„Copie de siguranță acum”** (Administrator): pe calculatorul de backup scrie în folder (`… manual.json`), pe orice alt
+  calculator descarcă fișierul. Util înaintea unei operațiuni mari (migrare, rescriere din borderou, golirea încărcărilor).
+- **Evidență și avertizări**: Administrare arată ultima copie automată (când, de pe ce calculator, câte comenzi), ultima copie
+  manuală și ultima eroare. Dacă ultima copie automată este mai veche de 3 zile, cardul devine roșu, iar Administratorul
+  primește un mesaj la intrarea în aplicație.
+- **„Restaurare din copie…”** (doar Administrator): alegi un fișier de backup; aplicația îl compară cu datele de acum și arată
+  câte documente se rescriu și câte se șterg (se scriu doar cele care diferă). După confirmare (se scrie `RESTAUREZ`), starea de
+  acum se salvează întâi în `Inainte de restaurare Status Comenzi ….json` (în folderul de backup sau ca descărcare), apoi
+  comenzile, adresele, încărcările, notificările și CMR-urile devin exact ca în copie. Setările se restaurează doar dacă rămâne
+  bifa; calculatorul de backup rămâne cel de acum. Jurnalul nu se șterge și nu se rescrie: se adaugă doar orele care lipsesc.
+  Tot ce s-a lucrat după momentul copiei se pierde, deci ceilalți nu trebuie să lucreze în timpul restaurării și reîncarcă
+  pagina după.
+- **Dacă se pierde tot proiectul Firebase**: se face un proiect nou (pașii de la „Punere în funcțiune”), se creează din nou
+  utilizatorii, apoi „Restaurare din copie…” aduce datele înapoi.
+- **Consum**: o copie = o citire pentru fiecare document (câteva sute) și o scriere pentru evidență (`meta/backup`). O
+  restaurare citește datele de două ori și scrie doar documentele care diferă.
+- Nu necesită schimbări în `firestore.rules`.
+
 ## Consum în planul gratuit Firebase (Spark)
 
 Limite: 50.000 citiri/zi, 20.000 scrieri/zi, 1 GiB stocare, 10 GiB transfer/lună.

@@ -214,6 +214,7 @@
       SC.config = Object.assign({}, SC.CONFIG_IMPLICIT, d || {});
       umpleClienti();
       if (stare.tab === 'admin') deseneazaAdmin();
+      bk.cfgSosit = true; bkAvertizeaza();
     }));
     stare.opriri.push(SC.store.urmaresteColectie('adrese', function (docs) {
       L.seteazaAdrese(docs);
@@ -240,6 +241,7 @@
         if (stare.tab === 'admin') deseneazaAdmin();
       }));
     }
+    bkPorneste();
     urmaresteComenzile();
     arataTab(doarInc ? 'incarcari' : 'comenzi');
   }
@@ -3145,6 +3147,7 @@
         'Le poți scoate de aici; la următorul import al fișierului TMS, liniile recente apar în rubrica separată „Doar din transport”.</p>' +
         '<div class="rand-form"><button class="btn rosu" id="xCurata">Scoate cele ' + deCuratat + ' rânduri din registru</button></div></div>';
     }
+    h += bkCard();
     h += '<div class="card"><h2>Migrare din Excel</h2><p>Încarcă registrul „Status Comenzi” (.xlsm): toate comenzile, cu Nr Crt păstrat, și foaia Adrese. <b>Înlocuiește tot ce există</b> în aplicație — se folosește la pornire și, dacă e nevoie, încă o dată în ziua trecerii de pe Excel.</p>' +
       '<div class="rand-form"><button class="btn" id="mMigrare">Alege fișierul și migrează…</button></div></div>';
 
@@ -3157,6 +3160,7 @@
     h += '<div class="card"><h2>Despre consum (plan gratuit Firebase)</h2><p>Comenzile sunt păstrate în grupe de ' + SC.MARIME_GRUPA + ', iar aplicația urmărește în timp real doar grupele cu comenzi active și pe cele recente. ' +
       'Acum sunt încărcate ' + Object.keys(SC.grupe).length + ' grupe (' + SC.comenzi.length + ' comenzi). Consumul real se vede în consola Firebase → Firestore → Usage.</p></div>';
     $('pag-admin').innerHTML = h;
+    bkArataFolder();
   }
   function schimbaUtilizator(uid, fn) {
     return SC.store.tx(function (t) {
@@ -3177,6 +3181,7 @@
   });
   $('pag-admin').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
+    if (b.id && b.id.indexOf('bk') === 0) { bkClick(b); return; }
     if (b.dataset.activ) {
       schimbaUtilizator(b.dataset.activ, function (u) { u.activ = !u.activ; }).then(function () { toast('Utilizator actualizat.', 'bun'); }, arataEroare);
     } else if (b.id === 'uAdauga') {
@@ -3385,6 +3390,381 @@
     arataTab(tab);
   }
 
+  /* =====================================================================
+     COPIE DE SIGURANTA (backup)
+     - un singur „calculator de backup” (config.backup = { disp, nume, de, t }), setat de Administrator chiar de pe el;
+       calculatorul se recunoaste dupa un cod tinut in browser (localStorage), iar folderul ales dupa un „handle” tinut
+       in IndexedDB-ul browserului (File System Access: Chrome / Edge pe calculator);
+     - pe acel calculator, o data pe zi, cand este logat un Administrator sau un Operator date, aplicatia citeste tot
+       si scrie un fisier in folder (de exemplu un folder OneDrive), pastrand ultimele BK_PASTREAZA fisiere;
+     - evidenta copiilor sta in meta/backup (ultima automata, ultima manuala, ultima eroare);
+     - restaurarea (doar Administrator) aduce baza de date la starea din fisier, scriind doar documentele care difera.
+     ===================================================================== */
+  var BK_PASTREAZA = 30, BK_ZILE_AVERTIZARE = 3, BK_INTARZIERE = 20000, BK_INTERVAL = 30 * 60000;
+  var BK_JURNAL_ZILE = 35;       // copiile automate facute de un Administrator iau jurnalul din ultimele zile; copia manuala il ia pe tot
+  var BK_PREFIX = 'Backup Status Comenzi ', BK_PREFIX_INAINTE = 'Inainte de restaurare Status Comenzi ';
+  var BK_RE = /^Backup Status Comenzi \d{4}-\d{2}-\d{2} \d{4}( manual)?\.json$/;
+  var bk = { info: undefined, cfgSosit: false, lucreaza: false, incercari: 0, avertizat: false, intarziere: BK_INTARZIERE };
+
+  function bkSuportat() { return typeof window.showDirectoryPicker === 'function' && !!window.indexedDB; }
+  function bkDisp() {
+    var id = '';
+    try { id = localStorage.getItem('sc_disp') || ''; if (!id) { id = SC.idScurt() + SC.idScurt(); localStorage.setItem('sc_disp', id); } } catch (e) { /* fara localStorage nu poate fi calculator de backup */ }
+    return id;
+  }
+  function bkCfg() { var c = SC.config && SC.config.backup; return c && c.disp ? c : null; }
+  function bkAici() { var c = bkCfg(); return !!c && c.disp === bkDisp(); }
+  function bkCand(t) { var d = new Date(t); return SC.fmtDT(SC.ymd(d) + ' ' + SC.p2(d.getHours()) + ':' + SC.p2(d.getMinutes())); }
+  function bkNr(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+  function bkJurnalText(x) { return !x.cuJurnal ? 'fără jurnal' : x.jurnalDela ? 'cu jurnalul de la ' + SC.fmtDataLunga(x.jurnalDela) : 'cu tot jurnalul'; }
+
+  /* ---- folderul ales, tinut minte in browser ---- */
+  function bkIdb() {
+    return new Promise(function (ok, rau) {
+      var r = indexedDB.open('sc-backup', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
+      r.onsuccess = function () { ok(r.result); }; r.onerror = function () { rau(r.error); };
+    });
+  }
+  function bkIdbGet(k) {
+    if (!window.indexedDB) return Promise.resolve(null);
+    return bkIdb().then(function (db) {
+      return new Promise(function (ok, rau) {
+        var q = db.transaction('kv').objectStore('kv').get(k);
+        q.onsuccess = function () { db.close(); ok(q.result || null); }; q.onerror = function () { db.close(); rau(q.error); };
+      });
+    });
+  }
+  function bkIdbSet(k, v) {
+    return bkIdb().then(function (db) {
+      return new Promise(function (ok, rau) {
+        var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k);
+        tx.oncomplete = function () { db.close(); ok(); }; tx.onerror = function () { db.close(); rau(tx.error); };
+      });
+    });
+  }
+  bk.depozit = { get: bkIdbGet, set: bkIdbSet };
+  /* 'granted' | 'prompt' | 'denied' | 'lipsa' ; cu cere=true browserul intreaba utilizatorul (merge doar in urma unui click) */
+  function bkPermisiune(h, cere) {
+    var opt = { mode: 'readwrite' };
+    if (!h) return Promise.resolve('lipsa');
+    if (!h.queryPermission) return Promise.resolve('granted');
+    return h.queryPermission(opt).then(function (p) { return p === 'prompt' && cere && h.requestPermission ? h.requestPermission(opt) : p; });
+  }
+  function bkAlegeFolder() {
+    return window.showDirectoryPicker({ id: 'sc-backup', mode: 'readwrite' }).then(function (h) {
+      return bkPermisiune(h, true).then(function (p) {
+        if (p !== 'granted') throw L.eroare('Browserul nu a permis scrierea în folderul ales.');
+        return bk.depozit.set('folder', h).then(function () { return h; });
+      });
+    }, function (e) { if (e && e.name === 'AbortError') return null; throw e; });
+  }
+  function bkScrieInFolder(h, nume, text) {
+    var marime = new Blob([text]).size;
+    return h.getFileHandle(nume, { create: true }).then(function (fh) {
+      return fh.createWritable().then(function (w) {
+        return w.write(new Blob([text], { type: 'application/json' })).then(function () { return w.close(); });
+      }).then(function () { return fh.getFile(); });
+    }).then(function (f) {
+      if (f.size !== marime) throw L.eroare('Fișierul de backup nu a fost scris complet (' + f.size + ' din ' + marime + ' octeți).');
+      return f.size;
+    });
+  }
+  /* pastreaza in folder doar ultimele BK_PASTREAZA copii (dupa numele fisierului, care incepe cu data) */
+  function bkCurata(h) {
+    var nume = [], it = h.entries();
+    function urm() {
+      return it.next().then(function (r) {
+        if (r.done) return;
+        if (r.value[1].kind === 'file' && BK_RE.test(r.value[0])) nume.push(r.value[0]);
+        return urm();
+      });
+    }
+    return urm().then(function () {
+      nume.sort();
+      return nume.slice(0, Math.max(0, nume.length - BK_PASTREAZA)).reduce(function (p, n) { return p.then(function () { return h.removeEntry(n); }); }, Promise.resolve());
+    });
+  }
+  function bkDescarca(nume, text) {
+    var a = document.createElement('a'), url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    a.href = url; a.download = nume; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+  }
+  function bkNumeFisier(prefix, t, manual) {
+    var d = new Date(t);
+    return prefix + SC.ymd(d) + ' ' + SC.p2(d.getHours()) + SC.p2(d.getMinutes()) + (manual ? ' manual' : '') + '.json';
+  }
+  /* scrie o copie deja citita: in folder (daca este dat) sau ca descarcare */
+  function bkSalveaza(copie, nume, folder) {
+    var text = JSON.stringify(copie);
+    var rez = { fisier: nume, comenzi: copie.nr.comenzi, doc: copie.nr.documente, kb: Math.round(text.length / 1024), cuJurnal: !!copie.cuJurnal, jurnalDela: copie.jurnalDela || '', t: copie.t };
+    if (!folder) { bkDescarca(nume, text); rez.loc = 'descarcat'; return Promise.resolve(rez); }
+    return bkScrieInFolder(folder, nume, text).then(function () { rez.loc = 'folder'; rez.folder = folder.name; return rez; });
+  }
+  /* citeste tot si salveaza; jurnalul intra doar cand drepturile reale sunt de Administrator:
+     tot la copia manuala, ultimele BK_JURNAL_ZILE zile la cea automata (ca numarul de citiri sa nu creasca in timp) */
+  function bkFa(opt) {
+    var jurnal = rolReal() !== 'admin' ? false : opt.manual ? true : { a: SC.ziPlus(SC.azi(), -BK_JURNAL_ZILE) };
+    return L.backupCiteste(jurnal, function (ce) { $('syncText').textContent = 'copie de siguranță: ' + ce.toLowerCase(); }).then(function (copie) {
+      return bkSalveaza(copie, bkNumeFisier(BK_PREFIX, copie.t, opt.manual), opt.folder).then(function (rez) {
+        return opt.folder ? bkCurata(opt.folder).then(function () { return rez; }, function () { return rez; }) : rez;
+      });
+    }).then(function (rez) { marcheazaSync(); return rez; }, function (e) { marcheazaSync(); throw e; });
+  }
+  function bkDateEvidenta(rez) {
+    var c = bkCfg(), d = { t: rez.t, u: SC.store.user.nume, fisier: rez.fisier, comenzi: rez.comenzi, doc: rez.doc, kb: rez.kb, cuJurnal: rez.cuJurnal, loc: rez.loc };
+    if (rez.jurnalDela) d.jurnalDela = rez.jurnalDela;
+    if (rez.folder) d.folder = rez.folder;
+    if (rez.loc === 'folder' && c) d.nume = c.nume;
+    return d;
+  }
+
+  /* ---- copia automata zilnica, doar pe calculatorul de backup ---- */
+  function bkBanda(ce) {
+    var el = $('bandaBackup'), admin = rolReal() === 'admin';
+    if (!ce) { el.className = 'ascuns'; el.innerHTML = ''; return; }
+    if (ce === 'cere') el.innerHTML = '<span><b>Copia de siguranță de azi așteaptă.</b> Browserul cere confirmarea accesului la folderul de backup.</span><button type="button" class="btn mic" id="bkPermite">Permite și fă copia</button>';
+    else if (ce === 'refuzat') el.innerHTML = '<span><b>Copia de siguranță de azi nu s-a făcut:</b> accesul la folderul de backup a fost refuzat în browser.</span><button type="button" class="btn mic" id="bkPermite">Încearcă din nou</button>';
+    else el.innerHTML = '<span><b>Copia de siguranță automată nu poate rula:</b> pe acest calculator nu mai este ales folderul de backup. ' +
+      (admin ? 'Alege-l din Administrare → Copie de siguranță.' : 'Anunță administratorul.') + '</span>';
+    el.className = '';
+  }
+  $('bandaBackup').addEventListener('click', function (e) { if (e.target.id === 'bkPermite') bkAutomat(true); });
+  /* cuGest = apelul vine dintr-un click (browserul poate intreba de acces); fortat = se face si daca azi exista deja o copie */
+  function bkAutomat(cuGest, fortat) {
+    var r = rolReal();
+    if (bk.lucreaza || !SC.store.user || (r !== 'admin' && r !== 'operator')) return Promise.resolve();
+    if (!bkAici()) { bkBanda(''); return Promise.resolve(); }
+    if (bk.info === undefined) return Promise.resolve();            // evidenta copiilor nu a sosit inca
+    var auto = (bk.info || {}).auto;
+    if (!fortat && auto && SC.ymd(new Date(auto.t)) === SC.azi()) { bkBanda(''); return Promise.resolve(); }
+    if (!bkSuportat()) { bkBanda('lipsa'); return Promise.resolve(); }
+    if (!cuGest && bk.incercari >= 3) return Promise.resolve();
+    try { if (Date.now() - (+localStorage.getItem('sc_bk_lucru') || 0) < 10 * 60000) return Promise.resolve(); } catch (e) { /* ignor */ }   // lucreaza alta fereastra
+    bk.lucreaza = true;
+    return bk.depozit.get('folder').then(function (h) {
+      return bkPermisiune(h, cuGest).then(function (p) {
+        if (p === 'lipsa') { bkBanda('lipsa'); return; }
+        if (p !== 'granted') { bkBanda(p === 'denied' ? 'refuzat' : 'cere'); return; }
+        bkBanda('');
+        try { localStorage.setItem('sc_bk_lucru', String(Date.now())); } catch (e) { /* ignor */ }
+        bk.incercari++;
+        return bkFa({ folder: h }).then(function (rez) {
+          return L.backupNoteaza('auto', bkDateEvidenta(rez), 'Copie de siguranță automată: ' + rez.fisier + ' (' + rez.comenzi + ' comenzi, ' + rez.doc + ' documente)').then(function () {
+            toast('Copia de siguranță de azi a fost salvată în folderul „' + rez.folder + '” (' + bkNr(rez.comenzi) + ' comenzi).', 'bun');
+          });
+        });
+      });
+    }).catch(function (e) {
+      var msg = e && e.message ? e.message : String(e);
+      toast('Copia de siguranță automată nu a reușit: ' + msg, 'rau');
+      return L.backupNoteaza('er', { t: Date.now(), u: SC.store.user ? SC.store.user.nume : '?', msg: msg.slice(0, 200) }).catch(function () { /* ignor */ });
+    }).then(function () { bk.lucreaza = false; try { localStorage.removeItem('sc_bk_lucru'); } catch (e) { /* ignor */ } });
+  }
+  function bkPorneste() {
+    var r = rolReal();
+    bk.info = undefined;
+    if (r !== 'admin' && r !== 'operator') { bkBanda(''); return; }
+    stare.opriri.push(SC.store.urmaresteDoc('meta', 'backup', function (d) {
+      bk.info = d || null;
+      if (stare.tab === 'admin') deseneazaAdmin();
+      bkAvertizeaza();
+    }));
+    var t1 = setTimeout(function () { bkAutomat(false); }, bk.intarziere), t2 = setInterval(function () { bkAutomat(false); }, BK_INTERVAL);
+    stare.opriri.push(function () { clearTimeout(t1); clearInterval(t2); });
+  }
+  /* Administratorul afla la intrare daca ultima copie automata este prea veche (pe calculatorul de backup copia porneste oricum singura) */
+  function bkAvertizeaza() {
+    if (bk.avertizat || rolReal() !== 'admin' || bk.info === undefined || !bk.cfgSosit) return;
+    var c = bkCfg(), auto = (bk.info || {}).auto;
+    if (!c || bkAici()) return;
+    var zile = auto ? (Date.now() - auto.t) / 86400000 : (Date.now() - (c.t || 0)) / 86400000;
+    if (zile <= BK_ZILE_AVERTIZARE) return;
+    bk.avertizat = true;
+    toast(auto ? 'Atenție: ultima copie de siguranță automată este din ' + bkCand(auto.t) + '. Verifică dacă aplicația este deschisă zilnic pe „' + c.nume + '”.'
+      : 'Atenție: pe „' + c.nume + '” nu s-a făcut încă nicio copie de siguranță automată.', 'rau');
+  }
+
+  /* ---- cardul din Administrare ---- */
+  function bkCard() {
+    var c = bkCfg(), info = bk.info || {}, auto = info.auto, man = info.manual, aici = bkAici();
+    var zile = auto ? (Date.now() - auto.t) / 86400000 : null, vechi = zile != null && zile > BK_ZILE_AVERTIZARE;
+    var h = '<div class="card"><h2>Copie de siguranță (backup)</h2><p>O copie pe zi a tuturor datelor, făcută automat pe <b>un singur calculator</b> (calculatorul de backup), într-un folder ales de pe el — ' +
+      'de exemplu un folder OneDrive. Se păstrează ultimele ' + BK_PASTREAZA + ' de fișiere. Copia conține comenzile, adresele, încărcările, CMR-urile, notificările și setările; ' +
+      'jurnalul de modificări intră doar când copia este făcută de un Administrator (ultimele ' + BK_JURNAL_ZILE + ' de zile la copia automată, tot la „Copie de siguranță acum”). ' +
+      'O copie consumă câte o citire pentru fiecare document (câteva sute din cele 50.000 zilnice).</p>';
+    if (bk.info === undefined) h += '<div class="mic" role="status">Se citește evidența copiilor…</div>';
+    else if (!c) h += '<div class="nota atentie"><b>Copia automată nu este configurată.</b> Datele există acum doar în Firebase.' + (auto ? ' Ultima copie automată: ' + esc(bkCand(auto.t)) + '.' : '') + '</div>';
+    else if (!auto) h += '<div class="nota atentie">Calculatorul de backup este setat, dar încă nu s-a făcut nicio copie automată.</div>';
+    else h += '<div class="nota ' + (vechi ? 'rau' : 'bun') + '">Ultima copie automată: <b>' + esc(bkCand(auto.t)) + '</b> · ' + esc(auto.nume || '') + ' · ' + esc(auto.u || '') + ' · ' + bkNr(auto.comenzi) + ' comenzi · ' +
+      bkNr(auto.doc) + ' documente · ' + bkNr(auto.kb) + ' KB · ' + esc(bkJurnalText(auto)) + '<br>Fișier: ' + esc(auto.fisier) + (auto.folder ? ' în folderul „' + esc(auto.folder) + '”' : '') +
+      (vechi ? '<br><b>Este mai veche de ' + BK_ZILE_AVERTIZARE + ' zile.</b> Verifică dacă aplicația este deschisă zilnic pe calculatorul de backup, cu un Operator date sau un Administrator.' : '') + '</div>';
+    if (info.er && (!auto || info.er.t > auto.t)) h += '<div class="nota rau" style="margin-top:6px">Ultima încercare automată (' + esc(bkCand(info.er.t)) + ', ' + esc(info.er.u || '') + ') nu a reușit: ' + esc(info.er.msg || '') + '</div>';
+    if (man) h += '<div class="mic" style="margin-top:6px">Ultima copie manuală: ' + esc(bkCand(man.t)) + ' · ' + esc(man.u || '') + ' · ' + esc(man.fisier) +
+      (man.loc === 'folder' ? ' în folderul „' + esc(man.folder || '') + '”' : ' (descărcată)') + ' · ' + esc(bkJurnalText(man)) + '</div>';
+    h += '<table class="simplu bk-tabel" style="margin-top:10px"><tr><td>Calculatorul de backup</td><td>' + (c ? '<b>' + esc(c.nume) + '</b> — ' + (aici ? 'acest calculator' : 'alt calculator') +
+      ' <span class="mic">(setat de ' + esc(c.de || '') + (c.t ? ' la ' + esc(bkCand(c.t)) : '') + ')</span>' : 'nesetat') + '</td></tr>' +
+      (aici ? '<tr><td>Folderul de pe acest calculator</td><td id="bkFolder">…</td></tr>' : '') + '</table>';
+    if (!bkSuportat()) h += '<div class="mic" style="margin-top:6px">Pe acest browser copia automată în folder nu este disponibilă (merge în Chrome sau Edge, pe calculator). „Copie de siguranță acum” descarcă fișierul.</div>';
+    h += '<div class="rand-form" style="margin-top:10px">' +
+      (aici ? '<button class="btn" id="bkFolderAlt">Schimbă folderul…</button><button class="btn" id="bkOpreste">Oprește copia automată</button>'
+        : '<button class="btn" id="bkSeteaza">' + (c ? 'Mută backup-ul pe acest calculator…' : 'Setează acest calculator ca și calculator de backup…') + '</button>' +
+          (c ? '<button class="btn" id="bkOpreste">Oprește copia automată</button>' : '')) +
+      '<button class="btn" id="bkAcum">Copie de siguranță acum</button><button class="btn rosu" id="bkRestaureaza">Restaurare din copie…</button></div></div>';
+    return h;
+  }
+  function bkArataFolder() {
+    if (!$('bkFolder')) return;
+    bk.depozit.get('folder').then(function (h) {
+      return bkPermisiune(h, false).then(function (p) {
+        var el = $('bkFolder'); if (!el) return;
+        el.innerHTML = p === 'lipsa' ? '<span class="nota rau">neales — apasă „Schimbă folderul…”</span>'
+          : '<b>' + esc(h.name) + '</b> — ' + (p === 'granted' ? 'acces permis' : p === 'denied' ? 'acces refuzat în browser' : 'browserul va cere confirmarea la următoarea copie');
+      });
+    }).catch(function () { var el = $('bkFolder'); if (el) el.textContent = 'nu poate fi citit'; });
+  }
+  function bkSalveazaCfg(backup, text) {
+    var cfg = Object.assign({}, SC.config);
+    if (backup) cfg.backup = backup; else delete cfg.backup;
+    return SC.store.tx(function (t) { t.set('meta', 'config', cfg); t.log(text); }).then(function () { SC.config = cfg; });
+  }
+  function bkClick(b) {
+    if (!eAdmin()) return;
+    if (b.id === 'bkSeteaza') bkSeteaza();
+    else if (b.id === 'bkFolderAlt') {
+      bkAlegeFolder().then(function (h) { if (h) { toast('Folderul de backup este acum „' + h.name + '”.', 'bun'); bkBanda(''); deseneazaAdmin(); } }).catch(arataEroare);
+    } else if (b.id === 'bkOpreste') {
+      var c = bkCfg();
+      confirma('Oprești copia de siguranță automată de pe „' + (c ? c.nume : '') + '”?\nFișierele deja salvate rămân în folder.').then(function (ok) {
+        if (!ok) return;
+        return bkSalveazaCfg(null, 'Copie de siguranță: copia automată a fost oprită').then(function () { bkBanda(''); toast('Copia automată a fost oprită.', 'bun'); deseneazaAdmin(); });
+      }).catch(arataEroare);
+    } else if (b.id === 'bkAcum') {
+      b.disabled = true; toast('Se face copia de siguranță…');
+      (bkAici() && bkSuportat() ? bk.depozit.get('folder').then(function (h) { return bkPermisiune(h, true).then(function (p) { return p === 'granted' ? h : null; }); }) : Promise.resolve(null)).then(function (h) {
+        return bkFa({ manual: true, folder: h });
+      }).then(function (rez) {
+        return L.backupNoteaza('manual', bkDateEvidenta(rez), 'Copie de siguranță manuală: ' + rez.fisier + ' (' + rez.comenzi + ' comenzi, ' + rez.doc + ' documente)').then(function () {
+          toast(rez.loc === 'folder' ? 'Copie salvată în folderul „' + rez.folder + '”: ' + rez.fisier : 'Copie descărcată: ' + rez.fisier + '. Mut-o într-un loc sigur.', 'bun');
+        });
+      }).catch(arataEroare).then(function () { b.disabled = false; });
+    } else if (b.id === 'bkRestaureaza') bkRestaureaza();
+  }
+  function bkSeteaza() {
+    if (!bkSuportat()) { alerta('Copia automată într-un folder merge doar în Chrome sau Edge, pe calculator.\nDeschide aplicația în unul dintre ele pe calculatorul care va face copiile.'); return; }
+    if (!bkDisp()) { alerta('Browserul nu permite păstrarea setărilor pe acest calculator (localStorage), deci nu poate fi calculator de backup.'); return; }
+    var c = bkCfg();
+    modal({
+      titlu: 'Calculatorul de backup',
+      html: (c ? '<div class="nota atentie">Copia automată este setată acum pe „' + esc(c.nume) + '”. Dacă continui, se mută pe acest calculator.</div>' : '') +
+        '<p>Copia automată se va face <b>doar de pe acest calculator</b> (din acest browser), o dată pe zi, când aplicația este deschisă de un Operator date sau de un Administrator.</p>' +
+        '<label class="camp"><span>Numele acestui calculator (apare în Administrare)</span><input type="text" id="bkNume" maxlength="40" value="' + esc(c && !bkAici() ? '' : 'PC Operator date') + '" placeholder="ex. PC Operator date"></label>' +
+        '<p class="mic">La pasul următor alegi folderul în care se scriu copiile, de exemplu un folder nou din OneDrive („Backup Status Comenzi”). Browserul cere acordul pentru a scrie în el.</p>',
+      butoane: [{ t: 'Renunță', v: null }, {
+        t: 'Alege folderul…', cls: 'pri', fn: function (rad) {
+          var nume = rad.querySelector('#bkNume').value.trim();
+          if (nume.length < 2) { toast('Scrie un nume pentru calculator.', 'rau'); return false; }
+          return bkAlegeFolder().then(function (h) {
+            if (!h) return false;
+            return bkSalveazaCfg({ disp: bkDisp(), nume: nume, de: SC.store.user.nume, t: Date.now() },
+              'Copie de siguranță: calculatorul de backup este „' + nume + '”, folderul „' + h.name + '”').then(function () { return true; });
+          });
+        }
+      }]
+    }).then(function (ok) {
+      if (ok !== true) return;
+      toast('Calculatorul de backup a fost setat. Fac prima copie…', 'bun');
+      bk.incercari = 0; deseneazaAdmin();
+      return bkAutomat(true, true).then(function () { deseneazaAdmin(); });
+    }).catch(arataEroare);
+  }
+
+  /* ---- restaurarea dintr-o copie (doar Administrator) ---- */
+  function bkAlegeJson() {
+    return new Promise(function (ok) {
+      var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json'; inp.id = 'bkFisier'; inp.style.display = 'none';
+      document.body.appendChild(inp);
+      inp.onchange = function () { var f = inp.files && inp.files[0]; inp.remove(); if (f) ok(f); };
+      inp.click();
+    });
+  }
+  function bkPlanHtml(copie, acum, plan) {
+    var randuri = [['comenzi', 'adrese', 'extra', 'notificari', 'cmr', 'meta'], copie.col.jurnal && acum.col.jurnal ? ['jurnal'] : []];
+    var h = '<table class="simplu bk-plan"><tr><th></th><th class="nr">În copie</th><th class="nr">Acum</th><th class="nr">Se rescriu</th><th class="nr">Se șterg</th></tr>' +
+      '<tr><td><b>Comenzi</b></td><td class="nr"><b>' + bkNr(L.backupNumaraComenzi(copie.col.comenzi)) + '</b></td><td class="nr"><b>' + bkNr(L.backupNumaraComenzi(acum.col.comenzi)) + '</b></td><td></td><td></td></tr>';
+    randuri[0].concat(randuri[1]).forEach(function (col) {
+      var p = plan.pe[col] || { scrie: 0, sterge: 0 };
+      h += '<tr><td>' + esc(L.BACKUP_NUME[col]) + '</td><td class="nr">' + (copie.col[col] ? bkNr(Object.keys(copie.col[col]).length) : '—') + '</td><td class="nr">' + bkNr(Object.keys(acum.col[col] || {}).length) +
+        '</td><td class="nr">' + bkNr(p.scrie) + '</td><td class="nr">' + bkNr(p.sterge) + '</td></tr>';
+    });
+    return h + '<tr><th>Total documente</th><th></th><th></th><th class="nr">' + bkNr(plan.nrScrie) + '</th><th class="nr">' + bkNr(plan.nrSterge) + '</th></tr></table>' +
+      '<div class="mic" style="margin-top:4px">' + bkNr(plan.nrLaFel) + ' documente sunt identice și nu se ating. Consum: ' + bkNr(plan.nrScrie + plan.nrSterge) + ' scrieri din cele 20.000 zilnice ale planului gratuit.</div>';
+  }
+  function bkRestaureaza() {
+    if (!eAdmin()) return;
+    var fisier, copie;
+    bkAlegeJson().then(function (f) {
+      fisier = f; toast('Se citește copia…');
+      return f.text();
+    }).then(function (text) {
+      try { copie = JSON.parse(text); } catch (e) { throw L.eroare('Fișierul nu poate fi citit: nu este o copie de siguranță Status Comenzi întreagă.'); }
+      var er = L.backupVerifica(copie); if (er) throw L.eroare(er);
+      toast('Se compară copia cu datele de acum…');
+      return L.backupCiteste(L.backupIntervalJurnal(copie), function (ce) { $('syncText').textContent = 'citesc: ' + ce.toLowerCase(); });
+    }).then(function (acum) {
+      marcheazaSync();
+      var plan = L.backupPlan(copie, acum, true);
+      var altMediu = copie.mod !== acum.mod || (copie.proiect || '') !== (acum.proiect || '');
+      if (!plan.nrScrie && !plan.nrSterge) { alerta('Copia este identică cu datele de acum. Nu este nimic de restaurat.'); return null; }
+      var html = '<div class="nota">Fișier: <b>' + esc(fisier.name) + '</b><br>Copie făcută la <b>' + esc(bkCand(copie.t)) + '</b> de ' + esc(copie.user || '?') + ' · aplicația ' + esc(copie.aplicatie || '?') +
+        ' · ' + esc(bkJurnalText(copie)) + '</div>' +
+        (altMediu ? '<div class="nota rau" style="margin-top:6px"><b>Copia provine din alt mediu</b> (' + esc(copie.mod === 'demo' ? 'mod demonstrație' : 'proiectul ' + (copie.proiect || '?')) + '). Continuă doar dacă știi că asta vrei.</div>' : '') +
+        '<div id="bkPlan" style="margin-top:8px">' + bkPlanHtml(copie, acum, plan) + '</div>' +
+        '<label class="bifa" style="margin-top:8px"><input type="checkbox" id="bkCuSetari" checked> <span>Restaurează și setările (clienți, reguli, adresele de email pentru CMR, exportul TMS)</span></label>' +
+        '<div class="nota atentie" style="margin-top:8px"><b>Tot ce s-a modificat după ' + esc(bkCand(copie.t)) + ' se pierde</b>: comenzi adăugate, statusuri, încărcări, CMR-uri. ' +
+        'Înainte de restaurare, starea de acum se salvează într-un fișier „' + esc(BK_PREFIX_INAINTE.trim()) + ' …”, din care se poate reveni. ' +
+        (copie.col.jurnal ? 'Jurnalul nu se șterge: se adaugă doar orele care lipsesc. ' : 'Jurnalul de modificări rămâne cel de acum. ') + 'Utilizatorii și PIN-urile nu se schimbă.<br>' +
+        'Cere colegilor să nu lucreze în aplicație până se termină și apoi să reîncarce pagina (Ctrl+F5).</div>' +
+        '<label class="camp" style="margin-top:8px"><span>Scrie RESTAUREZ pentru confirmare</span><input type="text" id="bkConfirm" autocomplete="off"></label>';
+      return modal({
+        titlu: 'Restaurare din copia de siguranță', lat: true, html: html,
+        laDeschidere: function (rad) {
+          rad.querySelector('#bkCuSetari').addEventListener('change', function () {
+            rad.querySelector('#bkPlan').innerHTML = bkPlanHtml(copie, acum, L.backupPlan(copie, acum, this.checked));
+          });
+        },
+        butoane: [{ t: 'Renunță', v: null }, {
+          t: 'Restaurează', cls: 'pri', fn: function (rad) {
+            if (rad.querySelector('#bkConfirm').value.trim().toUpperCase() !== 'RESTAUREZ') { toast('Scrie RESTAUREZ în câmpul de confirmare.', 'rau'); return false; }
+            return { cuSetari: rad.querySelector('#bkCuSetari').checked };
+          }
+        }]
+      });
+    }).then(function (ales) {
+      if (!ales) return;
+      var plan, rezInainte;
+      toast('Restaurare în curs… nu închide pagina.');
+      /* starea se citeste inca o data chiar inainte de scriere: planul si fisierul „inainte de restaurare” sunt cele de acum */
+      return L.backupCiteste(L.backupIntervalJurnal(copie), function (ce) { $('syncText').textContent = 'citesc: ' + ce.toLowerCase(); }).then(function (acum) {
+        plan = L.backupPlan(copie, acum, ales.cuSetari);
+        return (bkAici() && bkSuportat() ? bk.depozit.get('folder').then(function (h) { return bkPermisiune(h, false).then(function (p) { return p === 'granted' ? h : null; }); }) : Promise.resolve(null)).then(function (h) {
+          return bkSalveaza(acum, bkNumeFisier(BK_PREFIX_INAINTE, acum.t, false), h);
+        });
+      }).then(function (rez) {
+        rezInainte = rez;
+        opresteUrmarireaComenzilor();
+        return L.backupAplica(plan, 'Restaurare din copia de siguranță „' + fisier.name + '” (făcută la ' + bkCand(copie.t) + ' de ' + (copie.user || '?') + '): ' +
+          plan.nrScrie + ' documente rescrise, ' + plan.nrSterge + ' șterse' + (ales.cuSetari ? ', cu setări' : ', fără setări') + '. Starea dinainte: ' + rez.fisier,
+          function (a, b) { $('syncText').textContent = 'restaurare ' + a + '/' + b; });
+      }).then(function () {
+        L.golesteCache(); kpUitaArhiva(); stare.primaData = true;
+        repornesteUrmarireaComenzilor();
+        return alerta('Restaurare terminată.\n\nDocumente rescrise: ' + plan.nrScrie + '\nDocumente șterse: ' + plan.nrSterge + '\n\nStarea dinainte a fost salvată în:\n' + rezInainte.fisier +
+          (rezInainte.loc === 'folder' ? ' (folderul „' + rezInainte.folder + '”)' : ' (descărcat)') + '\n\nCere colegilor să reîncarce pagina (Ctrl+F5).');
+      }, function (e) { if (!stare.pornit) repornesteUrmarireaComenzilor(); throw e; });
+    }).catch(function (e) { marcheazaSync(); arataEroare(e); });
+  }
+
   /* ================= start ================= */
   window.addEventListener('afterprint', function () { $('tiparire').innerHTML = ''; });
   SC.creeazaStore();
@@ -3394,5 +3774,5 @@
     $('loginText').textContent = '';
     $('loginEroare').textContent = 'Aplicația nu a putut porni: ' + (e && e.message ? e.message : e) + '. Verifică internetul și config.js.';
   });
-  SC._test = { stare: stare, schimbaStatus: schimbaStatus, redeseneaza: redeseneaza };
+  SC._test = { stare: stare, schimbaStatus: schimbaStatus, redeseneaza: redeseneaza, bk: bk, bkAutomat: bkAutomat };
 })();

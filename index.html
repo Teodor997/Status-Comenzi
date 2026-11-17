@@ -69,6 +69,10 @@
   #banda.rau { background: #fde2e0; color: #7a1b15; border-color: #efb1ac; }
   #bandaRol { background: #ffe9a8; color: #5a3d00; padding: 7px 12px; font-size: 13.5px; border-bottom: 2px solid #d9a400; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
   #bandaRol.ascuns { display: none; }
+  #bandaBackup { background: #fff3cd; color: #5c4400; padding: 7px 12px; font-size: 13.5px; border-bottom: 1px solid #e6d28a; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+  #bandaBackup.ascuns { display: none; }
+  .bk-tabel td:first-child { color: var(--muted, #5b6472); white-space: nowrap; padding-right: 18px; }
+  .bk-plan td.nr, .bk-plan th.nr { text-align: right; }
   .vezi-ca { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .vezi-ca.ascuns { display: none; }
   .vezi-ca select { height: 28px; padding: 0 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,.55); background: #fff; color: var(--text); font: inherit; font-size: 13px; }
@@ -365,6 +369,7 @@
   </header>
   <div id="banda" class="ascuns"></div>
   <div id="bandaRol" class="ascuns" role="status"></div>
+  <div id="bandaBackup" class="ascuns" role="status"></div>
   <main>
     <!-- COMENZI -->
     <section class="pagina" id="pag-comenzi">
