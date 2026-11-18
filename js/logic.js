@@ -1210,6 +1210,24 @@
   };
   L.registruOcteti = function (wb) { return XLSX.write(wb, { bookType: 'xlsx', type: 'array', compression: true, bookSST: true }); };
 
+  /* ---- arhiva .zip, pentru copia salvata ca descarcare a browserului (un singur fisier: copia .json + registrul Excel) ----
+     Se foloseste scrierea / citirea de arhive din biblioteca SheetJS, deja incarcata. */
+  L.backupArhiva = function (fisiere) {
+    var cfb = XLSX.CFB.utils.cfb_new();
+    fisiere.forEach(function (f) { XLSX.CFB.utils.cfb_add(cfb, f.nume, f.octeti); });
+    var o = XLSX.CFB.write(cfb, { fileType: 'zip', type: 'array', compression: true });
+    return o instanceof Uint8Array ? o : new Uint8Array(o);
+  };
+  /* textul copiei .json dintr-o arhiva facuta de aplicatie */
+  L.backupDinArhiva = function (octeti) {
+    var cfb, i = -1;
+    try { cfb = XLSX.CFB.read(octeti, { type: 'array' }); } catch (e) { throw eroare('Arhiva nu poate fi citită: nu este o copie de siguranță făcută de aplicație sau fișierul este stricat.'); }
+    (cfb.FullPaths || []).forEach(function (cale, k) { if (i < 0 && /\.json$/i.test(cale)) i = k; });
+    if (i < 0) throw eroare('Arhiva nu conține nicio copie de siguranță (.json).');
+    var c = cfb.FileIndex[i].content;
+    return new TextDecoder('utf-8').decode(c instanceof Uint8Array ? c : new Uint8Array(c));
+  };
+
   /* evidenta copiilor (meta/backup): ultima copie automata, ultima manuala, ultima eroare. Un document mic, citit o data la pornire. */
   L.backupNoteaza = function (camp, date, textJurnal) {
     return SC.store.tx(function (t) {

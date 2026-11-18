@@ -3417,6 +3417,12 @@
   }
   function bkCfg() { var c = SC.config && SC.config.backup; return c && c.disp ? c : null; }
   function bkAici() { var c = bkCfg(); return !!c && c.disp === bkDisp(); }
+  /* Doua feluri de a salva copiile pe calculatorul de backup (config.backup.mod):
+     'folder' (implicit) = aplicatia scrie direct intr-un folder ales (File System Access) si pastreaza ultimele BK_PASTREAZA fisiere;
+     'descarcare' = un fisier .zip pe zi, ca descarcare obisnuita a browserului, pentru cand browserul sau o regula a firmei
+     nu permite alegerea unui folder. Aici aplicatia nu poate verifica daca fisierul a ajuns pe disc si nu poate sterge copiile vechi. */
+  function bkDescarcare() { var c = bkCfg(); return !!c && c.mod === 'descarcare'; }
+  function bkFolderBlocat() { try { return localStorage.getItem('sc_bk_fara_folder') === '1'; } catch (e) { return false; } }
   function bkCand(t) { var d = new Date(t); return SC.fmtDT(SC.ymd(d) + ' ' + SC.p2(d.getHours()) + ':' + SC.p2(d.getMinutes())); }
   function bkNr(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
   function bkJurnalText(x) { return !x.cuJurnal ? 'fără jurnal' : x.jurnalDela ? 'cu jurnalul de la ' + SC.fmtDataLunga(x.jurnalDela) : 'cu tot jurnalul'; }
@@ -3458,9 +3464,18 @@
     return window.showDirectoryPicker({ id: 'sc-backup', mode: 'readwrite' }).then(function (h) {
       return bkPermisiune(h, true).then(function (p) {
         if (p !== 'granted') throw L.eroare('Browserul nu a permis scrierea în folderul ales.');
+        try { localStorage.removeItem('sc_bk_fara_folder'); } catch (e) { /* ignor */ }
         return bk.depozit.set('folder', h).then(function () { return h; });
       });
-    }, function (e) { if (e && e.name === 'AbortError') return null; throw e; });
+    }, function (e) {
+      if (e && e.name === 'AbortError') return null;                       // utilizatorul a inchis fereastra de alegere
+      if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
+        try { localStorage.setItem('sc_bk_fara_folder', '1'); } catch (x) { /* ignor */ }
+        var er = L.eroare('Browserul nu permite alegerea unui folder (o setare a lui sau o regulă a firmei). Folosește varianta „Ca descărcare a browserului”.');
+        er.folderBlocat = true; throw er;
+      }
+      throw e;
+    });
   }
   /* continut = text (JSON) sau octeti (Excel) */
   function bkScrieInFolder(h, nume, continut) {
@@ -3498,10 +3513,24 @@
       return bkScrieInFolder(folder, nume, octeti).then(function (marime) { rez.excel = nume; rez.excelKb = Math.round(marime / 1024); });
     }).catch(function (e) { rez.excelEr = (e && e.message ? e.message : String(e)).slice(0, 200); }).then(function () { return rez; });
   }
-  function bkDescarca(nume, text) {
-    var a = document.createElement('a'), url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  /* continut = text (JSON) sau octeti (arhiva .zip) */
+  function bkDescarca(nume, continut) {
+    var tip = typeof continut === 'string' ? 'application/json' : 'application/zip';
+    var a = document.createElement('a'), url = URL.createObjectURL(new Blob([continut], { type: tip }));
     a.href = url; a.download = nume; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+  }
+  /* copia pentru descarcare: un singur fisier .zip cu copia .json si registrul Excel (o singura descarcare, deci browserul nu intreaba
+     de „mai multe fisiere”); daca Excelul nu poate fi facut, arhiva contine doar copia .json */
+  function bkArhiva(copie, manual) {
+    var numeJson = bkNumeFisier(BK_PREFIX, copie.t, manual), numeXlsx = bkNumeFisier(BK_PREFIX_XLSX, copie.t, manual).replace(/\.json$/, '.xlsx');
+    var fisiere = [{ nume: numeJson, octeti: new TextEncoder().encode(JSON.stringify(copie)) }];
+    var rez = { fisier: numeJson.replace(/\.json$/, '.zip'), comenzi: copie.nr.comenzi, doc: copie.nr.documente, cuJurnal: !!copie.cuJurnal, jurnalDela: copie.jurnalDela || '', t: copie.t, loc: 'descarcat' };
+    try { fisiere.push({ nume: numeXlsx, octeti: new Uint8Array(L.registruOcteti(L.registruExcel(L.comenziDinGrupe(copie.col.comenzi), copie.col.adrese))) }); rez.excel = numeXlsx; }
+    catch (e) { rez.excelEr = (e && e.message ? e.message : String(e)).slice(0, 200); }
+    var octeti = L.backupArhiva(fisiere);
+    rez.kb = Math.round(octeti.length / 1024);
+    return { rez: rez, octeti: octeti };
   }
   function bkNumeFisier(prefix, t, manual) {
     var d = new Date(t);
@@ -3519,8 +3548,11 @@
   function bkFa(opt) {
     var jurnal = rolReal() !== 'admin' ? false : opt.manual ? true : { a: SC.ziPlus(SC.azi(), -BK_JURNAL_ZILE) };
     return L.backupCiteste(jurnal, function (ce) { $('syncText').textContent = 'copie de siguranță: ' + ce.toLowerCase(); }).then(function (copie) {
+      if (!opt.folder) {
+        $('syncText').textContent = 'copie de siguranță: arhiva';
+        return new Promise(function (ok) { setTimeout(ok, 30); }).then(function () { var a = bkArhiva(copie, opt.manual); bkDescarca(a.rez.fisier, a.octeti); return a.rez; });
+      }
       return bkSalveaza(copie, bkNumeFisier(BK_PREFIX, copie.t, opt.manual), opt.folder).then(function (rez) {
-        if (!opt.folder) return rez;
         $('syncText').textContent = 'copie de siguranță: registrul excel';
         return bkScrieExcel(copie, opt.folder, opt.manual, rez).then(function () { return bkCurata(opt.folder); }).then(function () { return rez; }, function () { return rez; });
       });
@@ -3532,7 +3564,7 @@
     if (rez.excel) d.excel = rez.excel;
     if (rez.excelEr) d.excelEr = rez.excelEr;
     if (rez.folder) d.folder = rez.folder;
-    if (rez.loc === 'folder' && c) d.nume = c.nume;
+    if (c && bkAici()) d.nume = c.nume;
     return d;
   }
 
@@ -3555,22 +3587,29 @@
     if (bk.info === undefined) return Promise.resolve();            // evidenta copiilor nu a sosit inca
     var auto = (bk.info || {}).auto;
     if (!fortat && auto && SC.ymd(new Date(auto.t)) === SC.azi()) { bkBanda(''); return Promise.resolve(); }
-    if (!bkSuportat()) { bkBanda('lipsa'); return Promise.resolve(); }
+    var descarcare = bkDescarcare();
+    if (!descarcare && !bkSuportat()) { bkBanda('lipsa'); return Promise.resolve(); }
     if (!cuGest && bk.incercari >= 3) return Promise.resolve();
     try { if (Date.now() - (+localStorage.getItem('sc_bk_lucru') || 0) < 10 * 60000) return Promise.resolve(); } catch (e) { /* ignor */ }   // lucreaza alta fereastra
     bk.lucreaza = true;
-    return bk.depozit.get('folder').then(function (h) {
+    /* folderul (cu acordul browserului) sau, la varianta cu descarcare, nimic de pregatit */
+    var pregatire = descarcare ? Promise.resolve({ ok: true, folder: null }) : bk.depozit.get('folder').then(function (h) {
       return bkPermisiune(h, cuGest).then(function (p) {
-        if (p === 'lipsa') { bkBanda('lipsa'); return; }
-        if (p !== 'granted') { bkBanda(p === 'denied' ? 'refuzat' : 'cere'); return; }
-        bkBanda('');
-        try { localStorage.setItem('sc_bk_lucru', String(Date.now())); } catch (e) { /* ignor */ }
-        bk.incercari++;
-        return bkFa({ folder: h }).then(function (rez) {
-          return L.backupNoteaza('auto', bkDateEvidenta(rez), 'Copie de siguranță automată: ' + rez.fisier + ' (' + rez.comenzi + ' comenzi, ' + rez.doc + ' documente)').then(function () {
-            toast('Copia de siguranță de azi a fost salvată în folderul „' + rez.folder + '” (' + bkNr(rez.comenzi) + ' comenzi' + (rez.excel ? ', cu registrul Excel' : '') + ').', 'bun');
-            if (rez.excelEr) toast('Registrul Excel nu a putut fi scris lângă copie: ' + rez.excelEr + ' Copia .json este în regulă.', 'rau');
-          });
+        if (p === 'lipsa') { bkBanda('lipsa'); return { ok: false }; }
+        if (p !== 'granted') { bkBanda(p === 'denied' ? 'refuzat' : 'cere'); return { ok: false }; }
+        return { ok: true, folder: h };
+      });
+    });
+    return pregatire.then(function (x) {
+      if (!x.ok) return;
+      bkBanda('');
+      try { localStorage.setItem('sc_bk_lucru', String(Date.now())); } catch (e) { /* ignor */ }
+      bk.incercari++;
+      return bkFa({ folder: x.folder }).then(function (rez) {
+        return L.backupNoteaza('auto', bkDateEvidenta(rez), 'Copie de siguranță automată: ' + rez.fisier + ' (' + rez.comenzi + ' comenzi, ' + rez.doc + ' documente)').then(function () {
+          toast(rez.loc === 'folder' ? 'Copia de siguranță de azi a fost salvată în folderul „' + rez.folder + '” (' + bkNr(rez.comenzi) + ' comenzi' + (rez.excel ? ', cu registrul Excel' : '') + ').'
+            : 'Copia de siguranță de azi a fost descărcată: ' + rez.fisier + ' (' + bkNr(rez.comenzi) + ' comenzi' + (rez.excel ? ', cu registrul Excel' : '') + ').', 'bun');
+          if (rez.excelEr) toast('Registrul Excel nu a putut fi făcut: ' + rez.excelEr + ' Copia .json este în regulă.', 'rau');
         });
       });
     }).catch(function (e) {
@@ -3607,27 +3646,31 @@
   function bkCard() {
     var c = bkCfg(), info = bk.info || {}, auto = info.auto, man = info.manual, aici = bkAici();
     var zile = auto ? (Date.now() - auto.t) / 86400000 : null, vechi = zile != null && zile > BK_ZILE_AVERTIZARE;
-    var h = '<div class="card"><h2>Copie de siguranță (backup)</h2><p>O copie pe zi a tuturor datelor, făcută automat pe <b>un singur calculator</b> (calculatorul de backup), într-un folder ales de pe el — ' +
-      'de exemplu un folder OneDrive. Lângă fiecare copie (.json, din care se face restaurarea) se scrie și registrul în Excel, pe modelul „Status Comenzi”, doar pentru consultat. ' +
-      'Se păstrează ultimele ' + BK_PASTREAZA + ' de fișiere de fiecare fel. Copia conține comenzile, adresele, încărcările, CMR-urile, notificările și setările; ' +
+    var h = '<div class="card"><h2>Copie de siguranță (backup)</h2><p>O copie pe zi a tuturor datelor, făcută automat pe <b>un singur calculator</b> (calculatorul de backup): fie direct într-un folder ales de pe el ' +
+      '(de exemplu un folder OneDrive; se păstrează ultimele ' + BK_PASTREAZA + ' de fișiere de fiecare fel), fie, dacă browserul nu permite, ca descărcare a browserului (un fișier .zip pe zi). ' +
+      'Lângă copie (.json, din care se face restaurarea) vine și registrul în Excel, pe modelul „Status Comenzi”, doar pentru consultat. Copia conține comenzile, adresele, încărcările, CMR-urile, notificările și setările; ' +
       'jurnalul de modificări intră doar când copia este făcută de un Administrator (ultimele ' + BK_JURNAL_ZILE + ' de zile la copia automată, tot la „Copie de siguranță acum”). ' +
       'O copie consumă câte o citire pentru fiecare document (câteva sute din cele 50.000 zilnice).</p>';
     if (bk.info === undefined) h += '<div class="mic" role="status">Se citește evidența copiilor…</div>';
     else if (!c) h += '<div class="nota atentie"><b>Copia automată nu este configurată.</b> Datele există acum doar în Firebase.' + (auto ? ' Ultima copie automată: ' + esc(bkCand(auto.t)) + '.' : '') + '</div>';
     else if (!auto) h += '<div class="nota atentie">Calculatorul de backup este setat, dar încă nu s-a făcut nicio copie automată.</div>';
     else h += '<div class="nota ' + (vechi ? 'rau' : 'bun') + '">Ultima copie automată: <b>' + esc(bkCand(auto.t)) + '</b> · ' + esc(auto.nume || '') + ' · ' + esc(auto.u || '') + ' · ' + bkNr(auto.comenzi) + ' comenzi · ' +
-      bkNr(auto.doc) + ' documente · ' + bkNr(auto.kb) + ' KB · ' + esc(bkJurnalText(auto)) + '<br>Fișier: ' + esc(auto.fisier) + (auto.folder ? ' în folderul „' + esc(auto.folder) + '”' : '') +
-      (auto.excel ? '<br>Registru Excel: ' + esc(auto.excel) : auto.excelEr ? '<br><b>Registrul Excel nu a putut fi scris:</b> ' + esc(auto.excelEr) : '') +
+      bkNr(auto.doc) + ' documente · ' + bkNr(auto.kb) + ' KB · ' + esc(bkJurnalText(auto)) + '<br>Fișier: ' + esc(auto.fisier) + (auto.folder ? ' în folderul „' + esc(auto.folder) + '”' : auto.loc === 'descarcat' ? ' — pornit ca descărcare a browserului' : '') +
+      (auto.excel ? (auto.loc === 'descarcat' ? '<br>Arhiva conține copia .json și registrul Excel: ' : '<br>Registru Excel: ') + esc(auto.excel) : auto.excelEr ? '<br><b>Registrul Excel nu a putut fi făcut:</b> ' + esc(auto.excelEr) : '') +
       (vechi ? '<br><b>Este mai veche de ' + BK_ZILE_AVERTIZARE + ' zile.</b> Verifică dacă aplicația este deschisă zilnic pe calculatorul de backup, cu un Operator date sau un Administrator.' : '') + '</div>';
     if (info.er && (!auto || info.er.t > auto.t)) h += '<div class="nota rau" style="margin-top:6px">Ultima încercare automată (' + esc(bkCand(info.er.t)) + ', ' + esc(info.er.u || '') + ') nu a reușit: ' + esc(info.er.msg || '') + '</div>';
     if (man) h += '<div class="mic" style="margin-top:6px">Ultima copie manuală: ' + esc(bkCand(man.t)) + ' · ' + esc(man.u || '') + ' · ' + esc(man.fisier) +
       (man.loc === 'folder' ? ' în folderul „' + esc(man.folder || '') + '”' + (man.excel ? ' + ' + esc(man.excel) : '') : ' (descărcată)') + ' · ' + esc(bkJurnalText(man)) + '</div>';
     h += '<table class="simplu bk-tabel" style="margin-top:10px"><tr><td>Calculatorul de backup</td><td>' + (c ? '<b>' + esc(c.nume) + '</b> — ' + (aici ? 'acest calculator' : 'alt calculator') +
       ' <span class="mic">(setat de ' + esc(c.de || '') + (c.t ? ' la ' + esc(bkCand(c.t)) : '') + ')</span>' : 'nesetat') + '</td></tr>' +
-      (aici ? '<tr><td>Folderul de pe acest calculator</td><td id="bkFolder">…</td></tr>' : '') + '</table>';
-    if (!bkSuportat()) h += '<div class="mic" style="margin-top:6px">Pe acest browser copia automată în folder nu este disponibilă (merge în Chrome sau Edge, pe calculator). „Copie de siguranță acum” descarcă fișierul.</div>';
+      (c ? '<tr><td>Cum se salvează copiile</td><td>' + (c.mod === 'descarcare' ? 'ca <b>descărcare a browserului</b>: un fișier .zip pe zi, în folderul de descărcări' : 'direct într-un <b>folder ales</b>') + '</td></tr>' : '') +
+      (aici && c.mod !== 'descarcare' ? '<tr><td>Folderul de pe acest calculator</td><td id="bkFolder">…</td></tr>' : '') + '</table>';
+    if (c && c.mod === 'descarcare') h += '<div class="nota atentie" style="margin-top:6px">La varianta cu descărcare aplicația nu poate verifica dacă fișierul a ajuns pe disc și nu poate șterge copiile vechi. ' +
+      'Uită-te din când în când în folderul de descărcări al calculatorului de backup: trebuie să apară câte un „Backup Status Comenzi ….zip” pe zi; pe cele vechi le ștergi de mână.</div>';
+    if (!bkSuportat()) h += '<div class="mic" style="margin-top:6px">Pe acest browser scrierea direct într-un folder nu este disponibilă; pentru copia automată se poate folosi varianta cu descărcare.</div>';
     h += '<div class="rand-form" style="margin-top:10px">' +
-      (aici ? '<button class="btn" id="bkFolderAlt">Schimbă folderul…</button><button class="btn" id="bkOpreste">Oprește copia automată</button>'
+      (aici ? '<button class="btn" id="bkSeteaza">Modifică setările de backup…</button>' + (c.mod !== 'descarcare' ? '<button class="btn" id="bkFolderAlt">Schimbă folderul…</button>' : '') +
+          '<button class="btn" id="bkOpreste">Oprește copia automată</button>'
         : '<button class="btn" id="bkSeteaza">' + (c ? 'Mută backup-ul pe acest calculator…' : 'Setează acest calculator ca și calculator de backup…') + '</button>' +
           (c ? '<button class="btn" id="bkOpreste">Oprește copia automată</button>' : '')) +
       '<button class="btn" id="bkAcum">Copie de siguranță acum</button><button class="btn rosu" id="bkRestaureaza">Restaurare din copie…</button></div></div>';
@@ -3661,34 +3704,58 @@
       }).catch(arataEroare);
     } else if (b.id === 'bkAcum') {
       b.disabled = true; toast('Se face copia de siguranță…');
-      (bkAici() && bkSuportat() ? bk.depozit.get('folder').then(function (h) { return bkPermisiune(h, true).then(function (p) { return p === 'granted' ? h : null; }); }) : Promise.resolve(null)).then(function (h) {
+      (bkAici() && !bkDescarcare() && bkSuportat() ? bk.depozit.get('folder').then(function (h) { return bkPermisiune(h, true).then(function (p) { return p === 'granted' ? h : null; }); }) : Promise.resolve(null)).then(function (h) {
         return bkFa({ manual: true, folder: h });
       }).then(function (rez) {
         return L.backupNoteaza('manual', bkDateEvidenta(rez), 'Copie de siguranță manuală: ' + rez.fisier + ' (' + rez.comenzi + ' comenzi, ' + rez.doc + ' documente)').then(function () {
-          toast(rez.loc === 'folder' ? 'Copie salvată în folderul „' + rez.folder + '”: ' + rez.fisier + (rez.excel ? ' și ' + rez.excel : '') : 'Copie descărcată: ' + rez.fisier + '. Mut-o într-un loc sigur.', 'bun');
-          if (rez.excelEr) toast('Registrul Excel nu a putut fi scris lângă copie: ' + rez.excelEr + ' Copia .json este în regulă.', 'rau');
+          toast(rez.loc === 'folder' ? 'Copie salvată în folderul „' + rez.folder + '”: ' + rez.fisier + (rez.excel ? ' și ' + rez.excel : '') : 'Copie descărcată: ' + rez.fisier + (rez.excel ? ' (copia .json și registrul Excel)' : '') + '. Ține-o într-un loc sigur.', 'bun');
+          if (rez.excelEr) toast('Registrul Excel nu a putut fi făcut: ' + rez.excelEr + ' Copia .json este în regulă.', 'rau');
         });
       }).catch(arataEroare).then(function () { b.disabled = false; });
     } else if (b.id === 'bkRestaureaza') bkRestaureaza();
   }
   function bkSeteaza() {
-    if (!bkSuportat()) { alerta('Copia automată într-un folder merge doar în Chrome sau Edge, pe calculator.\nDeschide aplicația în unul dintre ele pe calculatorul care va face copiile.'); return; }
     if (!bkDisp()) { alerta('Browserul nu permite păstrarea setărilor pe acest calculator (localStorage), deci nu poate fi calculator de backup.'); return; }
-    var c = bkCfg();
+    var c = bkCfg(), aici = bkAici(), cuFolder = bkSuportat();
+    var modAcum = aici ? (c.mod === 'descarcare' ? 'descarcare' : 'folder') : (cuFolder && !bkFolderBlocat() ? 'folder' : 'descarcare');
+    var NOTE = {
+      folder: 'La pasul următor alegi folderul în care se scriu copiile, de exemplu un folder nou din OneDrive („Backup Status Comenzi”). Browserul cere acordul pentru a scrie în el.',
+      descarcare: '<b>Înainte de prima copie</b>, în setările browserului de pe acest calculator, la Descărcări: 1) alege ca loc al descărcărilor folderul în care vrei copiile (de exemplu un folder din OneDrive); ' +
+        '2) oprește întrebarea „ce să fac cu fiecare descărcare”, ca fișierul să se salveze singur. Aplicația nu poate verifica dacă fișierul a ajuns pe disc și nu poate șterge copiile vechi.'
+    };
     modal({
       titlu: 'Calculatorul de backup',
-      html: (c ? '<div class="nota atentie">Copia automată este setată acum pe „' + esc(c.nume) + '”. Dacă continui, se mută pe acest calculator.</div>' : '') +
+      html: (c && !aici ? '<div class="nota atentie">Copia automată este setată acum pe „' + esc(c.nume) + '”. Dacă continui, se mută pe acest calculator.</div>' : '') +
         '<p>Copia automată se va face <b>doar de pe acest calculator</b> (din acest browser), o dată pe zi, când aplicația este deschisă de un Operator date sau de un Administrator.</p>' +
-        '<label class="camp"><span>Numele acestui calculator (apare în Administrare)</span><input type="text" id="bkNume" maxlength="40" value="' + esc(c && !bkAici() ? '' : 'PC Operator date') + '" placeholder="ex. PC Operator date"></label>' +
-        '<p class="mic">La pasul următor alegi folderul în care se scriu copiile, de exemplu un folder nou din OneDrive („Backup Status Comenzi”). Browserul cere acordul pentru a scrie în el.</p>',
+        '<label class="camp"><span>Numele acestui calculator (apare în Administrare)</span><input type="text" id="bkNume" maxlength="40" value="' + esc(aici ? c.nume : c ? '' : 'PC Operator date') + '" placeholder="ex. PC Operator date"></label>' +
+        '<fieldset class="bk-mod"><legend>Cum se salvează copiile</legend>' +
+        '<label' + (cuFolder ? '' : ' class="oprit"') + '><input type="radio" name="bkMod" value="folder"' + (modAcum === 'folder' ? ' checked' : '') + (cuFolder ? '' : ' disabled') + '> <span><b>Direct într-un folder ales</b> — aplicația scrie copia .json și registrul Excel și păstrează singură ultimele ' + BK_PASTREAZA + '.' +
+        (cuFolder ? ' Merge doar dacă browserul și regulile firmei permit.' : ' Nu este disponibil în acest browser.') + '</span></label>' +
+        '<label><input type="radio" name="bkMod" value="descarcare"' + (modAcum === 'descarcare' ? ' checked' : '') + '> <span><b>Ca descărcare a browserului</b> — un fișier .zip pe zi (copia .json + registrul Excel), în folderul de descărcări al browserului. Pentru când alegerea unui folder nu este permisă.</span></label>' +
+        '</fieldset><p class="mic" id="bkModNota">' + NOTE[modAcum] + '</p>',
+      laDeschidere: function (rad) {
+        Array.prototype.forEach.call(rad.querySelectorAll('input[name=bkMod]'), function (r) {
+          r.addEventListener('change', function () { rad.querySelector('#bkModNota').innerHTML = NOTE[this.value]; });
+        });
+      },
       butoane: [{ t: 'Renunță', v: null }, {
-        t: 'Alege folderul…', cls: 'pri', fn: function (rad) {
-          var nume = rad.querySelector('#bkNume').value.trim();
+        t: 'Continuă', cls: 'pri', fn: function (rad) {
+          var nume = rad.querySelector('#bkNume').value.trim(), ales = rad.querySelector('input[name=bkMod]:checked');
           if (nume.length < 2) { toast('Scrie un nume pentru calculator.', 'rau'); return false; }
+          var baza = { disp: bkDisp(), nume: nume, de: SC.store.user.nume, t: Date.now() };
+          if (!ales || ales.value === 'descarcare') {
+            baza.mod = 'descarcare';
+            return bkSalveazaCfg(baza, 'Copie de siguranță: calculatorul de backup este „' + nume + '”, copiile se salvează ca descărcare a browserului').then(function () { return true; });
+          }
           return bkAlegeFolder().then(function (h) {
             if (!h) return false;
-            return bkSalveazaCfg({ disp: bkDisp(), nume: nume, de: SC.store.user.nume, t: Date.now() },
-              'Copie de siguranță: calculatorul de backup este „' + nume + '”, folderul „' + h.name + '”').then(function () { return true; });
+            return bkSalveazaCfg(baza, 'Copie de siguranță: calculatorul de backup este „' + nume + '”, folderul „' + h.name + '”').then(function () { return true; });
+          }, function (e) {
+            if (!e || !e.folderBlocat) throw e;
+            /* browserul a refuzat alegerea unui folder: ramane fereastra deschisa, cu varianta de descarcare aleasa */
+            toast(e.message, 'rau');
+            var d = rad.querySelector('input[name=bkMod][value=descarcare]'); d.checked = true; rad.querySelector('#bkModNota').innerHTML = NOTE.descarcare;
+            return false;
           });
         }
       }]
@@ -3703,7 +3770,7 @@
   /* ---- restaurarea dintr-o copie (doar Administrator) ---- */
   function bkAlegeJson() {
     return new Promise(function (ok) {
-      var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json'; inp.id = 'bkFisier'; inp.style.display = 'none';
+      var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,.zip,application/json,application/zip'; inp.id = 'bkFisier'; inp.style.display = 'none';
       document.body.appendChild(inp);
       inp.onchange = function () { var f = inp.files && inp.files[0]; inp.remove(); if (f) ok(f); };
       inp.click();
@@ -3726,8 +3793,11 @@
     var fisier, copie;
     bkAlegeJson().then(function (f) {
       fisier = f; toast('Se citește copia…');
-      return f.text();
-    }).then(function (text) {
+      return f.arrayBuffer();
+    }).then(function (buf) {
+      var octeti = new Uint8Array(buf);
+      /* arhiva .zip facuta la varianta cu descarcare (incepe cu „PK”) sau direct fisierul .json */
+      var text = octeti[0] === 0x50 && octeti[1] === 0x4B ? L.backupDinArhiva(octeti) : new TextDecoder('utf-8').decode(octeti);
       try { copie = JSON.parse(text); } catch (e) { throw L.eroare('Fișierul nu poate fi citit: nu este o copie de siguranță Status Comenzi întreagă.'); }
       var er = L.backupVerifica(copie); if (er) throw L.eroare(er);
       toast('Se compară copia cu datele de acum…');

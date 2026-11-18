@@ -230,6 +230,17 @@ backup propriu, așa că aplicația își face singură copii într-un folder de
   calculator ca și calculator de backup…”: îi dă un nume și alege folderul. Calculatorul este recunoscut după un cod ținut în
   browser, deci același utilizator intrat de pe alt calculator (sau din alt browser) nu face copii. Mutarea pe alt calculator
   și oprirea le poate face doar Administratorul.
+- **Două feluri de a salva copiile** (se aleg la setarea calculatorului de backup și se pot schimba din „Modifică setările de backup…”):
+  1. *Direct într-un folder ales* — aplicația scrie copia `.json` și registrul Excel în folder și păstrează singură ultimele 30.
+     Merge doar dacă browserul și regulile firmei permit (File System Access, Chrome / Edge). Dacă browserul refuză
+     („The request is not allowed by the user agent…”), aplicația spune asta și trece pe varianta a doua.
+  2. *Ca descărcare a browserului* — un singur fișier pe zi, `Backup Status Comenzi AAAA-LL-ZZ OOMM.zip`, care conține copia
+     `.json` și registrul Excel, salvat în folderul de descărcări al browserului. Înainte de prima copie, în setările
+     browserului de pe acel calculator, la Descărcări: se alege ca loc al descărcărilor folderul dorit (de exemplu unul din
+     OneDrive) și se oprește întrebarea „ce să fac cu fiecare descărcare”. **Limite:** aplicația nu poate verifica dacă
+     fișierul a ajuns pe disc (în Administrare apare momentul în care descărcarea a pornit) și nu poate șterge copiile vechi,
+     deci folderul trebuie verificat și curățat de mână din când în când; toate descărcările din acel browser ajung în același
+     folder. Restaurarea primește direct fișierul `.zip`.
 - **Copia automată**: o dată pe zi, la scurt timp după ce aplicația este deschisă pe calculatorul de backup de un Operator
   date sau de un Administrator (și din 30 în 30 de minute se verifică dacă a început o zi nouă). Fișierul se numește
   `Backup Status Comenzi AAAA-LL-ZZ OOMM.json`; în folder se păstrează ultimele 30 de copii, restul se șterg singure.
@@ -246,8 +257,8 @@ backup propriu, așa că aplicația își face singură copii într-un folder de
   contorul Nr Crt. Jurnalul de modificări intră doar când copia este făcută de un Administrator (regulile îl lasă doar pe el
   să-l citească): ultimele 35 de zile la copia automată, tot jurnalul la „Copie de siguranță acum”. Utilizatorii și PIN-urile
   nu intră în copie.
-- **„Copie de siguranță acum”** (Administrator): pe calculatorul de backup scrie în folder (`… manual.json`), pe orice alt
-  calculator descarcă fișierul. Util înaintea unei operațiuni mari (migrare, rescriere din borderou, golirea încărcărilor).
+- **„Copie de siguranță acum”** (Administrator): pe calculatorul de backup cu folder ales scrie în folder (`… manual.json` și
+  `… manual.xlsx`); în rest descarcă un `… manual.zip` cu amândouă. Util înaintea unei operațiuni mari (migrare, rescriere din borderou, golirea încărcărilor).
 - **Evidență și avertizări**: Administrare arată ultima copie automată (când, de pe ce calculator, câte comenzi), ultima copie
   manuală și ultima eroare. Dacă ultima copie automată este mai veche de 3 zile, cardul devine roșu, iar Administratorul
   primește un mesaj la intrarea în aplicație.
