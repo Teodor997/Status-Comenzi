@@ -125,8 +125,13 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - Liniile din TMS cu „Ridicare” sau „Preluare” în referință sunt retururi: nu se încarcă, iar paleții și greutatea lor nu
   intră în niciun total (Încărcări, borderou, KPI's). Rămân vizibile, marcate „Retur”.
 - **Comenzi încărcate înainte să fie închise.** În fereastra „Confirmare încărcare” apar și comenzile camionului care nu
-  sunt încă Terminata (Inițiată / În lucru), nebifate. Dacă pleacă cu camionul, cel de la Încărcări le bifează și scrie
-  **paleții și amprentele numărate** (obligatorii; scrisul lor bifează linia). Comanda devine *Încărcată = DA* pe loc, statusul
+  sunt încă Terminata (Inițiată / În lucru). Ele nu pot fi sărite: la „Confirmă încărcarea”, aplicația duce la prima comandă
+  neterminată fără **paleții și amprentele numărate** (rândul se înroșește, cursorul intră în câmp) și nu confirmă nimic până
+  nu sunt scrise la toate. Dacă o comandă chiar nu pleacă cu camionul, pe rândul ei este butonul **„Nu pleacă”** (și la
+  comenzile Terminata): după confirmare, comanda este scoasă pe loc de pe camion (i se șterg Nr AUTO, Nr transport, data,
+  șoferul și remorca), dispare din fereastră și rămâne în jurnal. Aplicația ține minte de pe ce transport a fost scoasă, așa
+  că următorul import al graficului nu o pune singur înapoi pe același transport: fereastra de import o arată separat, cu
+  bifa „Pune înapoi pe transportul lor…” (nebifată). Pe alt transport sau cu Nr AUTO pus de mână se planifică normal. Comanda devine *Încărcată = DA* pe loc, statusul
   rămâne cel de dinainte, iar camionul apare ca încărcat — nu mai trebuie redeschis. Cifrele se păstrează separat (în jurnal:
   „Paleți / Amprente numărate la încărcare”) și apar în borderou, în totalurile camionului și în KPI's (comanda se numără ca
   pregătită). Operatorul de date vede aceste comenzi cu eticheta „de închis” în celula Nr AUTO și are în tabul Comenzi

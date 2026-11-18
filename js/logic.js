@@ -60,7 +60,7 @@
     Object.keys(chei).forEach(function (k) {
       var x = a[k] == null ? '' : a[k], y = b[k] == null ? '' : b[k];
       if (String(x) === String(y)) return;
-      var nume = SC.COL[k] ? SC.COL[k].t : (k === 'ar' ? 'Arhivată' : k === 'ipr' ? 'Paleți numărați la încărcare' : k === 'iam' ? 'Amprente numărate la încărcare' : k);
+      var nume = SC.COL[k] ? SC.COL[k].t : (k === 'ar' ? 'Arhivată' : k === 'ipr' ? 'Paleți numărați la încărcare' : k === 'iam' ? 'Amprente numărate la încărcare' : k === 'xnt' ? 'Scoasă la încărcare de pe transportul' : k);
       parti.push(nume + ': ' + (x === '' ? '(gol)' : scurt(x)) + ' → ' + (y === '' ? '(gol)' : scurt(y)));
     });
     return parti.join('; ');
@@ -797,6 +797,17 @@
         return loc;
       });
     });
+  };
+  /* Incarcari: comanda nu pleaca efectiv cu camionul. Este scoasa de pe el (Nr AUTO, transport, data, sofer, remorca) si
+     tine minte de pe ce transport a fost scoasa (xnt), ca urmatorul import al graficului sa nu o puna singur inapoi. */
+  L.scoateDePeCamion = function (n, x) {
+    return L.modifica([{
+      n: n, fn: function (o) {
+        if (o.inc === 'DA') throw eroare('Comanda ' + o.nc + ' este deja confirmată ca încărcată.');
+        if (o.nt) o.xnt = o.nt; else delete o.xnt;
+        delete o.na; delete o.nt; delete o.dtr; delete o.so; delete o.re;
+      }
+    }], 'Încărcare ' + x.na + (x.nt ? ' / transport ' + x.nt : '') + ': o comandă nu pleacă cu acest camion și a fost scoasă de pe el', { cuText: true });
   };
   L.cheieCamion = function (x) { return String(x.cheie || '').replace(/[.\/\[\]*`~]/g, '_') || '_'; };
   L.infoCamion = function (x) { return SC.camInfo[(x.data || 'fara-data') + '|' + L.cheieCamion(x)] || null; };

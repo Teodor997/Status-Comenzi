@@ -2214,45 +2214,81 @@
   }
   /* Confirmarea incarcarii unui camion.
      - comenzile Terminata: ca pana acum (paletii reali sunt cei de la inchidere, amprentele se pot corecta);
-     - comenzile inca neterminate (Initiata / In lucru) pot pleca si ele cu camionul: cel de la incarcari le bifeaza si scrie
-       paletii si amprentele numarate (obligatorii). Comanda devine Incarcata = DA, statusul ramane, iar cifrele se pastreaza
-       separat (ipr / iam) si vin ca sugestie cand Operatorul de date inchide comanda. */
+     - comenzile inca neterminate (Initiata / In lucru) pleaca si ele cu camionul: nu se pot sari. La „Confirma incarcarea”
+       aplicatia duce la prima comanda neterminata fara paleti sau amprente si nu merge mai departe pana nu sunt scrise.
+       Comanda devine Incarcata = DA, statusul ramane, iar cifrele se pastreaza separat (ipr / iam) si vin ca sugestie
+       cand Operatorul de date inchide comanda. */
   function incarcaCamion(x) {
     var l = x.deIncarcat, d = x.inLucru;
+    function textNotaNet(n) {
+      return (n === 1 ? 'O comandă a acestui camion nu este încă Terminata.' : n + ' comenzi ale acestui camion nu sunt încă Terminata.') +
+        ' Încărcarea nu poate fi confirmată până nu sunt scrise, pentru fiecare, <b>paleții și amprentele numărate</b>. Închiderea comenzii rămâne la Operatorul de date, care primește aceste cifre ca sugestie.' +
+        ' Dacă o comandă chiar nu pleacă cu acest camion, apasă „Nu pleacă” pe rândul ei.';
+    }
+    function btnNuPleaca(fel, idx, o) {
+      return '<button type="button" class="btn mic" data-np="' + fel + idx + '" title="Comanda nu pleacă cu acest camion: se scoate de pe el și rămâne fără Nr AUTO" aria-label="Comanda ' + esc(o.nc) + ' nu pleacă cu acest camion">Nu pleacă</button>';
+    }
     var html = '<div class="nota">Camion <b>' + esc(x.na) + '</b>' + (x.nt ? ' · transport <b>' + esc(x.nt) + '</b>' : '') + (x.data ? ' · ' + esc(SC.fmtDataLunga(x.data)) : '') + '</div>' +
-      '<div class="lista-mica"><table class="simplu"><tr><th></th><th>Comandă</th><th>Destinatar</th><th class="nr">Paleți</th><th class="nr">Amprente</th></tr>' +
+      '<div class="lista-mica inc-lista"><table class="simplu"><tr><th></th><th>Comandă</th><th>Destinatar</th><th class="nr">Paleți</th><th class="nr">Amprente</th><th></th></tr>' +
       l.map(function (o, i) {
-        return '<tr><td><input type="checkbox" data-i="' + i + '" checked aria-label="Încarcă ' + esc(o.nc) + '"></td><td>' + esc(o.cl) + ' ' + esc(o.nc) +
+        return '<tr data-ri="' + i + '"><td><input type="checkbox" data-i="' + i + '" checked aria-label="Încarcă ' + esc(o.nc) + '"></td><td>' + esc(o.cl) + ' ' + esc(o.nc) +
           (o.extra ? ' <span class="eticheta asteapta">doar transport</span>' : '') + '</td><td>' + esc(o.de || '') + '</td><td class="nr">' +
-          SC.fmtNum(o.pr, 'int') + '</td><td class="nr"><input type="text" inputmode="numeric" data-am="' + i + '" value="' + (SC.esteNum(o.am) ? o.am : '') + '" style="width:64px;text-align:right" aria-label="Amprente ' + esc(o.nc) + '"></td></tr>';
+          SC.fmtNum(o.pr, 'int') + '</td><td class="nr"><input type="text" inputmode="numeric" data-am="' + i + '" value="' + (SC.esteNum(o.am) ? o.am : '') + '" style="width:64px;text-align:right" aria-label="Amprente ' + esc(o.nc) + '"></td><td>' +
+          (o.extra ? '' : btnNuPleaca('i', i, o)) + '</td></tr>';
       }).join('') +
       d.map(function (o, j) {
         var est = SC.esteNum(o.pe) ? 'est. ' + SC.fmtNum(o.pe, 'num') : '';
-        return '<tr class="inc-net"><td><input type="checkbox" data-j="' + j + '" aria-label="Încarcă ' + esc(o.nc) + ', neterminată"></td><td>' + esc(o.cl) + ' ' + esc(o.nc) +
+        return '<tr class="inc-net" data-rj="' + j + '"><td><input type="checkbox" data-j="' + j + '" checked disabled title="Comanda nu este închisă: pleacă cu camionul doar cu paleții și amprentele numărate" aria-label="Comanda ' + esc(o.nc) + ', neterminată, se încarcă obligatoriu"></td><td>' + esc(o.cl) + ' ' + esc(o.nc) +
           ' <span class="eticheta lucru">neterminată · ' + esc(o.st) + '</span></td><td>' + esc(o.de || '') + '</td>' +
           '<td class="nr"><input type="text" inputmode="numeric" data-pj="' + j + '" placeholder="' + esc(est) + '" style="width:74px;text-align:right" aria-label="Paleți numărați ' + esc(o.nc) + '"></td>' +
-          '<td class="nr"><input type="text" inputmode="numeric" data-aj="' + j + '" style="width:64px;text-align:right" aria-label="Amprente ' + esc(o.nc) + '"></td></tr>';
+          '<td class="nr"><input type="text" inputmode="numeric" data-aj="' + j + '" style="width:64px;text-align:right" aria-label="Amprente ' + esc(o.nc) + '"></td><td>' + btnNuPleaca('j', j, o) + '</td></tr>';
       }).join('') + '</table></div>' +
       (l.length ? '<div class="mic">Amprentele pot fi corectate aici, pe fiecare linie, înainte de confirmare.</div>' : '') +
-      (d.length ? '<div class="nota atentie">' + (d.length === 1 ? 'O comandă a acestui camion nu este încă Terminata.' : d.length + ' comenzi ale acestui camion nu sunt încă Terminata.') +
-        ' Ce pleacă totuși cu camionul se bifează și primește <b>paleții și amprentele numărate</b> (obligatorii). Închiderea rămâne la Operatorul de date, care primește aceste cifre ca sugestie.</div>' : '') +
+      (d.length ? '<div class="nota atentie" id="iNotaNet">' + textNotaNet(d.length) + '</div>' : '') +
       '<div class="grila"><label class="camp"><span>Stare camion</span><select id="iStare"><option>OK</option><option>NOK</option></select></label>' +
       '<label class="camp"><span>Temperatură</span><input type="text" id="iTemp" inputmode="decimal"></label>' +
       '<label class="camp"><span>Semnătură (nume)</span><input type="text" id="iSemn" value="' + esc(SC.store.user.nume) + '"></label></div>' +
-      '<div class="mic">Liniile debifate rămân neîncărcate și pot pleca cu alt camion.</div>';
+      (l.length ? '<div class="mic">Liniile Terminata debifate rămân neîncărcate și pot pleca cu alt camion.</div>' : '');
+    /* duce la campul care lipseste: randul este marcat, adus in vedere, iar cursorul pus in camp */
+    function arataLipsa(rad, j, camp, mesaj) {
+      var rand = rad.querySelector('[data-rj="' + j + '"]'), inp = rad.querySelector('[data-' + camp + '="' + j + '"]');
+      Array.prototype.forEach.call(rad.querySelectorAll('.inc-lipsa'), function (r) { r.classList.remove('inc-lipsa'); });
+      rand.classList.add('inc-lipsa');
+      if (rand.scrollIntoView) rand.scrollIntoView({ block: 'center' });
+      inp.focus(); inp.select();
+      toast(mesaj, 'rau');
+      return false;
+    }
     modal({
       titlu: 'Confirmare încărcare', html: html, lat: true,
       laDeschidere: function (rad) {
-        /* cine scrie paletii sau amprentele unei comenzi neterminate o si bifeaza */
+        /* „Nu pleaca”: comanda este scoasa pe loc de pe camion (ramane fara Nr AUTO) si dispare din fereastra */
+        rad.addEventListener('click', function (e) {
+          var b = e.target.closest && e.target.closest('[data-np]'); if (!b) return;
+          var fel = b.dataset.np.charAt(0), idx = +b.dataset.np.slice(1), o = (fel === 'i' ? l : d)[idx], rand = b.closest('tr');
+          confirma('Comanda ' + o.nc + ' nu pleacă cu camionul ' + x.na + (x.nt ? ' (transport ' + x.nt + ')' : '') + '?\n\nSe scoate de pe acest camion și rămâne fără Nr AUTO, până când Transportul o planifică din nou.',
+            { da: 'Da, scoate-o de pe camion', nu: 'Renunță' }).then(function (ok) {
+            if (!ok) return;
+            b.disabled = true;
+            return L.scoateDePeCamion(o.n, x).then(function () {
+              rand.remove();
+              toast('Comanda ' + o.nc + ' a fost scoasă de pe camionul ' + x.na + '.', 'bun');
+              var ramaseNet = rad.querySelectorAll('[data-j]').length, nota = rad.querySelector('#iNotaNet');
+              if (nota) { if (ramaseNet) nota.innerHTML = textNotaNet(ramaseNet); else nota.remove(); }
+              deseneazaIncarcari();
+              if (!rad.querySelectorAll('[data-i], [data-j]').length) rad.closest('.fundal').querySelector('.x').click();      /* nu a mai ramas nimic de incarcat */
+            }, function (er) { b.disabled = false; arataEroare(er); });
+          });
+        });
         rad.addEventListener('input', function (e) {
-          var j = e.target.dataset && (e.target.dataset.pj || e.target.dataset.aj);
-          if (j != null && e.target.value.trim() !== '') rad.querySelector('[data-j="' + j + '"]').checked = true;
+          var r = e.target.closest && e.target.closest('.inc-lipsa');
+          if (r && rad.querySelector('[data-pj="' + r.dataset.rj + '"]').value.trim() !== '' && rad.querySelector('[data-aj="' + r.dataset.rj + '"]').value.trim() !== '') r.classList.remove('inc-lipsa');
         });
       },
       butoane: [{ t: 'Renunță', v: null }, {
         t: 'Confirmă încărcarea', cls: 'pri', fn: function (rad) {
           var bife = Array.prototype.filter.call(rad.querySelectorAll('[data-i]'), function (c) { return c.checked; });
-          var bifeD = Array.prototype.filter.call(rad.querySelectorAll('[data-j]'), function (c) { return c.checked; });
+          var bifeD = Array.prototype.slice.call(rad.querySelectorAll('[data-j]'));      /* comenzile neterminate: toate, nu se pot sari */
           if (!bife.length && !bifeD.length) { toast('Bifează cel puțin o linie.', 'rau'); return false; }
           var alese = [], amNoi = [], gresit = false, deschise = [];
           bife.forEach(function (c) {
@@ -2262,9 +2298,12 @@
           });
           if (gresit) return false;
           for (var q = 0; q < bifeD.length; q++) {
-            var j = bifeD[q].dataset.j, od = d[+j];
-            var pal = citesteIntreg(rad.querySelector('[data-pj="' + j + '"]').value, 'Paleți numărați, comanda ' + od.nc, true); if (pal == null) { rad.querySelector('[data-pj="' + j + '"]').focus(); return false; }
-            var amp = citesteIntreg(rad.querySelector('[data-aj="' + j + '"]').value, 'Amprente, comanda ' + od.nc, true); if (amp == null) { rad.querySelector('[data-aj="' + j + '"]').focus(); return false; }
+            var j = bifeD[q].dataset.j, od = d[+j], vp = rad.querySelector('[data-pj="' + j + '"]').value.trim(), va = rad.querySelector('[data-aj="' + j + '"]').value.trim();
+            /* prima comanda neterminata care nu este completata: aplicatia duce la ea si nu merge mai departe */
+            if (vp === '') return arataLipsa(rad, j, 'pj', 'Comanda ' + od.nc + ' nu este închisă: scrie paleții numărați la încărcare.');
+            var pal = citesteIntreg(vp, 'Paleți numărați, comanda ' + od.nc, true); if (pal == null) return arataLipsa(rad, j, 'pj', 'Comanda ' + od.nc + ': paleții numărați trebuie să fie un număr întreg.');
+            if (va === '') return arataLipsa(rad, j, 'aj', 'Comanda ' + od.nc + ' nu este închisă: scrie amprentele numărate la încărcare.');
+            var amp = citesteIntreg(va, 'Amprente, comanda ' + od.nc, true); if (amp == null) return arataLipsa(rad, j, 'aj', 'Comanda ' + od.nc + ': amprentele trebuie să fie un număr întreg.');
             deschise.push({ o: od, pal: pal, am: amp });
           }
           alese.forEach(function (o, i) { o._am = amNoi[i]; });
@@ -2436,7 +2475,7 @@
       p.recente.forEach(function (r) { r.refCurat = String(r.ref).replace(/[.,;:\s]+$/, ''); });
       return L.cautaComenzi(p.recente.map(function (r) { return r.refCurat; }));
     }).then(function (exist) {
-      var noi = [], schimbate = [], neschimbate = 0, dejaInc = 0, vazute = {}, perZi = {}, nrExtra = 0, preaVechi = p.vechi, potriviri = [];
+      var noi = [], schimbate = [], neschimbate = 0, dejaInc = 0, vazute = {}, perZi = {}, nrExtra = 0, preaVechi = p.vechi, potriviri = [], ramase = [];
       var prag = SC.ziPlus(SC.azi(), -SC.ZILE_EXTRA);
       p.recente.forEach(function (r) {
         var k = SC.cheieComanda(r.refCurat);
@@ -2455,6 +2494,8 @@
         var libere = l.filter(function (o) { return o.inc !== 'DA'; });
         if (!libere.length) { dejaInc++; potriviri.push({ r: r, o: null }); return; }
         var o = libere[libere.length - 1];
+        /* scoasa la incarcare („Nu pleaca”) chiar de pe acest transport: ramane fara camion, daca nu se cere altfel */
+        if (o.xnt && r.nt && o.xnt === r.nt && !o.na) { ramase.push({ o: o, r: r }); return; }
         potriviri.push({ r: r, o: o });
         var acelasiAuto = SC.normNrAuto(o.na) === SC.normNrAuto(r.na);
         /* neschimbata = acelasi camion, transport si data, dar si acelasi sofer si aceeasi remorca (daca fisierul le are) */
@@ -2501,17 +2542,20 @@
       }
       if (cmp.deScos.length) html += '<label class="bifa" style="margin-top:8px"><input type="checkbox" id="trScoate" checked> <span>Scoate de pe camion comenzile din registru care nu mai sunt pe transportul lor: <b>' + cmp.deScos.length +
         '</b> (li se șterg Nr AUTO, Nr transport, data, șoferul și remorca)</span></label>';
+      if (ramase.length) html += '<label class="bifa" style="margin-top:8px"><input type="checkbox" id="trRamase"> <span>Pune înapoi pe transportul lor comenzile scoase la încărcare cu „Nu pleacă”: <b>' + ramase.length +
+        '</b> (' + esc(ramase.slice(0, 10).map(function (y) { return y.o.nc + ' → ' + y.r.nt; }).join(', ')) + (ramase.length > 10 ? ' …' : '') + '). Nebifat = rămân fără camion.</span></label>';
       if (cmp.transporturi.length) html += '<div class="mic" style="margin-top:6px">La „Aplică”, colegii de la Încărcări primesc câte o notificare pentru fiecare transport modificat.</div>';
       if (cmp.extraOrfane.length) html += '<div class="mic" style="margin-top:6px">Linii „doar din transport” ale unor transporturi care nu mai sunt deloc în fișier (se scot): ' + esc(cmp.extraOrfane.slice(0, 12).join(', ')) +
         (cmp.extraOrfane.length > 12 ? ' … încă ' + (cmp.extraOrfane.length - 12) : '') + '</div>';
-      if (!noi.length && !schimbate.length && !extraNoi && !nrExtra && !cmp.deScos.length && !cmp.extraOrfane.length) {
+      if (!noi.length && !schimbate.length && !extraNoi && !nrExtra && !cmp.deScos.length && !cmp.extraOrfane.length && !ramase.length) {
         return alerta('Nimic de actualizat din „' + fisier.name + '”.' + (nrVechi ? '\n\nTransporturi care erau deja în aplicație: ' + nrVechi + ', toate fără nicio modificare.' : ''));
       }
       return modal({
         titlu: 'Import fișier transport', html: html, lat: true,
         butoane: [{ t: 'Renunță', v: null }, {
           t: 'Aplică', cls: 'pri', fn: function (rad) {
-            var toate = noi.concat(schimbate), i = 0, bifa = rad.querySelector('#trScoate'), deScos = bifa && bifa.checked ? cmp.deScos : [];
+            var bifaR = rad.querySelector('#trRamase');
+            var toate = noi.concat(schimbate).concat(bifaR && bifaR.checked ? ramase : []), i = 0, bifa = rad.querySelector('#trScoate'), deScos = bifa && bifa.checked ? cmp.deScos : [];
             function parte() {
               if (i >= toate.length) return Promise.resolve();
               var bucata = toate.slice(i, i + 100); i += 100;
@@ -2521,6 +2565,7 @@
                   n: x.o.n, fn: function (o) {
                     if (o.inc === 'DA') return;
                     o.na = x.r.na; if (x.r.nt) o.nt = x.r.nt; if (x.r.so) o.so = x.r.so; if (x.r.re) o.re = x.r.re; if (x.r.dtr) o.dtr = x.r.dtr;
+                    delete o.xnt;      /* a primit din nou un camion: nu mai este „scoasa la incarcare” */
                   }
                 };
               }), 'Import transport ' + fisier.name + ': Nr AUTO pe ' + bucata.length + ' comenzi').then(parte);
