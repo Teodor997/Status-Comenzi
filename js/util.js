@@ -3,7 +3,7 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '2.39';
+  SC.VERSIUNE = '2.40';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
   SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
@@ -143,6 +143,10 @@
   };
   SC.esteEDI = function (o) { return String(o.im || '').slice(0, 3).toUpperCase() === 'EDI'; };
   SC.esteDeschisa = function (o) { return o.st === SC.ST.INI || o.st === SC.ST.LUC; };
+  /* comanda plecata cu camionul inainte sa fie inchisa: Incarcata = DA, dar statusul inca Initiata / In lucru.
+     Paletii si amprentele numarate la incarcare stau in ipr / iam; Operatorul de date mai are de inchis comanda.
+     (Comenzile vechi din registrul Excel care erau „incarcate” cu status deschis nu au ipr si nu intra aici.) */
+  SC.incDeInchis = function (o) { return o.inc === 'DA' && SC.esteDeschisa(o) && SC.esteNum(o.ipr); };
   /* comanda "activa" = inca se lucreaza cu ea: deschisa sau terminata dar neincarcata (si nearhivata) */
   SC.esteActiva = function (o) {
     if (o.ar) return false;

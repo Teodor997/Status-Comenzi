@@ -124,6 +124,22 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
   și pot fi corectate acolo; amprentele se completează manual.
 - Liniile din TMS cu „Ridicare” sau „Preluare” în referință sunt retururi: nu se încarcă, iar paleții și greutatea lor nu
   intră în niciun total (Încărcări, borderou, KPI's). Rămân vizibile, marcate „Retur”.
+- **Comenzi încărcate înainte să fie închise.** În fereastra „Confirmare încărcare” apar și comenzile camionului care nu
+  sunt încă Terminata (Inițiată / În lucru), nebifate. Dacă pleacă cu camionul, cel de la Încărcări le bifează și scrie
+  **paleții și amprentele numărate** (obligatorii; scrisul lor bifează linia). Comanda devine *Încărcată = DA* pe loc, statusul
+  rămâne cel de dinainte, iar camionul apare ca încărcat — nu mai trebuie redeschis. Cifrele se păstrează separat (în jurnal:
+  „Paleți / Amprente numărate la încărcare”) și apar în borderou, în totalurile camionului și în KPI's (comanda se numără ca
+  pregătită). Operatorul de date vede aceste comenzi cu eticheta „de închis” în celula Nr AUTO și are în tabul Comenzi
+  butonul **„Încărcate, de închis N”**, care le filtrează (apare doar când există). La trecerea pe Terminata, fereastra arată
+  ce s-a numărat la încărcare, pune amprentele ca sugestie și avertizează (fără să blocheze) dacă FPP + Pick diferă de paleții
+  numărați. Butonul „Încarcă” apare și la camioanele care au doar comenzi neterminate. Comenzile vechi din registrul Excel
+  care erau „încărcate” cu status deschis nu intră în această numărătoare.
+- **Notificări pentru Încărcări.** Când un transport care era deja în aplicație este încărcat din nou cu modificări (alt camion,
+  altă dată, comenzi adăugate / scoase etc.), colegii de la Încărcări primesc o notificare pentru fiecare transport modificat
+  (butonul *Notificări*, cu număr roșu), cu ce s-a schimbat și, dacă e cazul, cu avertismentul că borderoul fusese deja
+  tipărit. Un click pe numărul de transport deschide camionul în tabul Încărcări; „Am văzut” notează cine a luat la cunoștință.
+  Notificările de transport se păstrează 7 zile (modificările rămân oricum în jurnal). Operatorul de date vede în continuare
+  doar notificările despre datele de livrare, iar Administratorul pe toate.
 - Ora de început a încărcării se înregistrează automat la prima tipărire a borderoului (Administrator sau Încărcări);
   ora de sfârșit este confirmarea încărcării. Lista de camioane arată ambele și durata.
 - Data de încărcare a camionului este ziua din coloana `DataTransport` (dacă lipsește, `DataEstimataIncarcare`).

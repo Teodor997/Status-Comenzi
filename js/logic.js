@@ -60,7 +60,7 @@
     Object.keys(chei).forEach(function (k) {
       var x = a[k] == null ? '' : a[k], y = b[k] == null ? '' : b[k];
       if (String(x) === String(y)) return;
-      var nume = SC.COL[k] ? SC.COL[k].t : (k === 'ar' ? 'Arhivată' : k);
+      var nume = SC.COL[k] ? SC.COL[k].t : (k === 'ar' ? 'Arhivată' : k === 'ipr' ? 'Paleți numărați la încărcare' : k === 'iam' ? 'Amprente numărate la încărcare' : k);
       parti.push(nume + ': ' + (x === '' ? '(gol)' : scurt(x)) + ' → ' + (y === '' ? '(gol)' : scurt(y)));
     });
     return parti.join('; ');
@@ -112,7 +112,32 @@
       Object.keys(e).forEach(function (k) { var x = e[k]; x._luna = d.id; x._k = k; l.push(x); });
     });
     l.sort(function (a, b) { return b.t - a.t; });
-    SC.notif = l;
+    /* notificarile despre transporturi modificate conteaza doar cateva zile */
+    var pragTra = Date.now() - L.NOTIF_TRA_ZILE * 86400000;
+    SC.notif = l.filter(function (x) { return x.tip !== 'tra' || x.t >= pragTra; });
+  };
+  /* Notificari pentru Incarcari: transporturile care erau deja in aplicatie si au fost incarcate din nou cu modificari.
+     lista = [{ nt, na, zi, linii: [text], tiparit }]. Se scriu in documentul lunii, o singura scriere; cele mai vechi de
+     NOTIF_TRA_ZILE zile se scot cu aceasta ocazie (modificarile raman oricum in jurnal), ca documentul sa ramana mic. */
+  L.NOTIF_TRA_ZILE = 7;
+  L.notificaTransport = function (lista, numeFisier) {
+    if (!lista || !lista.length) return Promise.resolve(0);
+    var acum = Date.now(), luna = L.lunaNotif(acum), user = SC.store.user ? SC.store.user.nume : '?';
+    return SC.store.tx(function (t) {
+      return t.get('notificari', luna).then(function (doc) {
+        doc = doc || { e: {} }; doc.e = doc.e || {};
+        var prag = acum - L.NOTIF_TRA_ZILE * 86400000;
+        Object.keys(doc.e).forEach(function (k) { if (doc.e[k].tip === 'tra' && doc.e[k].t < prag) delete doc.e[k]; });
+        lista.forEach(function (x, i) {
+          var text = x.linii.join(' · ');
+          if (text.length > 600) text = text.slice(0, 597) + '…';
+          doc.e[acum + '_t' + i] = L.curata({ t: acum, u: user, tip: 'tra', nt: x.nt, na: x.na, zi: x.zi, txt: text, bt: x.tiparit || '', f: numeFisier });
+        });
+        doc.upd = acum;
+        t.set('notificari', luna, doc);
+        return lista.length;
+      });
+    });
   };
   /* Transport: schimba data de livrare a unei comenzi; in aceeasi tranzactie se salveaza notificarea pentru Operatorul de date */
   L.schimbaLivrare = function (n, nou) {
@@ -859,7 +884,8 @@
         eScoase.push(x.ref + (cheiFisier[SC.cheieComanda(x.ref)] ? ' (este acum în registru)' : ''));
       });
       if (adaugate.length) linii.push('Comenzi adăugate: ' + adaugate.join(', '));
-      if (scoase.length) linii.push('Comenzi care nu mai sunt pe transport: ' + scoase.join(', '));
+      var linieScoase = -1;
+      if (scoase.length) { linieScoase = linii.length; linii.push('Comenzi care nu mai sunt pe transport: ' + scoase.join(', ')); }
       if (mutate.length) linii.push('Comenzi mutate pe alt transport: ' + mutate.join(', '));
       if (eAdaug.length) linii.push('Linii doar din transport adăugate: ' + eAdaug.join(', '));
       if (eScoase.length) linii.push('Linii doar din transport scoase: ' + eScoase.join(', '));
@@ -869,7 +895,7 @@
       /* doar ca informatie, langa modificarile adevarate: ce a fost deja incarcat nu se mai atinge */
       if (ramanInc.length || eInc.length) linii.push('Nu mai sunt în fișier, dar sunt deja încărcate (rămân): ' + ramanInc.concat(eInc).join(', '));
       var info = SC.camInfo[(a.dtr || 'fara-data') + '|' + L.cheieCamion({ cheie: nt + '|' + SC.normNrAuto(a.na) })];
-      rez.transporturi.push({ nt: nt, na: b.na || a.na, zi: b.dtr || a.dtr, tiparit: info && info.bt ? info.bt : '', linii: linii });
+      rez.transporturi.push({ nt: nt, na: b.na || a.na, zi: b.dtr || a.dtr, tiparit: info && info.bt ? info.bt : '', linii: linii, linieScoase: linieScoase });
     });
     /* liniile doar din transport din fereastra importului care nu mai apar deloc in fisier si nu tin de un transport din fisier */
     SC.extra.forEach(function (x) {

@@ -73,6 +73,12 @@
   #bandaBackup.ascuns { display: none; }
   .bk-tabel td:first-child { color: var(--muted, #5b6472); white-space: nowrap; padding-right: 18px; }
   .bk-plan td.nr, .bk-plan th.nr { text-align: right; }
+  .diM { display: inline-block; padding: 1px 7px; margin-right: 5px; border-radius: 11px; background: #fbe3e0; color: #8a1c12; border: 1px solid #e9a9a1; font-size: 11px; font-weight: 700; }
+  .cip.cip-di { border-color: #e9a9a1; background: #fdf1ef; color: #8a1c12; font-weight: 600; }
+  .cip.cip-di.activ { background: #b42318; border-color: #b42318; color: #fff; }
+  tr.inc-net td { background: #fffaf0; }
+  .notif-tabel td { vertical-align: top; }
+  .notif-tabel .tr-tip { color: #8a4b00; font-weight: 600; }
   .tr-cmp td { vertical-align: top; }
   .tr-cmp td div { padding: 1px 0; }
   .tr-cmp .tr-tip { color: #8a4b00; font-weight: 600; }
@@ -404,6 +410,7 @@
         <select id="fClient" aria-label="Client"><option value="">Toți clienții</option></select>
         <div class="cipuri" id="fStatus"></div>
         <label class="bifa"><input type="checkbox" id="fNeinc"> Terminate neîncărcate</label>
+        <button type="button" class="cip cip-di ascuns" id="fDeInchis" title="Comenzi plecate cu camionul înainte să fie închise: trebuie trecute pe Terminata">Încărcate, de închis<b id="fDeInchisNr">0</b></button>
         <select id="fColData" aria-label="Coloana de dată pentru filtru">
           <option value="dl">Livrare solicitată</option><option value="dc">Data comandă</option><option value="dp">Data pregătire</option>
         </select>
