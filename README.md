@@ -109,6 +109,16 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - Se importă din *Încărcări → Import fișier transport (TMS)*, de către Administrator sau Operator date.
 - Fișierul este cumulativ, așa că se procesează doar transporturile din ultimele 14 zile (și rândurile fără dată).
 - Comenzile găsite în registru primesc Nr AUTO, Nr transport, șofer, remorcă și data transportului.
+- **Același transport încărcat din nou** (al doilea grafic, cu aceleași numere de transport): înainte de „Aplică”, fereastra de
+  import compară fiecare transport din fișier cu ce este acum în aplicație și arată, pe transport, ce s-a schimbat — alt
+  Nr AUTO, altă dată de încărcare, alt șofer sau altă remorcă, comenzi adăugate, comenzi care nu mai sunt pe transport,
+  comenzi mutate pe alt transport, linii „doar din transport” adăugate / scoase și cantități schimbate în TMS — plus câte
+  transporturi sunt neschimbate și câte sunt noi. Dacă borderoul transportului a fost deja tipărit, apare un avertisment că
+  trebuie tipărit din nou. La „Aplică”: comenzile primesc noile date (și șoferul / remorca, chiar dacă doar ele s-au schimbat),
+  iar comenzile din registru care nu mai sunt pe transportul lor rămân fără camion (li se șterg Nr AUTO, Nr transport, data,
+  șoferul și remorca) — bifa „Scoate de pe camion…” se poate scoate dacă nu vrei asta. Se compară doar transporturile care
+  apar în fișier; comenzile deja încărcate nu se ating. O linie „doar din transport” mutată pe altă zi își păstrează
+  corecturile făcute de mână. Borderoul nu este salvat: se face din datele comenzilor, deci după import arată situația nouă.
 - Rândurile care **nu există în registru** nu intră în tabul Comenzi: merg în rubrica „Doar din transport” din tabul
   Încărcări, apar la camionul lor și în borderou. Paleții și greutatea lor vin din TMS (`UnitatiTotale`, `MasaTotala`)
   și pot fi corectate acolo; amprentele se completează manual.

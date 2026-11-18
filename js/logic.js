@@ -796,6 +796,88 @@
     return (SC.cheieComanda(r.ref) + '~' + (r.nt || SC.normNrAuto(r.na))).replace(/[.\/\[\]*`]/g, '_');
   };
   L.ziExtra = function (r) { return r.dtr || 'fara-data'; };
+  /* ---------- un transport incarcat din nou: ce s-a schimbat fata de ce este acum in aplicatie ----------
+     recente = randurile din fisier (ultimele zile); potriviri = [{ r: rand, o: comanda din registru careia i se aplica sau null daca
+     este deja incarcata }]; perZi = liniile din fisier care nu sunt in registru, pe zile; prag = prima zi din fereastra importului.
+     Se compara doar numerele de transport care apar si in fisier, si in aplicatie. Intoarce:
+       transporturi: [{ nt, na, zi, tiparit, linii: [text] }] = cele cu modificari;  laFel / noi = cate sunt neschimbate / noi;
+       deScos: comenzile din registru care nu mai sunt pe transportul lor (si nu au fost mutate pe altul, nici incarcate);
+       extraOrfane: liniile „doar din transport” ale unor transporturi care nu mai sunt deloc in fisier. */
+  function celMaiDes(l) {
+    var m = {}, ales = '', n = 0;
+    l.forEach(function (v) { if (v == null || v === '') return; m[v] = (m[v] || 0) + 1; if (m[v] > n) { n = m[v]; ales = v; } });
+    return ales;
+  }
+  L.comparaTransport = function (recente, potriviri, perZi, prag) {
+    var peNt = {}, tinta = {}, extraFisier = {}, toateCheile = {};
+    var rez = { transporturi: [], noi: 0, laFel: 0, deScos: [], extraOrfane: [], areExtra: false };
+    recente.forEach(function (r) { if (r.nt) (peNt[r.nt] = peNt[r.nt] || []).push(r); });
+    potriviri.forEach(function (x) { if (x.o) tinta[x.o.n] = x.r; });
+    Object.keys(perZi).forEach(function (zi) {
+      perZi[zi].forEach(function (r) { var k = L.cheieExtra(r); toateCheile[k] = 1; if (r.nt) (extraFisier[r.nt] = extraFisier[r.nt] || {})[k] = r; });
+    });
+    function zi10(v) { return String(v || '').slice(0, 10); }
+    Object.keys(peNt).sort().forEach(function (nt) {
+      var randuri = peNt[nt];
+      var inainteC = SC.comenzi.filter(function (o) { return o.nt === nt && o.st !== SC.ST.ANU && !o.ar; });
+      var inainteE = SC.extra.filter(function (x) { return x.nt === nt; });
+      if (!inainteC.length && !inainteE.length) { rez.noi++; return; }
+      var inainte = inainteC.concat(inainteE), linii = [];
+      var a = { na: celMaiDes(inainte.map(function (o) { return o.na; })), dtr: celMaiDes(inainte.map(function (o) { return zi10(o.dtr); })),
+        so: celMaiDes(inainte.map(function (o) { return o.so; })), re: celMaiDes(inainte.map(function (o) { return o.re; })) };
+      var b = { na: celMaiDes(randuri.map(function (r) { return r.na; })), dtr: celMaiDes(randuri.map(function (r) { return r.dtr; })),
+        so: celMaiDes(randuri.map(function (r) { return r.so; })), re: celMaiDes(randuri.map(function (r) { return r.re; })) };
+      if (b.na && SC.normNrAuto(a.na) !== SC.normNrAuto(b.na)) linii.push('Nr AUTO: ' + (a.na || '—') + ' → ' + b.na);
+      if (b.dtr && a.dtr !== b.dtr) linii.push('Data încărcării: ' + (a.dtr ? SC.fmtDataLunga(a.dtr) : 'fără dată') + ' → ' + SC.fmtDataLunga(b.dtr));
+      if (b.so && (a.so || '') !== b.so) linii.push('Șofer: ' + (a.so || '—') + ' → ' + b.so);
+      if (b.re && (a.re || '') !== b.re) linii.push('Remorcă: ' + (a.re || '—') + ' → ' + b.re);
+      /* comenzile din registru */
+      var cheiFisier = {}; randuri.forEach(function (r) { cheiFisier[SC.cheieComanda(r.refCurat != null ? r.refCurat : r.ref)] = 1; });
+      var adaugate = potriviri.filter(function (x) { return x.r.nt === nt && x.o && x.o.nt !== nt; }).map(function (x) { return x.o.nc + (x.o.nt ? ' (era pe ' + x.o.nt + ')' : ''); });
+      var scoase = [], mutate = [], ramanInc = [];
+      inainteC.forEach(function (o) {
+        if (cheiFisier[SC.cheieComanda(o.nc)]) return;
+        if (o.inc === 'DA') { ramanInc.push(o.nc); return; }
+        var r = tinta[o.n];
+        if (r && r.nt !== nt) { mutate.push(o.nc + ' → ' + (r.nt || r.na)); return; }
+        scoase.push(o.nc); rez.deScos.push(o);
+      });
+      /* liniile doar din transport */
+      var eF = extraFisier[nt] || {}, eInainte = {}, eAdaug = [], eScoase = [], eCant = [], eInc = [];
+      inainteE.forEach(function (x) { eInainte[x._k] = x; });
+      Object.keys(eF).forEach(function (k) {
+        var x = eInainte[k], r = eF[k], s = [];
+        if (!x) { eAdaug.push(r.ref); return; }
+        if (x.inc === 'DA') return;
+        if (r.un != null && x.un != null && r.un !== x.un) s.push('paleți ' + x.un + ' → ' + r.un);
+        if (r.ma != null && x.ma != null && r.ma !== x.ma) s.push('kg ' + x.ma + ' → ' + r.ma);
+        if (s.length) eCant.push(r.ref + ' (' + s.join(', ') + ')');
+      });
+      inainteE.forEach(function (x) {
+        if (eF[x._k]) return;
+        if (x.inc === 'DA') { eInc.push(x.ref); return; }
+        eScoase.push(x.ref + (cheiFisier[SC.cheieComanda(x.ref)] ? ' (este acum în registru)' : ''));
+      });
+      if (adaugate.length) linii.push('Comenzi adăugate: ' + adaugate.join(', '));
+      if (scoase.length) linii.push('Comenzi care nu mai sunt pe transport: ' + scoase.join(', '));
+      if (mutate.length) linii.push('Comenzi mutate pe alt transport: ' + mutate.join(', '));
+      if (eAdaug.length) linii.push('Linii doar din transport adăugate: ' + eAdaug.join(', '));
+      if (eScoase.length) linii.push('Linii doar din transport scoase: ' + eScoase.join(', '));
+      if (eCant.length) linii.push('Cantități schimbate în TMS: ' + eCant.join(', '));
+      if (eAdaug.length || eScoase.length || eCant.length) rez.areExtra = true;
+      if (!linii.length) { rez.laFel++; return; }
+      /* doar ca informatie, langa modificarile adevarate: ce a fost deja incarcat nu se mai atinge */
+      if (ramanInc.length || eInc.length) linii.push('Nu mai sunt în fișier, dar sunt deja încărcate (rămân): ' + ramanInc.concat(eInc).join(', '));
+      var info = SC.camInfo[(a.dtr || 'fara-data') + '|' + L.cheieCamion({ cheie: nt + '|' + SC.normNrAuto(a.na) })];
+      rez.transporturi.push({ nt: nt, na: b.na || a.na, zi: b.dtr || a.dtr, tiparit: info && info.bt ? info.bt : '', linii: linii });
+    });
+    /* liniile doar din transport din fereastra importului care nu mai apar deloc in fisier si nu tin de un transport din fisier */
+    SC.extra.forEach(function (x) {
+      if (x.inc === 'DA' || toateCheile[x._k] || (x.nt && peNt[x.nt])) return;
+      if (x._zi === 'fara-data' || x._zi >= prag) rez.extraOrfane.push(x.ref + (x.nt ? ' (' + x.nt + ')' : ''));
+    });
+    return rez;
+  };
   /* perZi: {zi: [linii din fisier care nu exista in registru]}. Liniile deja incarcate nu se ating;
      cele care au disparut din fisier (sau au aparut intre timp in registru) se scot, daca nu sunt incarcate. */
   L.importaExtra = function (perZi, numeFisier) {
@@ -810,6 +892,8 @@
             var k = L.cheieExtra(r), v = vechi[k];
             if (v && v.inc === 'DA') { nou[k] = v; return; }
             var x = v ? JSON.parse(JSON.stringify(v)) : {};
+            /* linia vine din alta zi (camionul a fost mutat pe alta data): isi pastreaza corecturile facute de mana */
+            if (!v && r._mutat) { x = JSON.parse(JSON.stringify(r._mutat)); delete x._zi; delete x._k; delete x.retur; }
             ['ref', 'cl', 'de', 'or', 'ju', 'na', 'nt', 'so', 're', 'dtr', 'un', 'ma'].forEach(function (f) { if (r[f] != null && r[f] !== '') x[f] = r[f]; });
             /* paletii si greutatea vin din TMS (UnitatiTotale, MasaTotala), cat timp nu au fost corectate de mana (prm / gfm) */
             if (!x.prm && x.un != null) x.pr = x.un;

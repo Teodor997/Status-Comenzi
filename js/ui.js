@@ -2349,7 +2349,7 @@
       p.recente.forEach(function (r) { r.refCurat = String(r.ref).replace(/[.,;:\s]+$/, ''); });
       return L.cautaComenzi(p.recente.map(function (r) { return r.refCurat; }));
     }).then(function (exist) {
-      var noi = [], schimbate = [], neschimbate = 0, dejaInc = 0, vazute = {}, perZi = {}, nrExtra = 0, preaVechi = p.vechi;
+      var noi = [], schimbate = [], neschimbate = 0, dejaInc = 0, vazute = {}, perZi = {}, nrExtra = 0, preaVechi = p.vechi, potriviri = [];
       var prag = SC.ziPlus(SC.azi(), -SC.ZILE_EXTRA);
       p.recente.forEach(function (r) {
         var k = SC.cheieComanda(r.refCurat);
@@ -2366,16 +2366,29 @@
       Object.keys(vazute).forEach(function (k) {
         var r = vazute[k].r, l = vazute[k].l;
         var libere = l.filter(function (o) { return o.inc !== 'DA'; });
-        if (!libere.length) { dejaInc++; return; }
+        if (!libere.length) { dejaInc++; potriviri.push({ r: r, o: null }); return; }
         var o = libere[libere.length - 1];
+        potriviri.push({ r: r, o: o });
         var acelasiAuto = SC.normNrAuto(o.na) === SC.normNrAuto(r.na);
-        if (acelasiAuto && (o.nt || '') === (r.nt || '') && (!r.dtr || (o.dtr || '') === r.dtr)) { neschimbate++; return; }
+        /* neschimbata = acelasi camion, transport si data, dar si acelasi sofer si aceeasi remorca (daca fisierul le are) */
+        if (acelasiAuto && (o.nt || '') === (r.nt || '') && (!r.dtr || (o.dtr || '') === r.dtr) && (!r.so || (o.so || '') === r.so) && (!r.re || (o.re || '') === r.re)) { neschimbate++; return; }
         if (o.na && !acelasiAuto) schimbate.push({ o: o, r: r }); else noi.push({ o: o, r: r });
       });
       /* zilele deja existente in rubrica separata, din fereastra importului, se recalculeaza si ele (liniile disparute se scot) */
       SC.extra.forEach(function (x) { if (x._zi === 'fara-data' || x._zi >= prag) perZi[x._zi] = perZi[x._zi] || []; });
       var existente = {}; SC.extra.forEach(function (x) { existente[x._zi + '|' + x._k] = 1; });
-      var extraNoi = 0; Object.keys(perZi).forEach(function (zi) { perZi[zi].forEach(function (r) { if (!existente[zi + '|' + L.cheieExtra(r)]) extraNoi++; }); });
+      /* o linie doar din transport care isi schimba ziua (camionul a fost mutat pe alta data) isi pastreaza corecturile facute de mana */
+      var dupaCheie = {}; SC.extra.forEach(function (x) { if (x.inc !== 'DA') dupaCheie[x._k] = x; });
+      var extraNoi = 0;
+      Object.keys(perZi).forEach(function (zi) {
+        perZi[zi].forEach(function (r) {
+          var kx = L.cheieExtra(r), e = dupaCheie[kx];
+          if (existente[zi + '|' + kx]) return;
+          if (e && e._zi !== zi) r._mutat = e; else extraNoi++;
+        });
+      });
+      /* transporturile care erau deja in aplicatie: ce s-a schimbat fata de varianta dinainte */
+      var cmp = L.comparaTransport(p.recente, potriviri, perZi, prag);
 
       var html = '<div class="nota">Fișier: <b>' + esc(fisier.name) + '</b> (foaia „' + esc(p.foaie) + '”, ' + p.randuri.length + ' rânduri)' +
         '<br>Data încărcării: ' + (p.colData ? 'coloana „<b>' + esc(p.colData) + '</b>”' : '<b>nu am găsit o coloană de dată</b> — camioanele vor apărea „fără dată”') + '</div>' +
@@ -2384,12 +2397,33 @@
       html += '<div><b>Linii care nu există în registru</b> — merg în rubrica separată „Doar din transport” din tabul Încărcări: <b>' + nrExtra + '</b> (din care noi: ' + extraNoi + ')</div>' +
         (preaVechi ? '<div class="mic">Rânduri din fișier cu transport mai vechi de ' + SC.ZILE_EXTRA + ' zile, ignorate: ' + preaVechi + '.</div>' : '') +
         '<div class="mic">Aceste linii nu intră în registrul de comenzi; apar doar la camionul lor și în borderou.</div>';
-      if (!noi.length && !schimbate.length && !extraNoi && !nrExtra) return alerta('Nimic de actualizat din „' + fisier.name + '”.');
+      /* ---- transporturi incarcate din nou ---- */
+      var nrVechi = cmp.transporturi.length + cmp.laFel;
+      html += '<h4 style="margin:14px 0 4px">Transporturi care erau deja în aplicație: ' + nrVechi + '</h4>';
+      if (!nrVechi) html += '<div class="mic">Niciun număr de transport din fișier nu era deja în aplicație' + (cmp.noi ? ' (transporturi noi: ' + cmp.noi + ')' : '') + '.</div>';
+      else {
+        html += '<div>Cu modificări față de ce era în aplicație: <b>' + cmp.transporturi.length + '</b> · fără nicio modificare: ' + cmp.laFel + (cmp.noi ? ' · transporturi noi: ' + cmp.noi : '') + '</div>';
+        if (cmp.transporturi.length) {
+          html += '<div class="derulare-x" style="max-height:300px;overflow:auto;margin-top:6px"><table class="simplu tr-cmp"><tr><th>Transport</th><th>Camion</th><th>Data</th><th>Ce s-a schimbat</th></tr>' +
+            cmp.transporturi.map(function (t) {
+              return '<tr><td><b>' + esc(t.nt) + '</b></td><td>' + esc(t.na) + '</td><td>' + esc(t.zi ? SC.fmtDataLunga(t.zi) : 'fără dată') + '</td><td>' +
+                t.linii.map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') +
+                (t.tiparit ? '<div class="tr-tip">⚠ Borderoul a fost deja tipărit (' + esc(SC.fmtDT(t.tiparit)) + '): trebuie tipărit din nou.</div>' : '') + '</td></tr>';
+            }).join('') + '</table></div>';
+        }
+      }
+      if (cmp.deScos.length) html += '<label class="bifa" style="margin-top:8px"><input type="checkbox" id="trScoate" checked> <span>Scoate de pe camion comenzile din registru care nu mai sunt pe transportul lor: <b>' + cmp.deScos.length +
+        '</b> (li se șterg Nr AUTO, Nr transport, data, șoferul și remorca)</span></label>';
+      if (cmp.extraOrfane.length) html += '<div class="mic" style="margin-top:6px">Linii „doar din transport” ale unor transporturi care nu mai sunt deloc în fișier (se scot): ' + esc(cmp.extraOrfane.slice(0, 12).join(', ')) +
+        (cmp.extraOrfane.length > 12 ? ' … încă ' + (cmp.extraOrfane.length - 12) : '') + '</div>';
+      if (!noi.length && !schimbate.length && !extraNoi && !nrExtra && !cmp.deScos.length && !cmp.extraOrfane.length) {
+        return alerta('Nimic de actualizat din „' + fisier.name + '”.' + (nrVechi ? '\n\nTransporturi care erau deja în aplicație: ' + nrVechi + ', toate fără nicio modificare.' : ''));
+      }
       return modal({
         titlu: 'Import fișier transport', html: html, lat: true,
         butoane: [{ t: 'Renunță', v: null }, {
-          t: 'Aplică', cls: 'pri', fn: function () {
-            var toate = noi.concat(schimbate), i = 0;
+          t: 'Aplică', cls: 'pri', fn: function (rad) {
+            var toate = noi.concat(schimbate), i = 0, bifa = rad.querySelector('#trScoate'), deScos = bifa && bifa.checked ? cmp.deScos : [];
             function parte() {
               if (i >= toate.length) return Promise.resolve();
               var bucata = toate.slice(i, i + 100); i += 100;
@@ -2403,9 +2437,16 @@
                 };
               }), 'Import transport ' + fisier.name + ': Nr AUTO pe ' + bucata.length + ' comenzi').then(parte);
             }
-            return parte().then(function () { return L.importaExtra(perZi, fisier.name); }).then(function (st) {
+            /* comenzile din registru care nu mai sunt pe transportul lor: raman fara camion */
+            function scoate() {
+              if (!deScos.length) return Promise.resolve();
+              return L.modifica(deScos.map(function (x) {
+                return { n: x.n, fn: function (o) { if (o.inc === 'DA' || o.nt !== x.nt) return; delete o.na; delete o.nt; delete o.dtr; delete o.so; delete o.re; } };
+              }), 'Import transport ' + fisier.name + ': scoase de pe camion, fiindcă nu mai sunt pe transportul lor — ' + nCom(deScos.length), { cuText: true });
+            }
+            return parte().then(scoate).then(function () { return L.importaExtra(perZi, fisier.name); }).then(function (st) {
               marcheazaSync();
-              toast('Transport: ' + toate.length + ' comenzi actualizate; linii doar din transport: ' + st.noi + ' noi, ' + st.actualizate + ' actualizate, ' + st.scoase + ' scoase.', 'bun');
+              toast('Transport: ' + toate.length + ' comenzi actualizate' + (deScos.length ? '; scoase de pe camion: ' + nCom(deScos.length) : '') + '; linii doar din transport: ' + st.noi + ' noi, ' + st.actualizate + ' actualizate, ' + st.scoase + ' scoase.', 'bun');
               redeseneaza();
             });
           }
