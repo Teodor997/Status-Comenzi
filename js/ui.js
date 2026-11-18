@@ -1346,6 +1346,7 @@
     if (!l.length) return;
     var ascunse = l.length - stare.lista.filter(function (o) { return stare.sel[o.n]; }).length;
     b.innerHTML = '<span>Bifate: <b>' + nCom(l.length) + '</b></span><span>Greutate: <b>' + SC.fmtNum(SC.rotunjeste(suma(l, 'g')), 'num') + ' kg</b></span>' +
+      (poate() ? '<span>Cartoane: <b>' + SC.fmtNum(suma(l, 'ca'), 'int') + '</b></span>' : '') +          // doar Operator date / Administrator
       '<span>Paleți estimați: <b>' + SC.fmtNum(SC.rotunjeste(suma(l, 'pe')), 'num') + '</b></span>' +
       (ascunse ? '<span class="mic">' + ascunse + (ascunse === 1 ? ' bifată nu se vede' : ' bifate nu se văd') + ' cu filtrele de acum</span>' : '') +
       '<span style="flex:1"></span>' +

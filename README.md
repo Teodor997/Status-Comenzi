@@ -47,6 +47,10 @@ Datele rămân doar în acel browser, deci este bun pentru probă, nu pentru luc
 | **Încărcări** | Taburile *Încărcări* și *KPI's*: confirmă camioanele (stare camion, temperatură, semnătură) și tipărește borderoul. Vede și tabul *Comenzi*, doar pentru citit: poate căuta, filtra și exporta, dar comanda nu se deschide la click și nu poate modifica nimic acolo. |
 | **Transport** | Face fișierul de import pentru TMS (*Export pentru TMS*) și stabilește ordinea în care se încarcă mașinile. Un click pe celula *Observații* sau *Comentarii* deschide tot textul într-o fereastră (se închide cu Esc sau cu un click în afara ei). Vede comenzile și încărcările; modifică doar **Nr AUTO**, direct în celulă (sau pe mai multe comenzi bifate), cât timp comanda nu e încărcată. Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
 
+**Comenzi bifate.** Operatorul de date, Administratorul și Transportul pot bifa comenzi în listă; deasupra tabelului apare
+o bară cu numărul lor și cu totalul de greutate și de paleți estimați. Operatorul de date și Administratorul văd acolo și
+totalul de **cartoane**.
+
 **Vezi ca alt rol (doar Administrator).** În bara de sus, lângă nume, administratorul are lista **Vezi ca**: alege
 *Operator date*, *Încărcări* sau *Transport* și aplicația se reface exact cum o vede acel rol (taburi, butoane, ce se
 poate modifica). O bandă galbenă arată rolul ales și are butonul *Înapoi la Administrator*. Atenție: nu este o
