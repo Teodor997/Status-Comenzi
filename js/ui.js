@@ -1038,7 +1038,7 @@
       '<div class="nota">' + esc(o.cl) + ' · comanda <b>' + esc(o.nc) + '</b><br>' + esc(o.de || '') +
       (est != null ? '<br>Paleți estimați: <b>' + SC.fmtNum(est, 'num') + '</b>' : '') +
       (SC.esteNum(o.g) ? ' · Greutate: <b>' + SC.fmtNum(o.g, 'num') + ' kg</b>' : '') + '</div>') +
-      (incPal != null ? '<div class="nota bun" style="margin-top:6px">' + (cumul ? 'Comenzile au' : 'Comanda a') + ' plecat deja cu camionul' + (o.di ? ' (' + esc(SC.fmtDT(o.di)) + (o.se ? ', ' + esc(o.se) : '') + ')' : '') +
+      (incPal != null ? '<div class="nota bun" style="margin-top:6px">' + (!cumul ? 'Comanda a' : cuInc.length === grup.length ? 'Comenzile au' : cuInc.length === 1 ? 'O comandă din cele ' + grup.length + ' a' : cuInc.length + ' din cele ' + grup.length + ' comenzi au') + ' plecat deja cu camionul' + (o.di ? ' (' + esc(SC.fmtDT(o.di)) + (o.se ? ', ' + esc(o.se) : '') + ')' : '') +
         '. La încărcare s-au numărat <b>' + incPal + '</b> paleți și <b>' + incAm + '</b> amprente — sunt puse mai jos ca sugestie.</div>' : '') +
       '<div class="grila">' +
       '<label class="camp"><span>FPP (paleți full)</span><input type="text" id="tFpp" inputmode="numeric" value="' + (SC.esteNum(o.fpp) ? o.fpp : '') + '"></label>' +
@@ -1126,7 +1126,13 @@
   }
   /* cumul: statusul se schimba la toate comenzile legate; paletii se trec doar pe comanda la care s-a lucrat */
   function schimbaStatusCumul(o, stNou, grup) {
-    var cod = o.cum, n = o.n, tinta = grup.filter(function (x) { return x.inc !== 'DA' && (x.n === n || x.st !== stNou); }).sort(function (a, b) { return a.n - b.n; });
+    /* O comanda incarcata si deja inchisa nu se mai atinge. Una incarcata inainte de a fi inchisa (plecata cu camionul cu paletii
+       numarati la incarcare) trebuie insa sa poata fi inchisa odata cu cumulul ei; doar anularea o ocoleste. */
+    var cod = o.cum, n = o.n, tinta = grup.filter(function (x) {
+      if (x.inc === 'DA' && (!SC.esteDeschisa(x) || stNou === ST.ANU)) return false;
+      return x.n === n || x.st !== stNou;
+    }).sort(function (a, b) { return a.n - b.n; });
+    if (!tinta.length) { toast('Nicio comandă din cumulul ' + cod + ' nu mai poate fi trecută pe ' + stNou + ': sunt deja încărcate.', 'rau'); return Promise.resolve(); }
     var asteptat = {}; tinta.forEach(function (x) { asteptat[x.n] = x.st; });
     var lista = tinta.map(function (x) { return x.nc; }).join(', '), p;
     if (stNou === ST.TER) p = cereDateTerminare(o, stNou, tinta);

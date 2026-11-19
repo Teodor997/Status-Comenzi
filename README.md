@@ -204,6 +204,9 @@ până acum de mână. Comenzile „doar transport” se adaugă în continuare 
   comenzi cu același client și același destinatar. Comenzile legate au o dungă albastră pe celula Nr Crt (nu există coloană separată).
 - Comenzile legate își schimbă statusul împreună. La Terminata / Self-Pick paleții (FPP, Pick) se trec o singură dată, pe
   comanda la care se schimbă statusul; celelalte se închid cu 0 paleți. Greutatea finală rămâne greutatea din tabel.
+- Un cumul plecat cu camionul înainte să fie închis (încărcat de Încărcări cu paleții numărați) se închide la fel: Operatorul
+  trece pe Terminata oricare comandă din el și se închid toate, iar fereastra arată suma paleților și amprentelor numărate la
+  încărcare ca sugestie. Comenzile deja încărcate **și** închise nu se mai ating; anularea unui cumul ocolește comenzile plecate.
 - La căutare sau filtrare, dacă apare o comandă dintr-un cumul, apar și celelalte.
 - Cumulul se vede și se anulează (cu confirmare) din bara de bifare: bifezi una dintre comenzi, apoi „Vezi cumulul” sau „Anulează cumulul”.
 
