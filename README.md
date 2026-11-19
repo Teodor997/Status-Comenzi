@@ -248,6 +248,9 @@ până acum de mână. Comenzile „doar transport” se adaugă în continuare 
 - Un cumul plecat cu camionul înainte să fie închis (încărcat de Încărcări cu paleții numărați) se închide la fel: Operatorul
   trece pe Terminata oricare comandă din el și se închid toate, iar fereastra arată suma paleților și amprentelor numărate la
   încărcare ca sugestie. Comenzile deja încărcate **și** închise nu se mai ating; anularea unui cumul ocolește comenzile plecate.
+- La încărcarea unui cumul neînchis, Încărcările scriu paleții și amprentele o singură dată, pe una dintre comenzile lui; celelalte
+  rămân goale și pleacă cu 0. Când Operatorul închide apoi cumulul, paleții se trec pe aceeași comandă pe care au fost numărați la
+  încărcare, indiferent pe care comandă din cumul schimbă statusul.
 - La căutare sau filtrare, dacă apare o comandă dintr-un cumul, apar și celelalte.
 - Cumulul se vede și se anulează (cu confirmare) din bara de bifare: bifezi una dintre comenzi, apoi „Vezi cumulul” sau „Anulează cumulul”.
 

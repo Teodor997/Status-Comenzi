@@ -1157,6 +1157,11 @@
     }).sort(function (a, b) { return a.n - b.n; });
     if (!tinta.length) { toast('Nicio comandă din cumulul ' + cod + ' nu mai poate fi trecută pe ' + stNou + ': sunt deja încărcate.', 'rau'); return Promise.resolve(); }
     var asteptat = {}; tinta.forEach(function (x) { asteptat[x.n] = x.st; });
+    /* cumul plecat cu camionul: paletii se trec pe comanda pe care au fost numarati la incarcare, indiferent pe care apasa Operatorul */
+    if (stNou === ST.TER || stNou === ST.SELF) {
+      var purt = tinta.filter(function (x) { return x.inc === 'DA' && SC.esteNum(x.ipr) && x.ipr > 0; }).sort(function (a, b) { return b.ipr - a.ipr || a.n - b.n; })[0];
+      if (purt) { o = purt; n = purt.n; }
+    }
     var lista = tinta.map(function (x) { return x.nc; }).join(', '), p;
     if (stNou === ST.TER) p = cereDateTerminare(o, stNou, tinta);
     else if (stNou === ST.SELF) p = confirma('Cumulul ' + cod + ' (' + lista + ') se ridică de către client?').then(function (ok) { return ok ? cereDateTerminare(o, stNou, tinta) : null; });
@@ -2363,10 +2368,15 @@
        cand Operatorul de date inchide comanda. */
   function incarcaCamion(x) {
     var l = x.deIncarcat, d = x.inLucru;
+    /* cumul: comenzile neterminate ale aceluiasi cumul de pe acest camion se numara o singura data, pe una dintre ele */
+    var nrCum = {}; d.forEach(function (o) { if (o.cum) nrCum[o.cum] = (nrCum[o.cum] || 0) + 1; });
+    function inCumul(o) { return !!(o.cum && nrCum[o.cum] > 1); }
+    var areCumul = d.some(inCumul);
     function textNotaNet(n) {
       return (n === 1 ? 'O comandă a acestui camion nu este încă Terminata.' : n + ' comenzi ale acestui camion nu sunt încă Terminata.') +
         ' Încărcarea nu poate fi confirmată până nu sunt scrise, pentru fiecare, <b>paleții și amprentele numărate</b>. Închiderea comenzii rămâne la Operatorul de date, care primește aceste cifre ca sugestie.' +
-        ' Dacă o comandă chiar nu pleacă cu acest camion, apasă „Nu pleacă” pe rândul ei.';
+        ' Dacă o comandă chiar nu pleacă cu acest camion, apasă „Nu pleacă” pe rândul ei.' +
+        (areCumul ? '<br><b>Comenzi cumulate:</b> paleții și amprentele se scriu o singură dată, pe una dintre comenzile cumulului; celelalte rămân goale și pleacă cu 0.' : '');
     }
     function btnNuPleaca(fel, idx, o) {
       return '<button type="button" class="btn mic" data-np="' + fel + idx + '" title="Comanda nu pleacă cu acest camion: se scoate de pe el și rămâne fără Nr AUTO" aria-label="Comanda ' + esc(o.nc) + ' nu pleacă cu acest camion">Nu pleacă</button>';
@@ -2382,8 +2392,8 @@
       d.map(function (o, j) {
         var est = SC.esteNum(o.pe) ? 'est. ' + SC.fmtNum(o.pe, 'num') : '';
         return '<tr class="inc-net" data-rj="' + j + '"><td><input type="checkbox" data-j="' + j + '" checked disabled title="Comanda nu este închisă: pleacă cu camionul doar cu paleții și amprentele numărate" aria-label="Comanda ' + esc(o.nc) + ', neterminată, se încarcă obligatoriu"></td><td>' + esc(o.cl) + ' ' + esc(o.nc) +
-          ' <span class="eticheta lucru">neterminată · ' + esc(o.st) + '</span></td><td>' + esc(o.de || '') + '</td>' +
-          '<td class="nr"><input type="text" inputmode="numeric" data-pj="' + j + '" placeholder="' + esc(est) + '" style="width:74px;text-align:right" aria-label="Paleți numărați ' + esc(o.nc) + '"></td>' +
+          ' <span class="eticheta lucru">neterminată · ' + esc(o.st) + '</span>' + (inCumul(o) ? ' <span class="eticheta gri" title="Comenzi cumulate: se numără o singură dată, pe una dintre ele">cumul ' + esc(o.cum) + '</span>' : '') + '</td><td>' + esc(o.de || '') + '</td>' +
+          '<td class="nr"><input type="text" inputmode="numeric" data-pj="' + j + '" placeholder="' + esc(inCumul(o) ? 'cumul' : est) + '" style="width:74px;text-align:right" aria-label="Paleți numărați ' + esc(o.nc) + '"></td>' +
           '<td class="nr"><input type="text" inputmode="numeric" data-aj="' + j + '" style="width:64px;text-align:right" aria-label="Amprente ' + esc(o.nc) + '"></td><td>' + btnNuPleaca('j', j, o) + '</td></tr>';
       }).join('') + '</table></div>' +
       (l.length ? '<div class="mic">Amprentele pot fi corectate aici, pe fiecare linie, înainte de confirmare.</div>' : '') +
@@ -2424,7 +2434,9 @@
           });
         });
         rad.addEventListener('input', function (e) {
-          var r = e.target.closest && e.target.closest('.inc-lipsa');
+          var r = e.target.closest && e.target.closest('tr[data-rj]');
+          if (r && d[+r.dataset.rj] && inCumul(d[+r.dataset.rj])) Array.prototype.forEach.call(rad.querySelectorAll('.inc-lipsa'), function (z) { z.classList.remove('inc-lipsa'); });
+          r = e.target.closest && e.target.closest('.inc-lipsa');
           if (r && rad.querySelector('[data-pj="' + r.dataset.rj + '"]').value.trim() !== '' && rad.querySelector('[data-aj="' + r.dataset.rj + '"]').value.trim() !== '') r.classList.remove('inc-lipsa');
         });
       },
@@ -2440,8 +2452,19 @@
             alese.push(o); amNoi.push(a);
           });
           if (gresit) return false;
+          /* cumul: ajunge o comanda completata; cele lasate goale pleaca cu 0 paleti si 0 amprente */
+          var cumCompletat = {}, cumPrimul = {};
+          bifeD.forEach(function (c) {
+            var o = d[+c.dataset.j]; if (!inCumul(o)) return;
+            if (cumPrimul[o.cum] == null) cumPrimul[o.cum] = c.dataset.j;
+            if (rad.querySelector('[data-pj="' + c.dataset.j + '"]').value.trim() !== '' || rad.querySelector('[data-aj="' + c.dataset.j + '"]').value.trim() !== '') cumCompletat[o.cum] = 1;
+          });
           for (var q = 0; q < bifeD.length; q++) {
             var j = bifeD[q].dataset.j, od = d[+j], vp = rad.querySelector('[data-pj="' + j + '"]').value.trim(), va = rad.querySelector('[data-aj="' + j + '"]').value.trim();
+            if (inCumul(od) && vp === '' && va === '') {
+              if (cumCompletat[od.cum]) { deschise.push({ o: od, pal: 0, am: 0 }); continue; }
+              return arataLipsa(rad, cumPrimul[od.cum], 'pj', 'Cumulul ' + od.cum + ' nu este închis: scrie paleții și amprentele numărate pe una dintre comenzile lui.');
+            }
             /* prima comanda neterminata care nu este completata: aplicatia duce la ea si nu merge mai departe */
             if (vp === '') return arataLipsa(rad, j, 'pj', 'Comanda ' + od.nc + ' nu este închisă: scrie paleții numărați la încărcare.');
             var pal = citesteIntreg(vp, 'Paleți numărați, comanda ' + od.nc, true); if (pal == null) return arataLipsa(rad, j, 'pj', 'Comanda ' + od.nc + ': paleții numărați trebuie să fie un număr întreg.');
