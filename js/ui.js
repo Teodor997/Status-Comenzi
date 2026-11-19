@@ -1662,6 +1662,16 @@
       }]
     });
   }
+  /* Transport: data de livrare se schimba direct in celula, cu confirmare; Operatorul de date primeste o notificare care ramane salvata */
+  var popCal = null;
+  function inchideCal() {
+    if (!popCal) return;
+    popCal.remove(); popCal = null;
+    document.removeEventListener('pointerdown', afaraCal, true);
+    document.removeEventListener('keydown', tastaCal, true);
+  }
+  function afaraCal(e) { if (popCal && !popCal.contains(e.target)) inchideCal(); }
+  function tastaCal(e) { if (e.key === 'Escape') { e.preventDefault(); inchideCal(); } }
   function editeazaDlInLinie(o, cel) {
     if (o.st === ST.ANU) { toast('Comanda ' + o.nc + ' este anulată; data de livrare nu mai poate fi schimbată.', 'rau'); return; }
     if (o.inc === 'DA') { toast('Comanda ' + o.nc + ' este deja încărcată; data de livrare nu mai poate fi schimbată.', 'rau'); return; }
