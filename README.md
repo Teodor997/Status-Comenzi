@@ -190,6 +190,11 @@ Pentru câteva comenzi nu mai e nevoie de importul graficului: Transportul le pu
   o conține pe același transport, o ține fișierul: dacă dispare apoi din el, se propune scoaterea, ca la orice altă comandă.
   Dacă fișierul o are pe alt transport, fișierul are prioritate.
 
+## Căutarea în tabul Încărcări
+Căutarea după Nr AUTO sau Nr transport ține cont de zilele alese în calendar: cu una sau mai multe zile bifate apar doar camioanele din
+acele zile (titlul spune câte mai sunt în alte zile); fără nicio zi bifată („Toate datele”) caută în toate. Căutarea găsește și
+camioanele deja încărcate.
+
 ## Ordinea la încărcare
 
 În tabul Încărcări, prima coloană („Ordine”) arată în ce ordine se încarcă mașinile unei zile. O stabilește **Transportul**

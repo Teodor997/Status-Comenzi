@@ -1809,7 +1809,7 @@
           var v = e.target.closest('[data-vz]'), c = e.target.closest('[data-nc]'), tr = e.target.closest('[data-tra]');
           if (v) { var x = SC.notif.filter(function (y) { return y._k === v.dataset.vz; })[0]; if (x) { v.disabled = true; L.vazutNotificari([x]).catch(arataEroare); } }
           else if (c) { rad.closest('.fundal').querySelector('.x').click(); $('fCauta').value = c.dataset.nc; stare.f.q = c.dataset.nc; arataTab('comenzi'); $('tabel').scrollTop = 0; redeseneaza(); }
-          else if (tr) { rad.closest('.fundal').querySelector('.x').click(); $('incCauta').value = tr.dataset.tra; arataTab('incarcari'); }
+          else if (tr) { rad.closest('.fundal').querySelector('.x').click(); $('incCauta').value = tr.dataset.tra; Object.keys(incDate).forEach(function (d) { delete incDate[d]; }); arataTab('incarcari'); }
         });
       },
       butoane: (noi ? [{ t: 'Am văzut toate (' + noi + ')', fn: function () { return L.vazutNotificari(notifMele().filter(function (x) { return !x.vz; })).then(function () { return false; }); } }] : []).concat([{ t: 'Închide', cls: 'pri', v: null }])
@@ -2190,8 +2190,9 @@
     var date = Object.keys(peData).sort(function (a, b) { return a === FARA_DATA ? 1 : (b === FARA_DATA ? -1 : (a < b ? 1 : -1)); });
     deseneazaCalendar(peData, deInteres.length, f.areDate);
 
-    var l = (f.q ? toate.filter(function (x) { return SC.normNrAuto(x.na).indexOf(f.q) >= 0 || SC.normNrAuto(x.nt).indexOf(f.q) >= 0; })
-      : deInteres.filter(function (x) { return !f.areDate || incDate[x.data || FARA_DATA]; }))
+    /* cautarea dupa Nr AUTO / Nr transport tine cont de zilele alese: cu una sau mai multe zile bifate apar doar camioanele din ele */
+    var gasite = f.q ? toate.filter(function (x) { return SC.normNrAuto(x.na).indexOf(f.q) >= 0 || SC.normNrAuto(x.nt).indexOf(f.q) >= 0; }) : deInteres;
+    var l = gasite.filter(function (x) { return !f.areDate || incDate[x.data || FARA_DATA]; })
       .sort(function (a, b) {
         if ((a.data || '9') !== (b.data || '9')) return (a.data || '9') < (b.data || '9') ? -1 : 1;
         /* in aceeasi zi: intai camioanele cu loc stabilit de Transport, in ordinea lor */
@@ -2199,10 +2200,12 @@
       });
     camioaneAfisate = {};
     var zileAlese = Object.keys(incDate).sort().map(function (d) { return d === FARA_DATA ? 'fără dată' : SC.fmtDataLunga(d); });
-    $('incTitlu').textContent = (f.q ? 'căutare „' + $('incCauta').value.trim() + '”' : (zileAlese.length ? zileAlese.join(', ') : 'toate datele')) + ' · ' + l.length + (l.length === 1 ? ' camion' : ' camioane');
+    var inAlteZile = f.q && f.areDate ? gasite.length - l.length : 0;
+    $('incTitlu').textContent = (f.q ? 'căutare „' + $('incCauta').value.trim() + '” · ' : '') + (zileAlese.length ? zileAlese.join(', ') : 'toate datele') + ' · ' + l.length + (l.length === 1 ? ' camion' : ' camioane') +
+      (inAlteZile ? ' (încă ' + inAlteZile + ' în alte zile)' : '');
     var h;
     if (!l.length) {
-      h = '<div class="mic" style="padding:10px">Niciun camion pentru filtrele alese. Data încărcării vine din fișierul de transport (TMS): dacă ziua căutată lipsește, importă fișierul la zi.</div>';
+      h = '<div class="mic" style="padding:10px">' + (inAlteZile ? 'Niciun camion găsit în ' + (zileAlese.length === 1 ? 'ziua aleasă' : 'zilele alese') + '; căutarea se potrivește cu ' + inAlteZile + (inAlteZile === 1 ? ' camion' : ' camioane') + ' din alte zile — apasă „Toate datele” ca să le vezi.</div>' : 'Niciun camion pentru filtrele alese. Data încărcării vine din fișierul de transport (TMS): dacă ziua căutată lipsește, importă fișierul la zi.</div>');
     } else {
       h = '<table class="simplu"><tr><th title="Ordinea în care se încarcă mașinile, stabilită de Transport">Ordine</th><th>Data</th><th>Nr AUTO</th><th>Nr transport</th><th>De încărcat</th><th>În lucru</th><th>Doar transport</th><th>Început încărcare</th><th>Încărcat</th><th class="nr">Paleți reali</th><th class="nr">Amprente</th><th class="nr">Greutate finală</th><th></th></tr>';
       l.slice(0, 300).forEach(function (x, i) {
@@ -2239,7 +2242,7 @@
 
     /* rubrica separata: liniile din TMS care nu exista in registrul de comenzi */
     var ex = SC.extra.filter(function (x) {
-      if (f.q) return SC.normNrAuto(x.na).indexOf(f.q) >= 0 || SC.normNrAuto(x.nt).indexOf(f.q) >= 0 || SC.normNrAuto(x.ref).indexOf(f.q) >= 0;
+      if (f.q) return (SC.normNrAuto(x.na).indexOf(f.q) >= 0 || SC.normNrAuto(x.nt).indexOf(f.q) >= 0 || SC.normNrAuto(x.ref).indexOf(f.q) >= 0) && (!f.areDate || incDate[x.dtr || FARA_DATA]);
       if (!f.siInc && x.inc === 'DA') return false;
       return !f.areDate || incDate[x.dtr || FARA_DATA];
     }).sort(function (a, b) { return (a.dtr || '9') < (b.dtr || '9') ? -1 : ((a.dtr || '9') > (b.dtr || '9') ? 1 : String(a.na).localeCompare(String(b.na))); });
@@ -3147,7 +3150,7 @@
   $('kpiCorp').addEventListener('click', function (e) {
     var r = e.target.closest('[data-cam]'); if (!r) return;
     var x = kpiCamioane[+r.dataset.cam]; if (!x) return;
-    $('incCauta').value = x.nt || x.na; arataTab('incarcari');
+    $('incCauta').value = x.nt || x.na; Object.keys(incDate).forEach(function (d) { delete incDate[d]; }); arataTab('incarcari');
   });
 
   /* ================= CMR ================= */
