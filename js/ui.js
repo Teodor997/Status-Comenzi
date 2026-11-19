@@ -245,6 +245,29 @@
     urmaresteComenzile();
     arataTab(doarInc ? 'incarcari' : 'comenzi');
   }
+  /* ---- versiunea aplicatiei: aratata in antet; daca pe server exista alta (versiune.json), apare o banda cu „Reîncarcă”.
+     Fisierul este cerut direct de la GitHub Pages (nu din Firebase), la pornire, din 10 in 10 minute si la revenirea in pagina. */
+  var versVazuta = '';
+  function verificaVersiunea() {
+    if (!/^https?:/.test(location.protocol) || !window.fetch) return;
+    fetch('versiune.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      var v = d && d.v ? String(d.v) : '';
+      if (!v || v === SC.VERSIUNE || v === versVazuta) return;
+      versVazuta = v;
+      var b = $('bandaVersiune');
+      b.innerHTML = '<span>A apărut versiunea <b>' + esc(v) + '</b> a aplicației (pe acest calculator rulează ' + esc(SC.VERSIUNE) + '). Termină ce ai de salvat, apoi reîncarcă pagina.</span>' +
+        '<button type="button" class="btn mic pri" id="versReincarca">Reîncarcă acum</button>';
+      b.classList.remove('ascuns');
+      $('versReincarca').onclick = function () {
+        /* adresa primeste versiunea noua, ca browserul sa nu foloseasca pagina tinuta in memorie */
+        var q = location.search.replace(/([?&])v=[^&]*&?/, '$1').replace(/[?&]$/, '');
+        location.replace(location.pathname + q + (q ? '&' : '?') + 'v=' + encodeURIComponent(v));
+      };
+    }).catch(function () { /* fara retea: se incearca data viitoare */ });
+  }
+  $('versiune').textContent = 'v' + SC.VERSIUNE;
+  verificaVersiunea(); setInterval(verificaVersiunea, 10 * 60000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) verificaVersiunea(); });
   function marcheazaSync() {
     $('sync').classList.remove('rau');
     $('syncText').textContent = 'actualizat ' + SC.oraAcum();
@@ -1138,7 +1161,10 @@
     if (stNou === ST.TER) p = cereDateTerminare(o, stNou, tinta);
     else if (stNou === ST.SELF) p = confirma('Cumulul ' + cod + ' (' + lista + ') se ridică de către client?').then(function (ok) { return ok ? cereDateTerminare(o, stNou, tinta) : null; });
     else if (stNou === ST.ANU) p = confirma('Comanda ' + o.nc + ' face parte din cumulul ' + cod + '.\nSe anulează toate cele ' + tinta.length + ' comenzi: ' + lista + '?\n\nToate datele lor se șterg; rămân Nr Crt, clientul, numărul de comandă și eticheta de import.\nCa să anulezi doar una, anulează întâi cumulul.').then(function (ok) { return ok ? {} : null; });
-    else p = Promise.resolve({});
+    else {
+      var avertC = avertRedeschidere(tinta, stNou, 'cumulul ' + cod + ' (' + lista + ')');
+      p = avertC ? confirma(avertC, { da: 'Da, redeschide', nu: 'Renunță' }).then(function (ok) { return ok ? {} : null; }) : Promise.resolve({});
+    }
     return p.then(function (date) {
       if (!date) return;
       return L.modifica(tinta.map(function (m) {
@@ -1146,29 +1172,46 @@
           n: m.n, fn: function (x) {
             if (x.st !== asteptat[m.n]) throw L.eroare('Statusul comenzii ' + x.nc + ' a fost schimbat între timp de un coleg (acum: ' + x.st + '). Verifică și repetă.');
             L.aplicaStatus(x, stNou, (stNou === ST.TER || stNou === ST.SELF) ? (m.n === n ? date : { pr: 0, am: 0, fpp: 0, pk: 0, cumul: true }) : date);
+            dezanuleaza(x, asteptat[m.n] === ST.ANU);
           }
         };
       }), 'Cumul ' + cod + ' (' + lista + ') → ' + stNou).then(function () { toast('Cumul ' + cod + ': ' + nCom(tinta.length) + ' → ' + stNou, 'bun'); });
     });
   }
+  /* textul de avertizare la redeschiderea unor comenzi (Terminata / Self-Pick / Anulata → Initiata / In lucru); '' = nu e cazul */
+  function avertRedeschidere(l, stNou, ceEste) {
+    if (stNou !== ST.INI && stNou !== ST.LUC) return '';
+    var anulate = l.filter(function (x) { return x.st === ST.ANU; }), gata = l.filter(function (x) { return x.st === ST.TER || x.st === ST.SELF; });
+    if (!anulate.length && !gata.length) return '';
+    var inc = gata.filter(function (x) { return x.inc === 'DA'; }), t = 'Redeschizi ' + ceEste + ' (→ ' + stNou + ')?';
+    if (gata.length) t += '\n\n' + (l.length === 1 ? 'Comanda este ' + gata[0].st : nCom(gata.length) + ' sunt deja pregătite') + ': data și ora pregătirii se șterg și se trec din nou la următoarea închidere. Paleții rămân cum sunt.';
+    if (inc.length) t += '\n\nATENȚIE: ' + (l.length === 1 ? 'comanda este deja ÎNCĂRCATĂ' + (inc[0].na ? ' pe camionul ' + inc[0].na : '') + (inc[0].di ? ' (' + SC.fmtDT(inc[0].di) + ')' : '') : nCom(inc.length) + ' sunt deja ÎNCĂRCATE') + '. Rămâne încărcată, dar cu status deschis, și va trebui închisă din nou.';
+    if (anulate.length) t += '\n\n' + (l.length === 1 ? 'Comanda este Anulata' : nCom(anulate.length) + ' sunt Anulate') + ': la anulare i s-au șters toate datele (destinatar, adresă, greutăți, date). Revine goală și trebuie completată din nou; comentariul „COMANDA ANULATA” se șterge.';
+    return t;
+  }
+  function dezanuleaza(x, eraAnulata) { if (eraAnulata && String(x.co || '').trim().toUpperCase() === 'COMANDA ANULATA') delete x.co; }
   function schimbaStatus(o, stNou) {
     var vechi = o.st, nc = o.nc, n = o.n;
     if (stNou === vechi) return Promise.resolve();
     var grup = membriCumul(o);
     if (grup.length > 1) return schimbaStatusCumul(o, stNou, grup);
-    var p;
+    var p, avert = avertRedeschidere([o], stNou, 'comanda ' + nc);
     if (stNou === ST.TER) p = cereDateTerminare(o, stNou);
     else if (stNou === ST.SELF) {
       p = confirma('Comanda ' + nc + ' se ridică de către client?').then(function (ok) { return ok ? cereDateTerminare(o, stNou) : null; });
     } else if (stNou === ST.ANU) {
-      p = confirma('Ești sigur că vrei să anulezi comanda ' + nc + '?\n\nToate datele comenzii se șterg; rămân Nr Crt, clientul, numărul de comandă și eticheta de import.').then(function (ok) { return ok ? {} : null; });
-    } else p = Promise.resolve({});
+      p = confirma((o.inc === 'DA' ? 'ATENȚIE: comanda ' + nc + ' este deja ÎNCĂRCATĂ' + (o.na ? ' pe camionul ' + o.na + (o.nt ? ' / ' + o.nt : '') : '') + (o.di ? ' (' + SC.fmtDT(o.di) + (o.se ? ', ' + o.se : '') + ')' : '') +
+        '.\nDacă o anulezi, se șterg și datele de încărcare, iar camionul rămâne fără ea (în borderou și în totaluri).\n\n' : '') +
+        'Ești sigur că vrei să anulezi comanda ' + nc + '?\n\nToate datele comenzii se șterg; rămân Nr Crt, clientul, numărul de comandă și eticheta de import.',
+        o.inc === 'DA' ? { da: 'Da, anulează comanda încărcată', nu: 'Renunță' } : undefined).then(function (ok) { return ok ? {} : null; });
+    } else if (avert) p = confirma(avert, { da: 'Da, redeschide', nu: 'Renunță' }).then(function (ok) { return ok ? {} : null; });
+    else p = Promise.resolve({});
     return p.then(function (date) {
       if (!date) return;
       return L.modifica([{
         n: n, fn: function (x) {
           if (x.st !== vechi) throw L.eroare('Statusul comenzii ' + nc + ' a fost schimbat între timp de un coleg (acum: ' + x.st + '). Verifică și repetă.');
-          L.aplicaStatus(x, stNou, date);
+          L.aplicaStatus(x, stNou, date); dezanuleaza(x, vechi === ST.ANU);
         }
       }], nc + ': ' + vechi + ' → ' + stNou).then(function () { toast('Comanda ' + nc + ': ' + stNou, 'bun'); });
     });
@@ -1388,12 +1431,11 @@
       (l.some(function (o) { return o.cum; }) ? '<button type="button" class="btn mic" id="selVezi">Vezi cumulul</button>' : '') +
       (poate() && l.some(function (o) { return o.cum; }) ? '<button type="button" class="btn mic" id="selDecum">Anulează cumulul</button>' : '') +
       /* Transport (si Administrator): camionul se alege sau se creeaza cu Nr AUTO + Nr transport; Operatorul trece doar Nr AUTO */
-      (rol() === 'operator' ? '<button type="button" class="btn mic" id="selNa">Nr AUTO pentru cele bifate…</button>' : '<button type="button" class="btn mic" id="selTra" title="Pune comenzile bifate pe un camion: unul nou (Nr AUTO + Nr transport) sau unul care există deja">Creează TRA…</button>') +
+      (rol() === 'operator' ? '' : '<button type="button" class="btn mic" id="selTra" title="Pune comenzile bifate pe un camion: unul nou (Nr AUTO + Nr transport) sau unul care există deja">Creează TRA…</button>') +
       '<button type="button" class="btn mic" id="selGol">Debifează tot</button>';
   }
   $('baraSel').addEventListener('click', function (e) {
     if (e.target.id === 'selGol') { stare.sel = {}; deseneazaRanduri(); deseneazaBaraSel(); }
-    else if (e.target.id === 'selNa') nrAutoPentruBifate();
     else if (e.target.id === 'selTra') transportPentru(comenziBifate(), true);
     else if (e.target.id === 'selCum') cumuleazaBifate();
     else if (e.target.id === 'selCmr') cmrDinBifate();
@@ -1479,26 +1521,6 @@
       titlu: 'Cumul ' + o.cum, lat: true,
       html: '<div class="nota">' + esc(o.cl) + ' · ' + esc(o.de || '') + '</div>' + tabelCumul(l),
       butoane: (poate() ? [{ t: 'Anulează cumulul', fn: function () { anuleazaCumul([o.cum]); return null; } }] : []).concat([{ t: 'Închide', cls: 'pri', v: null }])
-    });
-  }
-  function nrAutoPentruBifate() {
-    var l = comenziBifate(), libere = l.filter(function (o) { return o.inc !== 'DA'; }), inc = l.length - libere.length;
-    if (!libere.length) { toast('Toate comenzile bifate sunt deja încărcate; numărul auto nu mai poate fi schimbat.', 'rau'); return; }
-    var cuAlt = libere.filter(function (o) { return o.na; }).length;
-    modal({
-      titlu: 'Nr AUTO pentru ' + nCom(libere.length),
-      html: '<div class="nota">Greutate <b>' + SC.fmtNum(SC.rotunjeste(suma(libere, 'g')), 'num') + ' kg</b> · paleți estimați <b>' + SC.fmtNum(SC.rotunjeste(suma(libere, 'pe')), 'num') + '</b>' +
-        (cuAlt ? '<br>' + cuAlt + (cuAlt === 1 ? ' comandă are' : ' comenzi au') + ' deja un Nr AUTO, care va fi înlocuit.' : '') +
-        (inc ? '<br>' + inc + (inc === 1 ? ' comandă bifată este deja încărcată și rămâne neschimbată.' : ' comenzi bifate sunt deja încărcate și rămân neschimbate.') : '') + '</div>' +
-        '<label class="camp"><span>Nr AUTO (gol = șterge numărul)</span><input type="text" id="naMulte" maxlength="20" style="text-transform:uppercase"></label>',
-      butoane: [{ t: 'Renunță', v: null }, {
-        t: 'Salvează', cls: 'pri', fn: function (rad) {
-          var v = rad.querySelector('#naMulte').value.trim().toUpperCase();
-          return L.modifica(libere.map(function (o) {
-            return { n: o.n, fn: function (x) { if (x.inc === 'DA') return; if (v) x.na = v; else delete x.na; } };
-          })).then(function () { toast('Nr AUTO ' + (v || '(gol)') + ' salvat pe ' + nCom(libere.length) + '.', 'bun'); redeseneaza(); });
-        }
-      }]
     });
   }
   /* ================= Transport: Nr AUTO + Nr transport scrise de mana (fara fisierul TMS) =================
@@ -1747,7 +1769,7 @@
     /* cele sosite cat aplicatia e deschisa se anunta si printr-un mesaj */
     if (!notifInitial && veziNotif()) noi.forEach(function (x) {
       if (notifVazute[x._k]) return;
-      if (x.tip === 'tra') toast('Transport modificat (' + x.u + '): ' + x.nt + (x.na ? ' / ' + x.na : '') + '. Vezi Notificări.');
+      if (x.tip === 'tra') toast('Transport modificat (' + x.u + '): ' + [x.nt, x.na].filter(Boolean).join(' / ') + '. Vezi Notificări.');
       else toast('Transport (' + x.u + '): comanda ' + x.nc + ' — livrare ' + (x.v ? SC.fmtData(x.v) : '(fără dată)') + ' → ' + SC.fmtData(x.nou));
     });
     SC.notif.forEach(function (x) { notifVazute[x._k] = 1; });
@@ -1793,26 +1815,6 @@
       butoane: (noi ? [{ t: 'Am văzut toate (' + noi + ')', fn: function () { return L.vazutNotificari(notifMele().filter(function (x) { return !x.vz; })).then(function () { return false; }); } }] : []).concat([{ t: 'Închide', cls: 'pri', v: null }])
     });
   };
-  function editeazaNrAuto(o) {
-    if (o.inc === 'DA') { toast('Comanda ' + o.nc + ' este deja încărcată; numărul auto nu mai poate fi schimbat.', 'rau'); return; }
-    var n = o.n;
-    modal({
-      titlu: 'Nr AUTO — comanda ' + o.nc,
-      html: '<div class="nota">' + esc(o.cl) + ' · ' + esc(o.de || '') + '</div><label class="camp"><span>Nr AUTO</span><input type="text" id="naNou" value="' + esc(o.na || '') + '" maxlength="20"></label>',
-      butoane: [{ t: 'Renunță', v: null }, {
-        t: 'Salvează', cls: 'pri', fn: function (rad) {
-          var v = rad.querySelector('#naNou').value.trim().toUpperCase();
-          if (v === String(o.na || '')) return null;
-          return L.modifica([{
-            n: n, fn: function (x) {
-              if (x.inc === 'DA') throw L.eroare('Comanda ' + x.nc + ' a fost încărcată între timp; numărul auto nu mai poate fi schimbat.');
-              if (v) x.na = v; else delete x.na;
-            }
-          }]).then(function () { toast('Nr AUTO salvat pentru comanda ' + o.nc + '.', 'bun'); redeseneaza(); });
-        }
-      }]
-    });
-  }
   function deschideComanda(o) {
     var r = rol(), n = o.n;
     function editabil(k) {
@@ -2222,7 +2224,8 @@
           '</td><td class="nr">' + SC.fmtNum(suma(baza, 'gf'), 'num') + '</td><td style="white-space:nowrap">' +
           (edit && (x.deIncarcat.length || x.inLucru.length) ? '<button class="btn mic' + (x.deIncarcat.length ? ' pri' : '') + '" data-inc="' + i + '"' +
             (x.deIncarcat.length ? '' : ' title="Comenzile camionului nu sunt încă Terminata: pot fi încărcate cu paleții și amprentele numărate"') + '>Încarcă</button> ' : '') +
-          '<button class="btn mic" data-print="' + i + '">Borderou</button></td></tr>';
+          '<button class="btn mic" data-print="' + i + '">Borderou</button>' +
+          (rol() === 'admin' && x.incarcate.length ? ' <button class="btn mic" data-dezinc="' + i + '" title="Doar Administratorul: șterge confirmarea de încărcare de pe comenzile acestui camion">Anulează încărcarea</button>' : '') + '</td></tr>';
       });
       h += '</table>' + (l.length > 300 ? '<div class="mic" style="padding:8px">Afișate primele 300 din ' + l.length + ' camioane — restrânge cu filtrul de date sau cu căutarea.</div>' : '');
     }
@@ -2309,6 +2312,7 @@
     var b = e.target.closest('button'); if (!b) return;
     if (b.dataset.inc != null) incarcaCamion(camioaneAfisate[+b.dataset.inc]);
     else if (b.dataset.print != null) tiparesteCamion(camioaneAfisate[+b.dataset.print]);
+    else if (b.dataset.dezinc != null) anuleazaIncarcarea(camioaneAfisate[+b.dataset.dezinc]);
   });
   $('incExtra').addEventListener('click', function (e) {
     var r = e.target.closest('tr.clic'); if (r) editeazaExtra(extraAfisate[+r.dataset.x]);
@@ -2471,6 +2475,49 @@
               (deschise.length ? '; ' + nCom(deschise.length) + (deschise.length === 1 ? ' rămâne' : ' rămân') + ' de închis de Operatorul de date.' : '.'), 'bun');
             $('incAzi').checked = true; deseneazaIncarcari();
           });
+        }
+      }]
+    });
+  }
+  /* Doar Administratorul: o incarcare confirmata din greseala. Comenzile camionului redevin neincarcate (se sterg Incarcata, data
+     incarcarii, starea camionului, temperatura, semnatura). La cele plecate inainte de inchidere se sterg si paletii / amprentele
+     numarate la incarcare; daca Operatorul le-a inchis intre timp, cifrele lui raman. */
+  function anuleazaIncarcarea(x) {
+    if (rol() !== 'admin' || !x) return;
+    var l = x.incarcate.slice(), reg = l.filter(function (o) { return !o.extra; });
+    if (!l.length) return;
+    var cand = ''; l.forEach(function (o) { if (o.di && String(o.di) > cand) cand = String(o.di); });
+    var neinchise = reg.filter(function (o) { return SC.esteDeschisa(o); }).length;
+    var html = '<div class="nota atentie">Camion <b>' + esc(x.na) + '</b>' + (x.nt ? ' · transport <b>' + esc(x.nt) + '</b>' : '') + (cand ? ' · încărcat ' + esc(SC.fmtDT(cand)) : '') +
+      '<br>Confirmarea de încărcare se șterge de pe ' + (l.length === 1 ? 'linia bifată' : 'liniile bifate') + '; camionul apare din nou la Încărcări, de încărcat.</div>' +
+      '<div class="lista-mica inc-lista"><table class="simplu"><tr><th></th><th>Comandă</th><th>Destinatar</th><th>Status</th><th>Încărcată</th></tr>' +
+      l.map(function (o, i) {
+        return '<tr><td><input type="checkbox" data-di="' + i + '" checked aria-label="Anulează încărcarea pentru ' + esc(o.nc) + '"></td><td>' + esc(o.cl || '') + ' ' + esc(o.nc) + (o.extra ? ' <span class="eticheta asteapta">doar transport</span>' : '') +
+          '</td><td>' + esc(o.de || '') + '</td><td>' + esc(o.extra ? '' : o.st) + '</td><td>' + esc(SC.fmtDT(o.di)) + (o.se ? ' · ' + esc(o.se) : '') + '</td></tr>';
+      }).join('') + '</table></div>' +
+      (neinchise ? '<div class="mic">' + (neinchise === 1 ? 'O comandă a plecat neînchisă' : neinchise + ' comenzi au plecat neînchise') + ': li se șterg și paleții și amprentele numărate la încărcare.</div>' : '') +
+      '<div class="mic">Operația rămâne în jurnal, cu valorile vechi. Ora de început a încărcării (borderoul tipărit) nu se schimbă.</div>';
+    modal({
+      titlu: 'Anulează încărcarea', html: html, lat: true,
+      butoane: [{ t: 'Renunță', v: null }, {
+        t: 'Anulează încărcarea', cls: 'pri', fn: function (rad) {
+          var alese = Array.prototype.filter.call(rad.querySelectorAll('[data-di]'), function (c) { return c.checked; }).map(function (c) { return l[+c.dataset.di]; });
+          if (!alese.length) { toast('Bifează cel puțin o linie.', 'rau'); return false; }
+          var r2 = alese.filter(function (o) { return !o.extra; }), e2 = alese.filter(function (o) { return o.extra; });
+          var text = 'Încărcare anulată de Administrator: ' + x.na + (x.nt ? ' / transport ' + x.nt : '') + ' — ' + (alese.length === 1 ? '1 linie' : alese.length + ' linii');
+          function scoate(o) { delete o.inc; delete o.di; delete o.sc; delete o.te; delete o.se; }
+          var p = r2.length ? L.modifica(r2.map(function (c) {
+            return { n: c.n, fn: function (o) {
+              if (o.inc !== 'DA') return;
+              scoate(o);
+              if (SC.esteNum(o.ipr) && SC.esteDeschisa(o)) { delete o.pr; delete o.am; }
+              delete o.ipr; delete o.iam;
+            } };
+          }), text, { cuText: true }) : Promise.resolve();
+          return p.then(function () {
+            if (!e2.length) return;
+            return L.modificaExtra(e2.map(function (c) { return { zi: c._zi, k: c._k, fn: scoate }; }), r2.length ? null : text);
+          }).then(function () { toast('Încărcarea a fost anulată pentru ' + (alese.length === 1 ? '1 linie' : alese.length + ' linii') + ' de pe camionul ' + x.na + '.', 'bun'); deseneazaIncarcari(); });
         }
       }]
     });

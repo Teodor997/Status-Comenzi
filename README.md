@@ -154,10 +154,28 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
   A doua opțiune a aceleiași ferestre șterge camioanele „Fără dată”: Nr AUTO de pe comenzile neîncărcate care nu au dată de
   transport (valoarea veche rămâne în jurnal).
 
+## Versiunea aplicației
+- Versiunea care rulează pe calculator apare în antet, lângă nume (ex. „v2.46”).
+- Pachetul conține `versiune.json`. Aplicația îl citește de pe GitHub Pages (nu din Firebase) la pornire, din 10 în 10 minute și
+  la revenirea în pagină; dacă pe server este altă versiune, apare o bandă albastră cu butonul „Reîncarcă acum”.
+- La fiecare actualizare se urcă **toate** fișierele din pachet, inclusiv `index.html` și `versiune.json`.
+
+## Statusuri: întrebări de siguranță
+- Anularea unei comenzi deja încărcate cere o confirmare separată, care arată camionul, data și cine a încărcat-o.
+- Redeschiderea (Terminata / Self-Pick / Anulata → Initiata / In lucru) cere confirmare și spune ce se pierde: data și ora
+  pregătirii; la o comandă anulată, toate datele ei (revine goală, fără comentariul „COMANDA ANULATA”).
+- Trecerea între Initiata și In lucru rămâne fără întrebare.
+
+## Anularea unei încărcări (doar Administratorul)
+În tabul *Încărcări*, cu „arată și camioanele deja încărcate” bifat, camioanele încărcate au butonul **„Anulează încărcarea”**.
+Fereastra arată liniile camionului (toate bifate); de pe cele bifate se șterg Încărcată, data încărcării, starea camionului,
+temperatura și semnătura. La comenzile plecate neînchise se șterg și paleții și amprentele numărate la încărcare. Camionul
+apare din nou de încărcat. Totul rămâne în jurnal.
+
 ## Camioane scrise de mână (fără fișierul de transport)
 Pentru câteva comenzi nu mai e nevoie de importul graficului: Transportul le pune pe camion direct din tabul *Comenzi*.
 - **O comandă**: click pe celula *Nr AUTO* sau *Nr transport*. **Mai multe**: le bifezi și apeși **„Creează TRA…”** în bara de
-  bifare (Administratorul are același buton; Operatorul de date rămâne cu „Nr AUTO pentru cele bifate…”).
+  bifare (Administratorul are același buton; Operatorul de date nu pune comenzi pe mașini și nu are buton pentru Nr AUTO).
 - Fereastra are câmpurile *Nr AUTO* și *Nr transport (TRA)*, iar dedesubt lista derulantă a camioanelor care există deja (cele
   care mai au ceva de încărcat sau sunt de azi încolo). Lista se scurtează pe măsură ce scrii; un click pe un rând îl alege.
   Ajunge și numărul de transport scris întreg: camionul lui se completează singur.

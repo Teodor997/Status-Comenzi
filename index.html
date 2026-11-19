@@ -69,6 +69,9 @@
   #banda.rau { background: #fde2e0; color: #7a1b15; border-color: #efb1ac; }
   #bandaRol { background: #ffe9a8; color: #5a3d00; padding: 7px 12px; font-size: 13.5px; border-bottom: 2px solid #d9a400; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
   #bandaRol.ascuns { display: none; }
+  #bandaVersiune { background: #c8e6ff; color: #06305c; padding: 8px 12px; font-size: 14px; border-bottom: 2px solid #2b7fd0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+  #bandaVersiune.ascuns { display: none; }
+  .versiune { font-size: 12px; opacity: .75; white-space: nowrap; }
   #bandaBackup { background: #fff3cd; color: #5c4400; padding: 7px 12px; font-size: 13.5px; border-bottom: 1px solid #e6d28a; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
   #bandaBackup.ascuns { display: none; }
   .bk-tabel td:first-child { color: var(--muted, #5b6472); white-space: nowrap; padding-right: 18px; }
@@ -386,6 +389,7 @@
     </nav>
     <div class="dreapta">
       <span id="sync"><i></i><span id="syncText">conectare…</span></span>
+      <span id="versiune" class="versiune" title="Versiunea aplicației pe acest calculator"></span>
       <span id="cine"></span>
       <label class="vezi-ca ascuns" id="veziCaCutie">Vezi ca <select id="veziCa" aria-label="Vezi aplicația ca alt rol"></select></label>
       <button class="btn mic ascuns" id="btnNotif">Notificări<b id="notifNr"></b></button>
@@ -394,6 +398,7 @@
     </div>
   </header>
   <div id="banda" class="ascuns"></div>
+  <div id="bandaVersiune" class="ascuns" role="status"></div>
   <div id="bandaRol" class="ascuns" role="status"></div>
   <div id="bandaBackup" class="ascuns" role="status"></div>
   <main>
@@ -516,12 +521,12 @@
 <div id="cmrPrint"></div>
 <input type="file" id="fisier" class="ascuns" accept=".xlsx,.xlsm,.xls">
 
-<script src="config.js"></script>
-<script src="js/xlsx.full.min.js"></script>
-<script src="js/util.js"></script>
-<script src="js/store.js"></script>
-<script src="js/logic.js"></script>
-<script src="js/cmr-sablon.js"></script>
-<script src="js/ui.js"></script>
+<script src="config.js?v=2.46"></script>
+<script src="js/xlsx.full.min.js?v=2.46"></script>
+<script src="js/util.js?v=2.46"></script>
+<script src="js/store.js?v=2.46"></script>
+<script src="js/logic.js?v=2.46"></script>
+<script src="js/cmr-sablon.js?v=2.46"></script>
+<script src="js/ui.js?v=2.46"></script>
 </body>
 </html>
