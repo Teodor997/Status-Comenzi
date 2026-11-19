@@ -45,7 +45,7 @@ Datele rămân doar în acel browser, deci este bun pentru probă, nu pentru luc
 | **Administrator** | Tot: utilizatori, migrare, arhivare, jurnal, plus tot ce pot celelalte roluri. |
 | **Operator date** | Toată partea de comenzi: adaugă manual, modifică orice câmp al comenzii, schimbă statusuri, importă borderoul Kandia, fișiere Excel și fișierul de transport din TMS; editează Adrese. Nu confirmă încărcări. În fereastra comenzii nu are câmpurile camionului (Stare camion, Temperatură, Semnătură, Șofer, Remorcă); acestea rămân vizibile în listă și la Administrator. |
 | **Încărcări** | Taburile *Încărcări* și *KPI's*: confirmă camioanele (stare camion, temperatură, semnătură) și tipărește borderoul. Vede și tabul *Comenzi*, doar pentru citit: poate căuta, filtra și exporta, dar comanda nu se deschide la click și nu poate modifica nimic acolo. |
-| **Transport** | Face fișierul de import pentru TMS (*Export pentru TMS*) și stabilește ordinea în care se încarcă mașinile. Un click pe celula *Observații* sau *Comentarii* deschide tot textul într-o fereastră (se închide cu Esc sau cu un click în afara ei). Vede comenzile și încărcările; modifică doar **Nr AUTO**, direct în celulă (sau pe mai multe comenzi bifate), cât timp comanda nu e încărcată. Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
+| **Transport** | Face fișierul de import pentru TMS (*Export pentru TMS*) și stabilește ordinea în care se încarcă mașinile. Un click pe celula *Observații* sau *Comentarii* deschide tot textul într-o fereastră (se închide cu Esc sau cu un click în afara ei). Vede comenzile și încărcările; pune comenzile pe camion (**Nr AUTO** + **Nr transport**) din fereastra camionului — click pe celula Nr AUTO sau Nr transport, ori „Creează TRA…” pentru comenzile bifate —, cât timp comanda nu e încărcată (vezi „Camioane scrise de mână”). Poate bifa comenzi ca să vadă suma greutății și a paleților estimați și poate importa fișierul TMS. |
 
 **Comenzi bifate.** Operatorul de date, Administratorul și Transportul pot bifa comenzi în listă; deasupra tabelului apare
 o bară cu numărul lor și cu totalul de greutate și de paleți estimați. Operatorul de date și Administratorul văd acolo și
@@ -153,6 +153,24 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
   ca următorul import să pornească de la zero. Nr AUTO și comenzile deja încărcate rămân.
   A doua opțiune a aceleiași ferestre șterge camioanele „Fără dată”: Nr AUTO de pe comenzile neîncărcate care nu au dată de
   transport (valoarea veche rămâne în jurnal).
+
+## Camioane scrise de mână (fără fișierul de transport)
+Pentru câteva comenzi nu mai e nevoie de importul graficului: Transportul le pune pe camion direct din tabul *Comenzi*.
+- **O comandă**: click pe celula *Nr AUTO* sau *Nr transport*. **Mai multe**: le bifezi și apeși **„Creează TRA…”** în bara de
+  bifare (Administratorul are același buton; Operatorul de date rămâne cu „Nr AUTO pentru cele bifate…”).
+- Fereastra are câmpurile *Nr AUTO* și *Nr transport (TRA)*, iar dedesubt lista derulantă a camioanelor care există deja (cele
+  care mai au ceva de încărcat sau sunt de azi încolo). Lista se scurtează pe măsură ce scrii; un click pe un rând îl alege.
+  Ajunge și numărul de transport scris întreg: camionul lui se completează singur.
+- **Camion existent**: comanda se adaugă pe el și primește data încărcării, șoferul și remorca lui.
+- **Camion nou** (numere care nu există): apar câmpurile *Data încărcării* (propusă: azi), *Șofer* și *Remorcă*. Se poate crea
+  și un camion doar cu Nr AUTO, fără număr de transport.
+- Un număr de transport nu poate fi pus pe alt număr auto decât cel pe care există deja; excepție: dacă alegi toate comenzile
+  transportului, îi corectezi numărul auto. Ambele câmpuri goale = comanda rămâne fără camion. Enter salvează.
+- Încărcările primesc notificare când se adaugă sau se scot comenzi de pe un camion existent ori i se schimbă numărul auto.
+- **La următorul import al graficului**: o comandă trecută de mână pe un transport și care nu este (încă) în fișier **rămâne**
+  pe camion — apare doar ca informație, „Trecute de mână în aplicație, nu sunt în fișier (rămân)”. Din momentul în care fișierul
+  o conține pe același transport, o ține fișierul: dacă dispare apoi din el, se propune scoaterea, ca la orice altă comandă.
+  Dacă fișierul o are pe alt transport, fișierul are prioritate.
 
 ## Ordinea la încărcare
 

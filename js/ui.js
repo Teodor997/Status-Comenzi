@@ -404,7 +404,7 @@
       if (c.k === 'im' && SC.esteEDI(o)) cc = 'imp-edi';
       if (c.k === 'ju' && o.jd) cc = 'jd';
       if (c.k === 'inc' && o.inc === 'DA') cc = 'da';
-      if (c.k === 'na' && rol() === 'transport' && o.inc !== 'DA') cc = 'ed';
+      if ((c.k === 'na' || c.k === 'nt') && rol() === 'transport' && o.inc !== 'DA' && o.st !== ST.ANU) cc = 'ed';
       if (c.k === 'dl' && rol() === 'transport' && o.inc !== 'DA' && o.st !== ST.ANU) cc = 'ed';
       var titlu = (c.typ === 'txt' && v.length > 14) ? ' title="' + esc(v) + '"' : '';
       if (c.k === 'n' && o.cum) { cc += ' nrc'; titlu = ' title="Comandă legată în cumulul ' + esc(o.cum) + ' (' + membriCumul(o).map(function (x) { return x.nc; }).join(', ') + ')"'; }
@@ -422,7 +422,7 @@
         titlu = ' title="Încărcată' + (o.di ? ' la ' + esc(SC.fmtDT(o.di)) : '') + (SC.esteNum(o.ipr) ? ' cu ' + o.ipr + ' paleți și ' + (SC.esteNum(o.iam) ? o.iam : '—') + ' amprente numărate' : '') + ', dar comanda nu este închisă: trebuie trecută pe Terminata' + (v ? ' — ' + esc(v) : '') + '"';
       }
       if (c.k === 'na' && o.sp === 'DA') { inainte = SP_ETICHETA + inainte; titlu = ' title="Self-Pick: o ridică clientul, nu intră în exportul pentru TMS' + (v ? ' — ' + esc(v) : '') + '"'; }
-      h += '<div' + (cc ? ' class="' + cc + '"' : '') + (c.k === 'na' || c.k === 'fpp' || c.k === 'pk' || c.k === 'am' || c.k === 'dl' || c.k === 'ob' || c.k === 'co' ? ' data-k="' + c.k + '"' : '') + titlu + '>' + inainte + esc(v) + '</div>';
+      h += '<div' + (cc ? ' class="' + cc + '"' : '') + (c.k === 'na' || c.k === 'nt' || c.k === 'fpp' || c.k === 'pk' || c.k === 'am' || c.k === 'dl' || c.k === 'ob' || c.k === 'co' ? ' data-k="' + c.k + '"' : '') + titlu + '>' + inainte + esc(v) + '</div>';
     }
     return h + '</div>';
   }
@@ -572,10 +572,10 @@
     }
     /* Incarcari: lista de comenzi este doar de citit - click-ul nu deschide si nu modifica nimic */
     if (rol() === 'incarcari') return;
-    /* Transport: comanda nu se deschide; Nr AUTO se scrie direct in celula */
+    /* Transport: comanda nu se deschide; click pe Nr AUTO sau pe Nr transport deschide fereastra camionului */
     if (rol() === 'transport') {
-      var cel = e.target.closest('[data-k=na]'), celDl = e.target.closest('[data-k=dl]');
-      if (cel) editeazaNaInLinie(o, cel); else if (celDl) editeazaDlInLinie(o, celDl);
+      var cel = e.target.closest('[data-k=na],[data-k=nt]'), celDl = e.target.closest('[data-k=dl]');
+      if (cel) transportPentru([o]); else if (celDl) editeazaDlInLinie(o, celDl);
       /* click pe Observatii sau Comentarii: tot textul, intr-o fereastra (in lista este taiat de latimea coloanei) */
       else if (e.target.closest('[data-k=ob],[data-k=co]') && (!SC.gol(o.ob) || !SC.gol(o.co))) arataTextComanda(o);
       return;
@@ -1387,11 +1387,14 @@
       (poate() ? '<button type="button" class="btn mic" id="selCmr">CMR</button>' : '') +
       (l.some(function (o) { return o.cum; }) ? '<button type="button" class="btn mic" id="selVezi">Vezi cumulul</button>' : '') +
       (poate() && l.some(function (o) { return o.cum; }) ? '<button type="button" class="btn mic" id="selDecum">Anulează cumulul</button>' : '') +
-      '<button type="button" class="btn mic" id="selNa">Nr AUTO pentru cele bifate…</button><button type="button" class="btn mic" id="selGol">Debifează tot</button>';
+      /* Transport (si Administrator): camionul se alege sau se creeaza cu Nr AUTO + Nr transport; Operatorul trece doar Nr AUTO */
+      (rol() === 'operator' ? '<button type="button" class="btn mic" id="selNa">Nr AUTO pentru cele bifate…</button>' : '<button type="button" class="btn mic" id="selTra" title="Pune comenzile bifate pe un camion: unul nou (Nr AUTO + Nr transport) sau unul care există deja">Creează TRA…</button>') +
+      '<button type="button" class="btn mic" id="selGol">Debifează tot</button>';
   }
   $('baraSel').addEventListener('click', function (e) {
     if (e.target.id === 'selGol') { stare.sel = {}; deseneazaRanduri(); deseneazaBaraSel(); }
     else if (e.target.id === 'selNa') nrAutoPentruBifate();
+    else if (e.target.id === 'selTra') transportPentru(comenziBifate(), true);
     else if (e.target.id === 'selCum') cumuleazaBifate();
     else if (e.target.id === 'selCmr') cmrDinBifate();
     else if (e.target.id === 'selVezi') { var prima = comenziBifate().filter(function (o) { return o.cum; })[0]; if (prima) arataCumul(prima); }
@@ -1498,50 +1501,167 @@
       }]
     });
   }
-  /* Transport: Nr AUTO se scrie direct in celula. Enter salveaza si coboara la comanda urmatoare, Esc renunta. */
-  function editeazaNaInLinie(o, cel) {
-    if (o.inc === 'DA') { toast('Comanda ' + o.nc + ' este deja încărcată; numărul auto nu mai poate fi schimbat.', 'rau'); return; }
-    if (cel.querySelector('.naInline')) return;
-    var vechi = String(o.na || ''), gata = false, n = o.n;
-    cel.innerHTML = '<input type="text" class="naInline" maxlength="20" aria-label="Nr AUTO pentru comanda ' + esc(o.nc) + '" value="' + esc(vechi) + '">';
-    var inp = cel.firstChild; inp.focus(); inp.select();
-    function termina(salveaza, coboara) {
-      if (gata) return; gata = true;
-      var v = inp.value.trim().toUpperCase(), urm = coboara ? cel.parentNode.nextElementSibling : null;
-      cel.textContent = salveaza ? v : vechi;
-      /* la renuntare ramane acelasi camion: se pune la loc si locul lui la incarcare */
-      if (!salveaza && SC.areOrdine && vechi) { var ocv = ordineComanda(o); if (ocv) cel.insertAdjacentHTML('afterbegin', '<span class="ordM">' + ocv.o + '</span>'); }
-      if (o.sp === 'DA') cel.insertAdjacentHTML('afterbegin', SP_ETICHETA);
-      if (salveaza && v !== vechi) {
-        L.modifica([{
-          n: n, fn: function (x) {
-            if (x.inc === 'DA') throw L.eroare('Comanda ' + x.nc + ' a fost încărcată între timp; numărul auto nu mai poate fi schimbat.');
-            if (v) x.na = v; else delete x.na;
-          }
-        }]).then(function () { toast('Nr AUTO ' + (v || '(gol)') + ' salvat pentru comanda ' + o.nc + '.', 'bun'); }, arataEroare).then(function () { redeseneaza(); });
-      }
-      if (urm) {
-        var o2 = SC.dupaNr[+urm.dataset.n], c2 = urm.querySelector('[data-k=na]');
-        if (o2 && c2 && o2.inc !== 'DA') { stare.atins = { n: o2.n, t: Date.now() }; editeazaNaInLinie(o2, c2); return; }
-      }
-      setTimeout(function () { if (stare.murdar) redeseneaza(); }, 0);
-    }
-    inp.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); termina(true, true); }
-      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); termina(false, false); }
+  /* ================= Transport: Nr AUTO + Nr transport scrise de mana (fara fisierul TMS) =================
+     Aceeasi fereastra pentru o comanda (click pe Nr AUTO / Nr transport) si pentru cele bifate („Creeaza TRA”):
+     pe masura ce se scrie, dedesubt apar camioanele care exista deja; un click pe unul il alege. Ce nu exista se creeaza. */
+  function celMaiDesDin(l, camp) {
+    var m = {}, ales = '', n = 0;
+    l.forEach(function (o) { var v = o[camp]; if (v == null || v === '') return; m[v] = (m[v] || 0) + 1; if (m[v] > n) { n = m[v]; ales = v; } });
+    return ales;
+  }
+  function transporturiExistente() {
+    return toateCamioanele().map(function (x) {
+      return { cheie: x.cheie, na: x.na, nt: x.nt, zi: x.data || '', so: celMaiDesDin(x.toate, 'so'), re: celMaiDesDin(x.toate, 're'),
+        nr: x.toate.length - x.doarTransport.length, nrExtra: x.doarTransport.length, nrInc: x.incarcate.length, deInc: x.toate.length - x.incarcate.length, x: x };
     });
-    inp.addEventListener('blur', function () { termina(true, false); });
   }
-  /* Transport: data de livrare se schimba direct in celula, cu confirmare; Operatorul de date primeste o notificare care ramane salvata */
-  var popCal = null;
-  function inchideCal() {
-    if (!popCal) return;
-    popCal.remove(); popCal = null;
-    document.removeEventListener('pointerdown', afaraCal, true);
-    document.removeEventListener('keydown', tastaCal, true);
+  function transportPentru(l, dinBara) {
+    var libere = l.filter(function (o) { return o.inc !== 'DA' && o.st !== ST.ANU; }), sarite = l.length - libere.length;
+    if (!libere.length) {
+      toast(l.length === 1 ? 'Comanda ' + l[0].nc + (l[0].st === ST.ANU ? ' este anulată' : ' este deja încărcată') + '; camionul ei nu mai poate fi schimbat.' : 'Comenzile bifate sunt deja încărcate sau anulate; camionul lor nu mai poate fi schimbat.', 'rau');
+      return Promise.resolve();
+    }
+    var una = libere.length === 1 ? libere[0] : null, azi = SC.azi(), ales = '';
+    var cam = transporturiExistente(), inSel = {}, camDupaNr = {};
+    libere.forEach(function (o) { inSel[o.n] = 1; });
+    cam.forEach(function (c) { c.x.toate.forEach(function (o) { if (!o.extra && o.n != null) camDupaNr[o.n] = c; }); });
+    /* in lista: camioanele care mai au ceva de incarcat sau sunt de azi incolo; cele mai noi sus, „fara data” la sfarsit */
+    var deAles = cam.filter(function (c) { return c.deInc > 0 || c.zi >= azi; }).sort(function (a, b) {
+      return (a.zi === b.zi ? 0 : !a.zi ? 1 : !b.zi ? -1 : a.zi < b.zi ? 1 : -1) || String(a.nt).localeCompare(String(b.nt)) || String(a.na).localeCompare(String(b.na));
+    });
+    var acelasi = libere.every(function (o) { return SC.normNrAuto(o.na) === SC.normNrAuto(libere[0].na) && (o.nt || '') === (libere[0].nt || ''); });
+    var naInit = acelasi ? String(libere[0].na || '') : '', ntInit = acelasi ? String(libere[0].nt || '') : '';
+    var cuCamion = libere.filter(function (o) { return o.na; }).length;
+    function gaseste(na, nt) {
+      var nn = SC.normNrAuto(na), c;
+      if (nt) {
+        c = cam.filter(function (x) { return String(x.nt).toUpperCase() === nt; }).sort(function (a, b) { return b.nr - a.nr; });
+        if (!c.length) return { nou: true };
+        var p = c.filter(function (x) { return SC.normNrAuto(x.na) === nn; })[0];
+        if (p || !na) return { ex: p || c[0] };
+        /* acelasi numar de transport, alt numar auto: se poate doar daca tot transportul este intre comenzile alese (corectarea numarului auto) */
+        var afara = c.some(function (x) { return x.x.toate.some(function (o) { return o.extra || !inSel[o.n]; }); });
+        return { nou: true, vechi: c[0], blocat: afara };
+      }
+      if (!na) return { gol: true };
+      c = deAles.filter(function (x) { return !x.nt && SC.normNrAuto(x.na) === nn; });
+      if (!c.length) return { nou: true };
+      return { ex: c.filter(function (x) { return x.cheie === ales; })[0] || c.filter(function (x) { return x.zi >= azi; }).sort(function (a, b) { return a.zi < b.zi ? -1 : 1; })[0] || c[0] };
+    }
+    function descrie(c) {
+      return '<b>' + esc(c.na || '—') + '</b>' + (c.nt ? ' · <b>' + esc(c.nt) + '</b>' : ' · fără nr. transport') + ' · ' + (c.zi ? esc(SC.fmtDataLunga(c.zi)) : 'fără dată') + (c.so ? ' · șofer ' + esc(c.so) : '') + (c.re ? ' · remorcă ' + esc(c.re) : '') +
+        ' · ' + nCom(c.nr) + (c.nrExtra ? ' + ' + c.nrExtra + ' doar din transport' : '') + (c.nrInc ? ' (' + c.nrInc + ' deja încărcate)' : '');
+    }
+    var html = '<div class="nota">' + (una ? esc(una.cl) + ' · comanda <b>' + esc(una.nc) + '</b>' + (una.de ? '<br>' + esc(una.de) : '') + '<br>' : '') +
+        'Greutate <b>' + SC.fmtNum(SC.rotunjeste(suma(libere, 'g')), 'num') + ' kg</b> · paleți estimați <b>' + SC.fmtNum(SC.rotunjeste(suma(libere, 'pe')), 'num') + '</b>' +
+        (!una && cuCamion ? '<br>' + cuCamion + (cuCamion === 1 ? ' comandă are' : ' comenzi au') + ' deja un camion; ' + (cuCamion === 1 ? 'va fi mutată' : 'vor fi mutate') + ' pe cel ales aici.' : '') +
+        (sarite ? '<br>' + sarite + (sarite === 1 ? ' comandă bifată este deja încărcată sau anulată și rămâne neschimbată.' : ' comenzi bifate sunt deja încărcate sau anulate și rămân neschimbate.') : '') + '</div>' +
+      '<div class="grila"><label class="camp"><span>Nr AUTO</span><input type="text" id="trNa" maxlength="20" autocomplete="off" style="text-transform:uppercase" value="' + esc(naInit) + '"></label>' +
+      '<label class="camp"><span>Nr transport (TRA)</span><input type="text" id="trNt" maxlength="30" autocomplete="off" style="text-transform:uppercase" value="' + esc(ntInit) + '"></label></div>' +
+      '<div class="mic" id="trListaTitlu" style="margin-top:8px"></div><div class="lista-mica tra-lista" id="trLista" role="listbox" aria-label="Camioane care există deja"></div>' +
+      '<div class="nota" id="trStare" style="margin-top:8px" role="status"></div>' +
+      '<div class="grila ascuns" id="trNou" style="margin-top:8px"><label class="camp"><span>Data încărcării</span><input type="date" id="trData" value="' + esc(celMaiDesDin(libere, 'dtr') ? String(celMaiDesDin(libere, 'dtr')).slice(0, 10) : azi) + '"></label>' +
+      '<label class="camp"><span>Șofer (opțional)</span><input type="text" id="trSo" maxlength="60"></label><label class="camp"><span>Remorcă (opțional)</span><input type="text" id="trRe" maxlength="20" style="text-transform:uppercase"></label></div>' +
+      '<div class="mic" style="margin-top:8px">Ambele câmpuri goale = ' + (una ? 'comanda rămâne' : 'comenzile rămân') + ' fără camion. Camioanele scrise aici apar la Încărcări la fel ca cele din fișierul de transport.</div>';
+    function citeste(rad) {
+      var na = rad.querySelector('#trNa').value.trim().toUpperCase(), nt = rad.querySelector('#trNt').value.trim().toUpperCase();
+      return { na: na, nt: nt, g: gaseste(na, nt) };
+    }
+    function arata(rad) {
+      var s = citeste(rad), nn = SC.normNrAuto(s.na), lista = rad.querySelector('#trLista'), st = rad.querySelector('#trStare'), g = s.g;
+      var filtrate = deAles.filter(function (c) { return (!nn || SC.normNrAuto(c.na).indexOf(nn) >= 0) && (!s.nt || String(c.nt).toUpperCase().indexOf(s.nt) >= 0); });
+      rad.querySelector('#trListaTitlu').textContent = deAles.length ? 'Camioane care există deja' + (nn || s.nt ? ' și se potrivesc cu ce ai scris' : '') + ' (' + filtrate.length + ')' + (filtrate.length ? ' — click pe unul ca să îl alegi:' : ':') : 'Încă nu există niciun camion de încărcat în aplicație.';
+      lista.classList.toggle('ascuns', !deAles.length);
+      lista.innerHTML = filtrate.slice(0, 80).map(function (c) {
+        return '<button type="button" class="tra-rand' + (g.ex && g.ex.cheie === c.cheie ? ' ales' : '') + '" role="option" data-cheie="' + esc(c.cheie) + '"><span class="tra-na">' + esc(c.na || '—') + '</span><span class="tra-nt">' + esc(c.nt || '—') + '</span><span>' +
+          (c.zi ? esc(SC.fmtDataLunga(c.zi)) : 'fără dată') + '</span><span>' + esc(c.so || '') + '</span><span class="tra-nr">' + nCom(c.nr) + (c.nrInc ? ' · ' + c.nrInc + ' înc.' : '') + '</span></button>';
+      }).join('') + (filtrate.length > 80 ? '<div class="mic" style="padding:6px 8px">… încă ' + (filtrate.length - 80) + '. Scrie câteva caractere ca să scurtezi lista.</div>' : '') +
+        (!filtrate.length ? '<div class="mic" style="padding:8px">Niciun camion existent nu se potrivește.</div>' : '');
+      var cls = 'nota', txt, nou = false;
+      if (g.gol) { cls = cuCamion ? 'nota atentie' : 'nota'; txt = cuCamion ? (una ? 'Comanda rămâne' : 'Comenzile rămân') + ' fără camion: se șterg Nr AUTO, Nr transport, data încărcării, șoferul și remorca.' : 'Scrie un Nr AUTO sau un Nr transport, ori alege un camion din listă.'; }
+      else if (g.ex) { cls = 'nota bun'; txt = 'Camion existent: ' + descrie(g.ex) + '.<br>' + (una ? 'Comanda se adaugă' : 'Comenzile se adaugă') + ' pe el, cu data, șoferul și remorca lui.' + (g.ex.deInc ? '' : ' Camionul a fost deja confirmat ca încărcat; va apărea din nou la Încărcări.'); }
+      else if (g.blocat) { cls = 'nota rau'; txt = 'Transportul <b>' + esc(s.nt) + '</b> există deja pe camionul <b>' + esc(g.vechi.na) + '</b> (' + nCom(g.vechi.nr) + '). Alege-l din listă sau scrie alt număr de transport.'; }
+      else if (s.nt && !s.na) { cls = 'nota atentie'; txt = 'Transport nou <b>' + esc(s.nt) + '</b>: scrie și Nr AUTO.'; }
+      else { nou = true; txt = (g.vechi ? 'Transportul <b>' + esc(s.nt) + '</b> trece de pe camionul <b>' + esc(g.vechi.na) + '</b> pe <b>' + esc(s.na) + '</b>.' : (s.nt ? 'Transport nou: <b>' + esc(s.na) + '</b> · <b>' + esc(s.nt) + '</b>.' : 'Camion nou, fără număr de transport: <b>' + esc(s.na) + '</b>.')) + ' Completează mai jos data încărcării.'; }
+      if (!g.ex && !g.gol && !g.blocat && filtrate.length) txt += '<br><b>Atenție:</b> în listă ' + (filtrate.length === 1 ? 'este un camion care se potrivește' : 'sunt ' + filtrate.length + ' camioane care se potrivesc') + ' cu ce ai scris. Dacă e vorba de ' + (filtrate.length === 1 ? 'el' : 'unul dintre ele') + ', apasă pe el în listă.';
+      st.className = cls; st.innerHTML = txt;
+      rad.querySelector('#trNou').classList.toggle('ascuns', !nou);
+    }
+    return modal({
+      titlu: una ? 'Camion — comanda ' + una.nc : 'Camion (TRA) pentru ' + nCom(libere.length), html: html, lat: true,
+      laDeschidere: function (rad) {
+        var vechiPus = false;
+        function laScris() { ales = ''; arata(rad); var s = citeste(rad); if (s.g.vechi && !s.g.blocat && !vechiPus) { vechiPus = true; rad.querySelector('#trData').value = s.g.vechi.zi || ''; rad.querySelector('#trSo').value = s.g.vechi.so || ''; rad.querySelector('#trRe').value = s.g.vechi.re || ''; } }
+        rad.querySelector('#trNa').addEventListener('input', laScris); rad.querySelector('#trNt').addEventListener('input', laScris);
+        rad.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); rad.parentNode.querySelector('.jos .btn.pri').click(); } });
+        rad.querySelector('#trLista').addEventListener('click', function (e) {
+          var b = e.target.closest('.tra-rand'); if (!b) return;
+          var c = deAles.filter(function (x) { return x.cheie === b.dataset.cheie; })[0]; if (!c) return;
+          ales = c.cheie; rad.querySelector('#trNa').value = c.na || ''; rad.querySelector('#trNt').value = c.nt || ''; arata(rad);
+        });
+        arata(rad);
+      },
+      butoane: [{ t: 'Renunță', v: null }, {
+        t: 'Salvează', cls: 'pri', fn: function (rad) {
+          var s = citeste(rad), g = s.g, T = null;
+          if (g.blocat) { toast('Transportul ' + s.nt + ' există deja pe camionul ' + g.vechi.na + '. Alege-l din listă sau scrie alt număr de transport.', 'rau'); return false; }
+          if (g.ex) T = { na: g.ex.na, nt: g.ex.nt || '', dtr: g.ex.zi || '', so: g.ex.so || '', re: g.ex.re || '' };
+          else if (!g.gol) {
+            if (!s.na) { toast('Scrie și Nr AUTO pentru transportul ' + s.nt + '.', 'rau'); rad.querySelector('#trNa').focus(); return false; }
+            T = { na: s.na, nt: s.nt, dtr: rad.querySelector('#trData').value || '', so: rad.querySelector('#trSo').value.trim(), re: rad.querySelector('#trRe').value.trim().toUpperCase() };
+          }
+          function laFel(o) {
+            if (!T) return !o.na && !o.nt && !o.dtr && !o.so && !o.re;
+            return SC.normNrAuto(o.na) === SC.normNrAuto(T.na) && (o.nt || '') === T.nt && String(o.dtr || '').slice(0, 10) === T.dtr && (o.so || '') === T.so && (o.re || '') === T.re;
+          }
+          var deSchimbat = libere.filter(function (o) { return !laFel(o); });
+          if (!deSchimbat.length) { toast('Nimic de schimbat: ' + (una ? 'comanda este' : 'comenzile sunt') + ' deja ' + (T ? 'pe acest camion.' : 'fără camion.')); return null; }
+          /* ce afla Incarcarile: camionul existent care primeste comenzi, camioanele de pe care pleaca, numarul auto corectat */
+          var anunt = [], peVechi = {};
+          function tiparit(c) { var info = L.infoCamion(c.x); return info && info.bt ? info.bt : ''; }
+          if (g.vechi) anunt.push({ nt: T.nt, na: T.na, zi: T.dtr, tiparit: tiparit(g.vechi), linii: ['Nr AUTO: ' + (g.vechi.na || '—') + ' → ' + T.na] });
+          else {
+            var adaugate = deSchimbat.filter(function (o) { return g.ex && camDupaNr[o.n] !== g.ex; });
+            if (adaugate.length) anunt.push({ nt: T.nt, na: T.na, zi: T.dtr, tiparit: tiparit(g.ex), linii: ['Comenzi adăugate de mână: ' + adaugate.map(function (o) { return o.nc; }).join(', ')] });
+            deSchimbat.forEach(function (o) {
+              var c = camDupaNr[o.n]; if (!c || (g.ex && c === g.ex)) return;
+              (peVechi[c.cheie] = peVechi[c.cheie] || { c: c, l: [] }).l.push(o.nc);
+            });
+            Object.keys(peVechi).forEach(function (k) {
+              var v = peVechi[k];
+              anunt.push({ nt: v.c.nt, na: v.c.na, zi: v.c.zi, tiparit: tiparit(v.c), linii: ['Comenzi scoase de mână: ' + v.l.join(', ') + (T ? ' (mutate pe ' + T.na + (T.nt ? ' / ' + T.nt : '') + ')' : ' (rămân fără camion)')] });
+            });
+          }
+          var nume = T ? T.na + (T.nt ? ' / ' + T.nt : '') : '';
+          return L.modifica(deSchimbat.map(function (o) {
+            return {
+              n: o.n, fn: function (x) {
+                if (x.inc === 'DA') { if (una) throw L.eroare('Comanda ' + x.nc + ' a fost încărcată între timp; camionul ei nu mai poate fi schimbat.'); return; }
+                if (!T) { delete x.na; delete x.nt; delete x.dtr; delete x.so; delete x.re; delete x.mnt; }
+                else {
+                  x.na = T.na;
+                  if (T.nt) { x.nt = T.nt; x.mnt = T.nt; } else { delete x.nt; delete x.mnt; }      /* mnt: fisierul de transport nu o scoate de pe acest transport */
+                  if (T.dtr) x.dtr = T.dtr; else delete x.dtr;
+                  if (T.so) x.so = T.so; else delete x.so;
+                  if (T.re) x.re = T.re; else delete x.re;
+                }
+                delete x.xnt;
+              }
+            };
+          }), T ? 'Camion scris de mână: ' + nume + ' — ' + nCom(deSchimbat.length) : 'Scoase de mână de pe camion — ' + nCom(deSchimbat.length), { cuText: true }).then(function () {
+            return L.notificaTransport(anunt, 'modificare de mână').then(function () { return true; }, function (e) {
+              toast('Modificarea a fost salvată, dar notificarea pentru Încărcări nu a putut fi salvată: ' + (e && e.message ? e.message : e), 'rau'); return false;
+            });
+          }).then(function (anuntat) {
+            toast((T ? (g.ex ? 'Adăugat pe camionul ' : g.vechi ? 'Nr AUTO corectat: ' : 'Camion nou ') + nume + ': ' + nCom(deSchimbat.length) + '.' : nCom(deSchimbat.length) + (deSchimbat.length === 1 ? ' a rămas' : ' au rămas') + ' fără camion.') +
+              (anuntat && anunt.length ? ' Încărcările au fost anunțate.' : ''), 'bun');
+            if (dinBara) stare.sel = {};
+            redeseneaza();
+          });
+        }
+      }]
+    });
   }
-  function afaraCal(e) { if (popCal && !popCal.contains(e.target)) inchideCal(); }
-  function tastaCal(e) { if (e.key === 'Escape') { e.preventDefault(); inchideCal(); } }
   function editeazaDlInLinie(o, cel) {
     if (o.st === ST.ANU) { toast('Comanda ' + o.nc + ' este anulată; data de livrare nu mai poate fi schimbată.', 'rau'); return; }
     if (o.inc === 'DA') { toast('Comanda ' + o.nc + ' este deja încărcată; data de livrare nu mai poate fi schimbată.', 'rau'); return; }
@@ -2434,7 +2554,7 @@
           }
           var pas = Promise.resolve();
           if (tms) pas = pas.then(function () { return SC.store.stergeColectie('extra'); }).then(function () {
-            return inBucati(atinse, 'golire', function (x) { if (x.inc === 'DA') return; delete x.nt; delete x.dtr; delete x.so; delete x.re; },
+            return inBucati(atinse, 'golire', function (x) { if (x.inc === 'DA') return; delete x.nt; delete x.dtr; delete x.so; delete x.re; delete x.mnt; },
               function (n) { return 'Golire încărcări: date de transport scoase de pe ' + n + ' comenzi'; }, { faraDetalii: true });
           });
           if (fara) pas = pas.then(function () {
@@ -2481,7 +2601,7 @@
       p.recente.forEach(function (r) { r.refCurat = String(r.ref).replace(/[.,;:\s]+$/, ''); });
       return L.cautaComenzi(p.recente.map(function (r) { return r.refCurat; }));
     }).then(function (exist) {
-      var noi = [], schimbate = [], neschimbate = 0, dejaInc = 0, vazute = {}, perZi = {}, nrExtra = 0, preaVechi = p.vechi, potriviri = [], ramase = [];
+      var noi = [], schimbate = [], neschimbate = 0, dejaInc = 0, vazute = {}, perZi = {}, nrExtra = 0, preaVechi = p.vechi, potriviri = [], ramase = [], confirmate = [];
       var prag = SC.ziPlus(SC.azi(), -SC.ZILE_EXTRA);
       p.recente.forEach(function (r) {
         var k = SC.cheieComanda(r.refCurat);
@@ -2505,7 +2625,11 @@
         potriviri.push({ r: r, o: o });
         var acelasiAuto = SC.normNrAuto(o.na) === SC.normNrAuto(r.na);
         /* neschimbata = acelasi camion, transport si data, dar si acelasi sofer si aceeasi remorca (daca fisierul le are) */
-        if (acelasiAuto && (o.nt || '') === (r.nt || '') && (!r.dtr || (o.dtr || '') === r.dtr) && (!r.so || (o.so || '') === r.so) && (!r.re || (o.re || '') === r.re)) { neschimbate++; return; }
+        if (acelasiAuto && (o.nt || '') === (r.nt || '') && (!r.dtr || (o.dtr || '') === r.dtr) && (!r.so || (o.so || '') === r.so) && (!r.re || (o.re || '') === r.re)) {
+          /* trecuta de mana pe transport si ajunsa acum si in fisier: de aici inainte o tine fisierul (daca dispare din el, se scoate) */
+          if (o.mnt) confirmate.push({ o: o, r: r }); else neschimbate++;
+          return;
+        }
         if (o.na && !acelasiAuto) schimbate.push({ o: o, r: r }); else noi.push({ o: o, r: r });
       });
       /* zilele deja existente in rubrica separata, din fereastra importului, se recalculeaza si ele (liniile disparute se scot) */
@@ -2526,7 +2650,8 @@
 
       var html = '<div class="nota">Fișier: <b>' + esc(fisier.name) + '</b> (foaia „' + esc(p.foaie) + '”, ' + p.randuri.length + ' rânduri)' +
         '<br>Data încărcării: ' + (p.colData ? 'coloana „<b>' + esc(p.colData) + '</b>”' : '<b>nu am găsit o coloană de dată</b> — camioanele vor apărea „fără dată”') + '</div>' +
-        '<div><b>Comenzi din registru</b> — Nr AUTO de completat sau actualizat: <b>' + noi.length + '</b> · de schimbat: <b>' + schimbate.length + '</b> · neschimbate: ' + neschimbate + ' · deja încărcate (sărite): ' + dejaInc + '</div>';
+        '<div><b>Comenzi din registru</b> — Nr AUTO de completat sau actualizat: <b>' + noi.length + '</b> · de schimbat: <b>' + schimbate.length + '</b> · neschimbate: ' + neschimbate + ' · deja încărcate (sărite): ' + dejaInc + '</div>' +
+        (confirmate.length ? '<div class="mic">Trecute de mână în aplicație și găsite acum și în fișier, pe același camion: ' + confirmate.length + ' (de aici înainte le ține fișierul).</div>' : '');
       if (schimbate.length) html += '<div class="mic">Numere auto care se schimbă (fișierul de transport are prioritate):</div>' + listaHtml(schimbate.map(function (x) { return x.o.nc + ': ' + x.o.na + ' → ' + x.r.na; }));
       html += '<div><b>Linii care nu există în registru</b> — merg în rubrica separată „Doar din transport” din tabul Încărcări: <b>' + nrExtra + '</b> (din care noi: ' + extraNoi + ')</div>' +
         (preaVechi ? '<div class="mic">Rânduri din fișier cu transport mai vechi de ' + SC.ZILE_EXTRA + ' zile, ignorate: ' + preaVechi + '.</div>' : '') +
@@ -2553,7 +2678,7 @@
       if (cmp.transporturi.length) html += '<div class="mic" style="margin-top:6px">La „Aplică”, colegii de la Încărcări primesc câte o notificare pentru fiecare transport modificat.</div>';
       if (cmp.extraOrfane.length) html += '<div class="mic" style="margin-top:6px">Linii „doar din transport” ale unor transporturi care nu mai sunt deloc în fișier (se scot): ' + esc(cmp.extraOrfane.slice(0, 12).join(', ')) +
         (cmp.extraOrfane.length > 12 ? ' … încă ' + (cmp.extraOrfane.length - 12) : '') + '</div>';
-      if (!noi.length && !schimbate.length && !extraNoi && !nrExtra && !cmp.deScos.length && !cmp.extraOrfane.length && !ramase.length) {
+      if (!noi.length && !schimbate.length && !confirmate.length && !extraNoi && !nrExtra && !cmp.deScos.length && !cmp.extraOrfane.length && !ramase.length) {
         return alerta('Nimic de actualizat din „' + fisier.name + '”.' + (nrVechi ? '\n\nTransporturi care erau deja în aplicație: ' + nrVechi + ', toate fără nicio modificare.' : ''));
       }
       return modal({
@@ -2561,7 +2686,7 @@
         butoane: [{ t: 'Renunță', v: null }, {
           t: 'Aplică', cls: 'pri', fn: function (rad) {
             var bifaR = rad.querySelector('#trRamase');
-            var toate = noi.concat(schimbate).concat(bifaR && bifaR.checked ? ramase : []), i = 0, bifa = rad.querySelector('#trScoate'), deScos = bifa && bifa.checked ? cmp.deScos : [];
+            var toate = noi.concat(schimbate).concat(confirmate).concat(bifaR && bifaR.checked ? ramase : []), i = 0, bifa = rad.querySelector('#trScoate'), deScos = bifa && bifa.checked ? cmp.deScos : [];
             function parte() {
               if (i >= toate.length) return Promise.resolve();
               var bucata = toate.slice(i, i + 100); i += 100;
@@ -2572,6 +2697,7 @@
                     if (o.inc === 'DA') return;
                     o.na = x.r.na; if (x.r.nt) o.nt = x.r.nt; if (x.r.so) o.so = x.r.so; if (x.r.re) o.re = x.r.re; if (x.r.dtr) o.dtr = x.r.dtr;
                     delete o.xnt;      /* a primit din nou un camion: nu mai este „scoasa la incarcare” */
+                    delete o.mnt;      /* camionul vine acum din fisier, nu mai este „trecuta de mana” */
                   }
                 };
               }), 'Import transport ' + fisier.name + ': Nr AUTO pe ' + bucata.length + ' comenzi').then(parte);
@@ -2580,7 +2706,7 @@
             function scoate() {
               if (!deScos.length) return Promise.resolve();
               return L.modifica(deScos.map(function (x) {
-                return { n: x.n, fn: function (o) { if (o.inc === 'DA' || o.nt !== x.nt) return; delete o.na; delete o.nt; delete o.dtr; delete o.so; delete o.re; } };
+                return { n: x.n, fn: function (o) { if (o.inc === 'DA' || o.nt !== x.nt) return; delete o.na; delete o.nt; delete o.dtr; delete o.so; delete o.re; delete o.mnt; } };
               }), 'Import transport ' + fisier.name + ': scoase de pe camion, fiindcă nu mai sunt pe transportul lor — ' + nCom(deScos.length), { cuText: true });
             }
             /* Incarcarile afla ce transporturi s-au schimbat (cu textul potrivit, daca s-a ales ca unele comenzi sa ramana pe camion) */

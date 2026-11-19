@@ -3,7 +3,7 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '2.43';
+  SC.VERSIUNE = '2.44';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
   SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
@@ -73,7 +73,7 @@
   /* campurile care se sterg la anulare: tot ce tine de comanda, in afara de Nr Crt, Client, Status, Nr. Comanda, Import */
   SC.ZILE_EXTRA = 14;              // liniile doar din transport mai vechi de atat nu se mai preiau din fisierul TMS
   SC.CAMPURI_ANULARE = ['fpp', 'pk', 'dtr', 'cc', 'dc', 'dl', 'de', 'ad', 'or', 'ju', 'jd', 'g', 'ca', 'pe', 'gf', 'pr', 'am', 'dp', 'op',
-    'ob', 'co', 'inc', 'di', 'na', 'nt', 'sc', 'te', 'se', 'so', 're'];
+    'ob', 'co', 'inc', 'di', 'na', 'nt', 'sc', 'te', 'se', 'so', 're', 'mnt', 'xnt'];
 
   /* ---------- text ---------- */
   SC.esc = function (s) {

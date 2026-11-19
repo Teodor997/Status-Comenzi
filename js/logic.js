@@ -60,7 +60,7 @@
     Object.keys(chei).forEach(function (k) {
       var x = a[k] == null ? '' : a[k], y = b[k] == null ? '' : b[k];
       if (String(x) === String(y)) return;
-      var nume = SC.COL[k] ? SC.COL[k].t : (k === 'ar' ? 'Arhivată' : k === 'ipr' ? 'Paleți numărați la încărcare' : k === 'iam' ? 'Amprente numărate la încărcare' : k === 'xnt' ? 'Scoasă la încărcare de pe transportul' : k);
+      var nume = SC.COL[k] ? SC.COL[k].t : (k === 'ar' ? 'Arhivată' : k === 'ipr' ? 'Paleți numărați la încărcare' : k === 'iam' ? 'Amprente numărate la încărcare' : k === 'xnt' ? 'Scoasă la încărcare de pe transportul' : k === 'mnt' ? 'Trecută de mână pe transportul' : k);
       parti.push(nume + ': ' + (x === '' ? '(gol)' : scurt(x)) + ' → ' + (y === '' ? '(gol)' : scurt(y)));
     });
     return parti.join('; ');
@@ -805,7 +805,7 @@
       n: n, fn: function (o) {
         if (o.inc === 'DA') throw eroare('Comanda ' + o.nc + ' este deja confirmată ca încărcată.');
         if (o.nt) o.xnt = o.nt; else delete o.xnt;
-        delete o.na; delete o.nt; delete o.dtr; delete o.so; delete o.re;
+        delete o.na; delete o.nt; delete o.dtr; delete o.so; delete o.re; delete o.mnt;
       }
     }], 'Încărcare ' + x.na + (x.nt ? ' / transport ' + x.nt : '') + ': o comandă nu pleacă cu acest camion și a fost scoasă de pe el', { cuText: true });
   };
@@ -870,12 +870,14 @@
       /* comenzile din registru */
       var cheiFisier = {}; randuri.forEach(function (r) { cheiFisier[SC.cheieComanda(r.refCurat != null ? r.refCurat : r.ref)] = 1; });
       var adaugate = potriviri.filter(function (x) { return x.r.nt === nt && x.o && x.o.nt !== nt; }).map(function (x) { return x.o.nc + (x.o.nt ? ' (era pe ' + x.o.nt + ')' : ''); });
-      var scoase = [], mutate = [], ramanInc = [];
+      var scoase = [], mutate = [], ramanInc = [], deMana = [];
       inainteC.forEach(function (o) {
         if (cheiFisier[SC.cheieComanda(o.nc)]) return;
         if (o.inc === 'DA') { ramanInc.push(o.nc); return; }
         var r = tinta[o.n];
         if (r && r.nt !== nt) { mutate.push(o.nc + ' → ' + (r.nt || r.na)); return; }
+        /* trecuta de mana pe acest transport (mnt) si inca neajunsa in fisier: ramane pe camion, fisierul nu o scoate */
+        if (o.mnt === nt) { deMana.push(o.nc); return; }
         scoase.push(o.nc); rez.deScos.push(o);
       });
       /* liniile doar din transport */
@@ -905,6 +907,7 @@
       if (!linii.length) { rez.laFel++; return; }
       /* doar ca informatie, langa modificarile adevarate: ce a fost deja incarcat nu se mai atinge */
       if (ramanInc.length || eInc.length) linii.push('Nu mai sunt în fișier, dar sunt deja încărcate (rămân): ' + ramanInc.concat(eInc).join(', '));
+      if (deMana.length) linii.push('Trecute de mână în aplicație, nu sunt în fișier (rămân): ' + deMana.join(', '));
       var info = SC.camInfo[(a.dtr || 'fara-data') + '|' + L.cheieCamion({ cheie: nt + '|' + SC.normNrAuto(a.na) })];
       rez.transporturi.push({ nt: nt, na: b.na || a.na, zi: b.dtr || a.dtr, tiparit: info && info.bt ? info.bt : '', linii: linii, linieScoase: linieScoase });
     });
