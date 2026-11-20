@@ -505,6 +505,94 @@
     return docs;
   };
 
+  /* ---------- Adrese: export / import in Excel (aceleasi coloane ca foaia „Adrese” din registru) ---------- */
+  L.ADRESE_ANTET = ['Client', 'Cod', 'Nume 1', 'Stradă', 'Localitate', 'Judet'];
+  L.adreseExcel = function (randuri) {
+    var aoa = [L.ADRESE_ANTET.slice()];
+    randuri.slice().sort(function (a, b) { return String(a.cl || '').localeCompare(String(b.cl || '')) || String(a.nume || '').localeCompare(String(b.nume || ''), 'ro') || String(a.cod || '').localeCompare(String(b.cod || '')); })
+      .forEach(function (a) { aoa.push([a.cl || null, a.cod != null && a.cod !== '' ? String(a.cod) : null, a.nume || null, a.str || null, a.loc || null, a.jud ? SC.fmtJudet(a.jud) : null]); });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    /* codurile raman text (zerourile din fata nu se pierd) */
+    for (var r = 1; r < aoa.length; r++) { var c = ws[XLSX.utils.encode_cell({ r: r, c: 1 })]; if (c) { c.t = 's'; c.v = String(c.v); c.z = '@'; } }
+    ws['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 42 }, { wch: 42 }, { wch: 24 }, { wch: 16 }];
+    if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
+    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Adrese');
+    return wb;
+  };
+  /* citeste adresele dintr-un fisier: foaia „Adrese” sau, daca lipseste, prima foaie care are coloana Nume */
+  L.adreseDinExcel = function (wb) {
+    var nume = wb.SheetNames.indexOf('Adrese') >= 0 ? ['Adrese'] : wb.SheetNames.slice(), rez = null;
+    nume.some(function (n) {
+      var ws = wb.Sheets[n]; if (!ws || !ws['!ref']) return false;
+      var z = zona(ws), h = {};
+      for (var c = 0; c <= z.e.c; c++) {
+        var t = SC.normText(vText(cel(ws, 0, c)));
+        if (t === 'client') h.cl = c; else if (t === 'cod' || t === 'cod client') h.cod = c; else if (t === 'nume 1' || t === 'nume' || t === 'destinatar') h.nume = c;
+        else if (t.slice(0, 5) === 'strad' || t === 'adresa') h.str = c; else if (t === 'localitate' || t === 'oras') h.loc = c; else if (t === 'judet') h.jud = c;
+      }
+      if (h.nume == null) return false;
+      var l = [], faraNume = 0;
+      for (var r = 1; r <= z.e.r; r++) {
+        var nm = vText(cel(ws, r, h.nume)), gol = true;
+        Object.keys(h).forEach(function (k) { if (vText(cel(ws, r, h[k]))) gol = false; });
+        if (gol) continue;
+        if (!nm) { faraNume++; continue; }
+        l.push({ cl: h.cl != null ? vText(cel(ws, r, h.cl)).toUpperCase() : '', cod: h.cod != null ? vText(cel(ws, r, h.cod)) : '', nume: nm,
+          str: h.str != null ? vAdresa(cel(ws, r, h.str)) : '', loc: h.loc != null ? vText(cel(ws, r, h.loc)) : '', jud: h.jud != null ? SC.fmtJudet(vText(cel(ws, r, h.jud))) : '', _r: r + 1 });
+      }
+      rez = { foaie: n, randuri: l, faraNume: faraNume, lipsa: ['cl', 'cod', 'str', 'loc', 'jud'].filter(function (k) { return h[k] == null; }) };
+      return true;
+    });
+    return rez;
+  };
+  /* cheia dupa care o adresa din fisier este aceeasi cu una din aplicatie: client + cod; fara cod: client + nume + localitate + strada */
+  L.cheieAdresa = function (a) {
+    var cl = SC.normText(a.cl), cod = normCod(a.cod);
+    return cod ? cl + '|c|' + cod : cl + '|n|' + SC.normText(a.nume) + '|' + SC.normLoc(a.loc) + '|' + SC.normLoc(a.str);
+  };
+  /* compara fisierul cu aplicatia. inlocuieste = true: ce lipseste din fisier se sterge */
+  L.planAdrese = function (dinFisier, inlocuieste) {
+    /* Mai multe adrese pot avea aceeasi cheie (acelasi client si cod, cu puncte de livrare diferite): se potrivesc una cu una —
+       intai randurile identice, apoi restul in ordine; ce ramane in fisier este nou, ce ramane in aplicatie lipseste din fisier. */
+    var CAMPURI = ['cl', 'cod', 'nume', 'str', 'loc', 'jud'], plan = { noi: [], schimbate: [], laFel: 0, lipsa: [], final: [] };
+    function curat(a, id) { return { id: id || SC.idScurt(), cl: a.cl || '', cod: a.cod != null ? String(a.cod) : '', nume: a.nume || '', str: a.str || '', loc: a.loc || '', jud: SC.fmtJudet(a.jud) }; }
+    function semn(a) { return CAMPURI.map(function (c) { return String(c === 'jud' ? SC.fmtJudet(a[c]) : (a[c] == null ? '' : a[c])).trim(); }).join('\u0001'); }
+    var vechi = {}, folosit = [];
+    SC.adrese.forEach(function (a, i) { var k = L.cheieAdresa(a); (vechi[k] = vechi[k] || []).push(i); });
+    var pereche = dinFisier.map(function (a) {
+      var l = vechi[L.cheieAdresa(a)] || [], s = semn(a);
+      for (var q = 0; q < l.length; q++) if (!folosit[l[q]] && semn(SC.adrese[l[q]]) === s) { folosit[l[q]] = 1; return l[q]; }
+      return -1;
+    });
+    dinFisier.forEach(function (a, x) {
+      if (pereche[x] >= 0) return;
+      var l = vechi[L.cheieAdresa(a)] || [];
+      for (var q = 0; q < l.length; q++) if (!folosit[l[q]]) { folosit[l[q]] = 1; pereche[x] = l[q]; return; }
+    });
+    dinFisier.forEach(function (a, x) {
+      var v = pereche[x] >= 0 ? SC.adrese[pereche[x]] : null, nou = curat(a, v && v.id);
+      if (!v) plan.noi.push(nou);
+      else {
+        var d = CAMPURI.filter(function (c) { return String(v[c] == null ? '' : v[c]).trim() !== String(nou[c]).trim(); });
+        if (d.length) plan.schimbate.push({ v: v, n: nou, campuri: d }); else plan.laFel++;
+      }
+      plan.final.push(nou);
+    });
+    SC.adrese.forEach(function (a, i) { if (folosit[i]) return; plan.lipsa.push(a); if (!inlocuieste) plan.final.push(curat(a, a.id)); });
+    return plan;
+  };
+  L.aplicaAdrese = function (plan, inlocuieste, numeFisier) {
+    /* intai se scriu documentele noi (peste cele vechi), apoi se sterg cele ramase in plus: la o intrerupere nu se pierd adrese */
+    var docs = L.adreseInDocumente(plan.final), noi = {}, vechi = {};
+    docs.forEach(function (d) { noi[d.id] = 1; });
+    SC.adrese.forEach(function (a) { if (a._c && !noi[a._c]) vechi[a._c] = 1; });
+    return SC.store.setMulte('adrese', docs).then(function () { return Object.keys(vechi).length ? SC.store.stergeMulte('adrese', Object.keys(vechi)) : null; }).then(function () {
+      return SC.store.tx(function (t) {
+        t.log('Adrese: import din ' + numeFisier + ' — ' + plan.noi.length + ' noi, ' + plan.schimbate.length + ' modificate' + (inlocuieste ? ', ' + plan.lipsa.length + ' șterse (înlocuire completă)' : '') + '; total ' + plan.final.length);
+      });
+    });
+  };
+
   /* ---------- citire Excel (SheetJS) ---------- */
   function cel(ws, r, c) { return ws[XLSX.utils.encode_cell({ r: r, c: c })]; }
   function eData(c) { return c && c.t === 'n' && c.z && XLSX.SSF.is_date(String(c.z)); }

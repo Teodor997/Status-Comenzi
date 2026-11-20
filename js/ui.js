@@ -3435,6 +3435,7 @@
   /* ================= ADRESE ================= */
   var adreseAfisate = [];
   function deseneazaAdrese() {
+    adrButoane();
     var cuv = SC.normText($('adrCauta').value).split(' ').filter(Boolean), cl = $('adrClient').value;
     var l = SC.adrese.filter(function (a) {
       if (cl && a.cl !== cl) return false;
@@ -3449,6 +3450,70 @@
         return '<tr class="clic" data-i="' + i + '"><td>' + esc(a.cl) + '</td><td>' + esc(a.cod) + '</td><td>' + esc(a.nume) + '</td><td>' + esc(a.str) + '</td><td>' + esc(a.loc) + '</td><td>' + esc(a.jud) + '</td></tr>';
       }).join('') + '</table>';
   }
+  /* ---- Administrator: export / import al nomenclatorului de adrese (Excel) ---- */
+  function adrButoane() { var a = rol() === 'admin'; $('btnAdrExport').classList.toggle('ascuns', !a); $('btnAdrImport').classList.toggle('ascuns', !a); }
+  $('btnAdrExport').onclick = function () {
+    if (rol() !== 'admin') return;
+    if (!SC.adrese.length) { toast('Nu există nicio adresă de exportat.'); return; }
+    XLSX.writeFile(L.adreseExcel(SC.adrese), 'Adrese Status Comenzi ' + SC.azi() + '.xlsx');
+    toast(SC.adrese.length + ' adrese exportate.', 'bun');
+  };
+  $('btnAdrImport').onclick = function () {
+    if (rol() !== 'admin') return;
+    var fisier, citit;
+    alegeFisier().then(function (f) { fisier = f; return citesteFisier(f); }).then(function (wb) {
+      citit = L.adreseDinExcel(wb);
+      if (!citit) throw L.eroare('Nu am găsit în fișier o foaie cu adrese: prima linie trebuie să aibă coloanele ' + L.ADRESE_ANTET.join(', ') + ' (cel puțin „Nume 1”).');
+      if (!citit.randuri.length) throw L.eroare('Foaia „' + citit.foaie + '” nu conține nicio adresă.');
+      var NUME = { cl: 'Client', cod: 'Cod', nume: 'Nume', str: 'Stradă', loc: 'Localitate', jud: 'Județ' };
+      function rand(a) { return [a.cl, a.cod, a.nume, a.str, a.loc, a.jud].filter(Boolean).join(' · '); }
+      function cuprins(inl) {
+        var p = L.planAdrese(citit.randuri, inl);
+        return '<table class="simplu"><tr><td>Adrese în fișier</td><td class="nr"><b>' + citit.randuri.length + '</b></td></tr>' +
+          '<tr><td>Adrese în aplicație acum</td><td class="nr">' + SC.adrese.length + '</td></tr>' +
+          '<tr><td>&nbsp;&nbsp;noi (se adaugă)</td><td class="nr"><b>' + p.noi.length + '</b></td></tr>' +
+          '<tr><td>&nbsp;&nbsp;modificate (se actualizează)</td><td class="nr"><b>' + p.schimbate.length + '</b></td></tr>' +
+          '<tr><td>&nbsp;&nbsp;la fel</td><td class="nr">' + p.laFel + '</td></tr>' +
+          '<tr><td>&nbsp;&nbsp;există în aplicație, dar nu în fișier (' + (inl ? '<b>se șterg</b>' : 'rămân') + ')</td><td class="nr">' + (inl ? '<b>' + p.lipsa.length + '</b>' : p.lipsa.length) + '</td></tr>' +
+          '<tr><td>Total după import</td><td class="nr"><b>' + p.final.length + '</b></td></tr></table>' +
+          (citit.faraNume ? '<div class="mic">' + citit.faraNume + ' rânduri fără nume au fost sărite.</div>' : '') +
+          (citit.lipsa.length ? '<div class="nota atentie">Coloane care lipsesc din fișier: ' + esc(citit.lipsa.map(function (k) { return NUME[k]; }).join(', ')) + '. La adresele din fișier aceste câmpuri rămân goale.</div>' : '') +
+          (p.schimbate.length ? '<div class="mic" style="margin-top:8px">Modificate:</div>' + listaHtml(p.schimbate.slice(0, 200).map(function (x) {
+            return rand(x.v) + ' — ' + x.campuri.map(function (c) { return NUME[c] + ': ' + (x.v[c] || '(gol)') + ' → ' + (x.n[c] || '(gol)'); }).join('; ');
+          })) : '') +
+          (p.noi.length ? '<div class="mic" style="margin-top:8px">Noi' + (p.noi.length > 200 ? ' (primele 200)' : '') + ':</div>' + listaHtml(p.noi.slice(0, 200).map(rand)) : '') +
+          (inl && p.lipsa.length ? '<div class="mic" style="margin-top:8px">Se șterg' + (p.lipsa.length > 200 ? ' (primele 200)' : '') + ':</div>' + listaHtml(p.lipsa.slice(0, 200).map(rand)) : '');
+      }
+      return modal({
+        titlu: 'Import adrese', lat: true,
+        html: '<div class="nota">Fișier: <b>' + esc(fisier.name) + '</b> · foaia „' + esc(citit.foaie) + '”. O adresă din fișier este aceeași cu una din aplicație dacă are același client și cod (fără cod: același client, nume, localitate și stradă). Mai multe adrese cu același cod se păstrează toate.</div>' +
+          '<div class="bk-mod"><label class="bifa"><input type="radio" name="adrMod" value="adauga" checked> <span><b>Adaugă și actualizează</b> — adresele care nu sunt în fișier rămân</span></label>' +
+          '<label class="bifa"><input type="radio" name="adrMod" value="inlocuieste"> <span><b>Înlocuiește tot</b> — rămân doar adresele din fișier</span></label></div>' +
+          '<div id="adrPlan" style="margin-top:8px"></div>',
+        laDeschidere: function (rad) {
+          function arata() { rad.querySelector('#adrPlan').innerHTML = cuprins(rad.querySelector('[name=adrMod]:checked').value === 'inlocuieste'); }
+          Array.prototype.forEach.call(rad.querySelectorAll('[name=adrMod]'), function (x) { x.onchange = arata; });
+          arata();
+        },
+        butoane: [{ t: 'Renunță', v: null }, {
+          t: 'Importă', cls: 'pri', fn: function (rad) {
+            var inl = rad.querySelector('[name=adrMod]:checked').value === 'inlocuieste', p = L.planAdrese(citit.randuri, inl);
+            if (!p.noi.length && !p.schimbate.length && !(inl && p.lipsa.length)) { toast('Nimic de schimbat: adresele din fișier sunt deja în aplicație.'); return null; }
+            var pas = inl && p.lipsa.length ? confirma('Înlocuire completă: ' + p.lipsa.length + (p.lipsa.length === 1 ? ' adresă care nu este' : ' adrese care nu sunt') + ' în fișier se ' + (p.lipsa.length === 1 ? 'șterge' : 'șterg') + ' din aplicație.\n\nÎnainte de import se descarcă automat un Excel cu adresele de acum. Continui?', { da: 'Da, înlocuiește', nu: 'Renunță' }) : Promise.resolve(true);
+            return pas.then(function (ok) {
+              if (!ok) return false;
+              /* copie a adreselor de acum, ca importul sa poata fi dat inapoi */
+              if (SC.adrese.length) XLSX.writeFile(L.adreseExcel(SC.adrese), 'Adrese inainte de import ' + SC.azi() + ' ' + SC.oraAcum().replace(':', '') + '.xlsx');
+              toast('Import adrese în curs…');
+              return L.aplicaAdrese(p, inl, fisier.name).then(function () {
+                toast('Adrese importate: ' + p.noi.length + ' noi, ' + p.schimbate.length + ' modificate' + (inl ? ', ' + p.lipsa.length + ' șterse' : '') + '. Total ' + p.final.length + '.', 'bun');
+              });
+            });
+          }
+        }]
+      });
+    }).catch(arataEroare);
+  };
   var tAdr = null;
   $('adrCauta').addEventListener('input', function () { clearTimeout(tAdr); tAdr = setTimeout(deseneazaAdrese, 180); });
   $('adrClient').onchange = deseneazaAdrese;

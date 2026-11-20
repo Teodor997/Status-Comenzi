@@ -195,6 +195,18 @@ Căutarea după Nr AUTO sau Nr transport ține cont de zilele alese în calendar
 acele zile (titlul spune câte mai sunt în alte zile); fără nicio zi bifată („Toate datele”) caută în toate. Căutarea găsește și
 camioanele deja încărcate.
 
+## Adrese: export și import în Excel (doar Administratorul)
+În tabul *Adrese*, Administratorul are două butoane:
+- **Export adrese (Excel)** — descarcă toate adresele, foaia „Adrese”, cu coloanele Client, Cod, Nume 1, Stradă, Localitate, Judet
+  (aceleași ca în registru). Codurile sunt text, ca să nu se piardă zerourile din față.
+- **Import adrese (Excel)…** — citește un fișier cu aceleași coloane (foaia „Adrese” sau prima foaie care are coloana „Nume 1”).
+  Fereastra arată câte adrese sunt noi, modificate, la fel și câte există doar în aplicație, apoi alegi:
+  *Adaugă și actualizează* (ce nu e în fișier rămâne) sau *Înlocuiește tot* (rămân doar adresele din fișier; cere o confirmare).
+  O adresă este „aceeași” dacă are același client și cod; fără cod: același client, nume, localitate și stradă.
+  Adresele care împart același cod (puncte de livrare diferite) se păstrează toate; un export importat înapoi neschimbat nu modifică nimic.
+  Înainte de import se descarcă automat un Excel cu adresele de dinainte, ca importul să poată fi dat înapoi.
+- Consum: importul rescrie nomenclatorul întreg — câte un document la 400 de adrese (câteva scrieri).
+
 ## Ordinea la încărcare
 
 În tabul Încărcări, prima coloană („Ordine”) arată în ce ordine se încarcă mașinile unei zile. O stabilește **Transportul**
