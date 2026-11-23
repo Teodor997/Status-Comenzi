@@ -207,6 +207,16 @@ camioanele deja încărcate.
   Înainte de import se descarcă automat un Excel cu adresele de dinainte, ca importul să poată fi dat înapoi.
 - Consum: importul rescrie nomenclatorul întreg — câte un document la 400 de adrese (câteva scrieri).
 
+## Export pentru TMS: contorul și perioada
+- Cifra de pe butonul „Export pentru TMS” = comenzile **neexportate cu livrare solicitată mâine**; dacă mâine e weekend, intră și
+  zilele până la prima zi lucrătoare inclusiv (vinerea: sâmbătă, duminică și luni).
+  Totalul neexportatelor apare când ții mouse-ul pe buton.
+- În fereastra de export, „Perioada după” pornește pe **Livrare solicitată** (se poate schimba pe Data comandă).
+
+## FPP completat din oficiu cu 0
+La clienții trecuți în Administrare → Configurare → „Clienți cu FPP = 0 din oficiu” (implicit NATURA), câmpul FPP apare completat
+cu 0 în fereastra de terminare și în „FPP și Pick”, dacă nu are deja o valoare. Se poate modifica înainte de salvare.
+
 ## Ordinea la încărcare
 
 În tabul Încărcări, prima coloană („Ordine”) arată în ce ordine se încarcă mașinile unei zile. O stabilește **Transportul**
@@ -280,13 +290,14 @@ până acum de mână. Comenzile „doar transport” se adaugă în continuare 
   factura fiecărei comenzi, transportatorul, codul UIT și mențiunile. Toate câmpurile pot fi corectate înainte de tipărire.
 - Expeditorul, natura mărfii și instrucțiunile se țin minte pe client (ultimele folosite).
 - **Greutatea cu 3 zecimale.** Dacă în „Greutate brută” nu sunt scrise exact 3 zecimale (ex. `556,59`), sub câmp apare un
-  avertisment, iar la „Salvează”, „Salvează și tipărește” și „Email” aplicația întreabă „Corectez / Continuă oricum”. Nu blochează.
+  avertisment, iar la „Salvează” și „Salvează, tipărește și email” aplicația întreabă „Corectez / Continuă oricum”. Nu blochează.
   În tabelul cu documente, comenzile a căror greutate nu are 3 zecimale sunt marcate cu ⚠ (greutatea se arată cu zecimalele ei reale).
   Se numără ce este scris în câmp, deci `556,590` este corect; zecimalele scrise se țin minte la salvare (`gz`).
-- „Salvează și tipărește” scoate cele 4 copii (negru, roșu, albastru, verde) pe A4. CMR-urile rămân salvate (colecția `cmr`,
+- „Salvează, tipărește și email” scoate cele 4 copii (negru, roșu, albastru, verde) pe A4. CMR-urile rămân salvate (colecția `cmr`,
   un document pe lună) și se redeschid din **CMR-uri emise** sau bifând din nou aceleași comenzi.
-- „Email” întreabă pentru ce client se trimite CMR-ul (este propus clientul comenzilor), arată adresele lui și deschide
-  programul de email cu subiectul și textul standard. Adresele se setează în Administrare → *CMR — adrese de email*:
+- Același buton deschide și programul de email, cu destinatarii clientului comenzilor, subiectul și textul standard (nu mai
+  există buton „Email” separat și nu se mai întreabă clientul). CMR-ul se atașează de mână: din fereastra de tipărire alegi
+  „Salvare ca PDF” și tragi fișierul în email. Dacă clientul nu are adrese setate, apare un mesaj și se tipărește doar. Adresele se setează în Administrare → *CMR — adrese de email*:
   câte un rând (Către / CC) pentru fiecare client, plus un rând „Implicit” pentru clienții fără adrese proprii.
 - Formularul tipărit este generat din foaia `CMR_Black` (`js/cmr-sablon.js`). Necesită regulile din `firestore.rules` (blocul `cmr`).
 

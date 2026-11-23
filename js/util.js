@@ -3,7 +3,7 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '2.49';
+  SC.VERSIUNE = '2.52';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
   SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
@@ -14,6 +14,7 @@
   SC.CONFIG_IMPLICIT = {
     clienti: ['KANDIA', 'ROSHEN', 'PODRAVKA', 'IMERSIA', 'NATURA', 'NICHE BRANDS'],
     clientGreutateAuto: 'KANDIA',  // greutate finala = greutate + paleti reali * kgPalet
+    clientiFpp0: 'NATURA',          // clientii (despartiti prin virgula) la care FPP este completat din oficiu cu 0
     kgPalet: 20,
     tolerantaPaleti: 1,
     factorGreutate: 5,
@@ -74,6 +75,12 @@
   SC.ZILE_EXTRA = 14;              // liniile doar din transport mai vechi de atat nu se mai preiau din fisierul TMS
   SC.CAMPURI_ANULARE = ['fpp', 'pk', 'dtr', 'cc', 'dc', 'dl', 'de', 'ad', 'or', 'ju', 'jd', 'g', 'ca', 'pe', 'gf', 'pr', 'am', 'dp', 'op',
     'ob', 'co', 'inc', 'di', 'na', 'nt', 'sc', 'te', 'se', 'so', 're', 'mnt', 'xnt'];
+
+  /* FPP propus din oficiu pentru o comanda: 0 la clientii din config.clientiFpp0, altfel nimic */
+  SC.fppImplicit = function (o) {
+    var l = String((SC.config || {}).clientiFpp0 || '').split(',').map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean);
+    return l.indexOf(String(o.cl || '').trim().toUpperCase()) >= 0 ? 0 : '';
+  };
 
   /* ---------- text ---------- */
   SC.esc = function (s) {

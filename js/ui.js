@@ -852,11 +852,21 @@
   }
   /* ================= export pentru TMS ================= */
   function tmsDeExportat() { return SC.comenzi.filter(function (o) { return L.tmsStare(o) === 'deExportat'; }); }
+  /* zilele numarate pe buton: de maine pana la urmatoarea zi lucratoare inclusiv (vineri: sambata, duminica si luni) */
+  function tmsPerioadaContor(azi) {
+    var a = SC.ziPlus(azi || SC.azi(), 1), b = a, z;
+    for (var i = 0; i < 3; i++) { z = new Date(b + 'T12:00:00').getDay(); if (z !== 0 && z !== 6) break; b = SC.ziPlus(b, 1); }
+    return { a: a, b: b };
+  }
+  SC._tmsPerioadaContor = tmsPerioadaContor;
   function actualizeazaTmsNr() {
     var b = $('tmsNr'); if (!b || !poateTmsExport()) return;
-    var n = tmsDeExportat().length;
+    /* contorul: comenzile neexportate cu livrare solicitata in ziua urmatoare (cele urgente pentru Transport) */
+    var per = tmsPerioadaContor(), toate = tmsDeExportat(), n = toate.filter(function (o) { var d = String(o.dl || '').slice(0, 10); return d >= per.a && d <= per.b; }).length;
+    var cand = per.a === per.b ? 'mâine (' + SC.fmtDataLunga(per.a) + ')' : 'între ' + SC.fmtDataLunga(per.a) + ' și ' + SC.fmtDataLunga(per.b);
     b.textContent = n || ''; b.classList.toggle('are', n > 0);
-    $('btnTmsExport').title = n ? nCom(n) + ' din status nu ' + (n === 1 ? 'a fost exportată' : 'au fost exportate') + ' încă pentru TMS' : 'Toate comenzile care au nevoie de transport au fost exportate pentru TMS';
+    $('btnTmsExport').title = (n ? nCom(n) + ' cu livrare ' + cand + ' nu ' + (n === 1 ? 'a fost exportată' : 'au fost exportate') + ' încă pentru TMS' : 'Nicio comandă cu livrare ' + cand + ' nu așteaptă exportul pentru TMS') +
+      '. În total, neexportate: ' + toate.length + '.';
   }
   function tmsNumeFisier(ts) { var d = new Date(ts); return 'Import TMS ' + SC.ymd(d) + ' ' + SC.p2(d.getHours()) + SC.p2(d.getMinutes()) + SC.p2(d.getSeconds()) + '.xlsx'; }      /* cu secunde: doua exporturi in acelasi minut au nume diferite */
   function tmsMoment(ts) { var d = new Date(ts); return SC.p2(d.getDate()) + '.' + SC.p2(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + SC.p2(d.getHours()) + ':' + SC.p2(d.getMinutes()); }
@@ -871,7 +881,7 @@
     if (!poateTmsExport()) return;
     var html = '<div class="rand-form">' +
       '<label class="camp"><span>Client</span><select id="txCl"><option value="">Toți clienții</option>' + SC.config.clienti.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></label>' +
-      '<label class="camp"><span>Perioada după</span><select id="txDupa"><option value="dc">Data comandă</option><option value="dl">Livrare solicitată</option></select></label>' +
+      '<label class="camp"><span>Perioada după</span><select id="txDupa"><option value="dl">Livrare solicitată</option><option value="dc">Data comandă</option></select></label>' +
       '<label class="camp"><span>De la</span><input type="date" id="txDe"></label>' +
       '<label class="camp"><span>Până la</span><input type="date" id="txPana"></label></div>' +
       '<div class="mic" style="margin-top:6px">În fișier intră toate comenzile din perioada aleasă care au nevoie de transport, chiar dacă au mai fost exportate. Fără perioadă intră comenzile din orice zi.</div>' +
@@ -1064,7 +1074,7 @@
       (incPal != null ? '<div class="nota bun" style="margin-top:6px">' + (!cumul ? 'Comanda a' : cuInc.length === grup.length ? 'Comenzile au' : cuInc.length === 1 ? 'O comandă din cele ' + grup.length + ' a' : cuInc.length + ' din cele ' + grup.length + ' comenzi au') + ' plecat deja cu camionul' + (o.di ? ' (' + esc(SC.fmtDT(o.di)) + (o.se ? ', ' + esc(o.se) : '') + ')' : '') +
         '. La încărcare s-au numărat <b>' + incPal + '</b> paleți și <b>' + incAm + '</b> amprente — sunt puse mai jos ca sugestie.</div>' : '') +
       '<div class="grila">' +
-      '<label class="camp"><span>FPP (paleți full)</span><input type="text" id="tFpp" inputmode="numeric" value="' + (SC.esteNum(o.fpp) ? o.fpp : '') + '"></label>' +
+      '<label class="camp"><span>FPP (paleți full)</span><input type="text" id="tFpp" inputmode="numeric" value="' + (SC.esteNum(o.fpp) ? o.fpp : SC.fppImplicit(o)) + '"></label>' +
       '<label class="camp"><span>Pick (paleți din picking)</span><input type="text" id="tPk" inputmode="numeric" value="' + (SC.esteNum(o.pk) ? o.pk : '') + '"></label>' +
       '<label class="camp"><span>Paleți reali (FPP + Pick)</span><input type="text" id="tPr" readonly tabindex="-1" value=""></label>' +
       '<label class="camp"><span>Amprente paleți</span><input type="text" id="tAm" inputmode="numeric" value="' + (incAm != null ? incAm : SC.esteNum(o.am) ? o.am : '') + '"></label>' +
@@ -1372,13 +1382,13 @@
       titlu: 'FPP și Pick — comanda ' + o.nc,
       html: '<div class="nota">' + esc(o.cl) + ' · ' + esc(o.de || '') + '<br>Paleți estimați: <b>' + (SC.esteNum(o.pe) ? SC.fmtNum(o.pe, 'num') : '—') + '</b>' +
         (SC.esteNum(o.pr) ? ' · Paleți reali: <b>' + SC.fmtNum(o.pr, 'int') + '</b>' : '') + '</div>' +
-        '<div class="grila"><label class="camp"><span>FPP (paleți full)</span><input type="text" inputmode="numeric" id="fppNou" value="' + (SC.esteNum(o.fpp) ? o.fpp : '') + '"></label>' +
+        '<div class="grila"><label class="camp"><span>FPP (paleți full)</span><input type="text" inputmode="numeric" id="fppNou" value="' + (SC.esteNum(o.fpp) ? o.fpp : SC.fppImplicit(o)) + '"></label>' +
         '<label class="camp"><span>Pick (paleți din picking)</span><input type="text" inputmode="numeric" id="pkNou" value="' + (SC.esteNum(o.pk) ? o.pk : '') + '"></label></div>' +
         (gata ? '<div class="nota" id="fpTot"></div><div class="mic">Comanda este pregătită: paleții reali se refac din FPP + Pick. Amprentele urmează suma doar dacă nu au fost modificate separat.</div>' :
           '<div class="mic">Când scrii FPP, Pick se calculează singur: estimarea rotunjită în sus − FPP. Îl poți corecta înainte de salvare.</div>'),
       laDeschidere: function (rad) {
         var iF = rad.querySelector('#fppNou'), iP = rad.querySelector('#pkNou');
-        if (!gata) return leagaFppPick(iF, iP, o.pe, null);
+        if (!gata) { leagaFppPick(iF, iP, o.pe, null); if (!SC.esteNum(o.fpp) && iF.value !== '' && iP.value === '') iF.dispatchEvent(new Event('input')); return; }
         function total() {
           var f = SC.parseNum(iF.value.trim()), p = SC.parseNum(iP.value.trim());
           rad.querySelector('#fpTot').innerHTML = 'Paleți reali după salvare: <b>' + (f != null && p != null ? f + p : '—') + '</b>' + (SC.esteNum(o.pr) ? ' (acum: ' + SC.fmtNum(o.pr, 'int') + ')' : '');
@@ -3361,13 +3371,9 @@
           if (!ok) return false;
           return L.stergeCmr(c).then(function () { toast('CMR șters.', 'bun'); return null; });
         });
-      } }] : []).concat([{ t: 'Renunță', v: null }, {
-        t: 'Email', fn: function (rad) {
-          var x = citeste(rad); if (!x) return false;
-          return zecConfirma(rad).then(function (ok) { return ok ? emailCmr(x) : null; }).then(function () { return false; });
-        }
-      }, { t: 'Salvează', fn: function (rad) { return salveaza(rad, null); } },
-      { t: 'Salvează și tipărește', cls: 'pri', fn: function (rad) { return salveaza(rad, function (s) { setTimeout(function () { tiparesteCmr(s); }, 50); }); } }])
+      } }] : []).concat([{ t: 'Renunță', v: null }, { t: 'Salvează', fn: function (rad) { return salveaza(rad, null); } },
+      /* un singur buton: salveaza, deschide emailul pregatit pentru clientul CMR-ului, apoi fereastra de tiparire */
+      { t: 'Salvează, tipărește și email', cls: 'pri', fn: function (rad) { return salveaza(rad, function (s) { emailCmr(s); setTimeout(function () { tiparesteCmr(s); }, 400); }); } }])
     });
   }
   /* ---- CMR pe email: adrese diferite pentru fiecare client ----
@@ -3378,33 +3384,18 @@
     return { catre: SC.config.cmrCatre || '', copie: SC.config.cmrCopie || '', proprii: false };
   }
   function adreseMailto(s) { return encodeURIComponent(s).replace(/%3B/gi, ';').replace(/%2C/gi, ';').replace(/%40/g, '@').replace(/%20/g, ''); }
+  /* deschide programul de email cu mesajul pregatit (destinatari dupa clientul CMR-ului); CMR-ul se ataseaza de mana */
   function emailCmr(x) {
-    var clienti = SC.config.clienti.slice(), al = String(x.cl || '').toUpperCase();
-    if (al && clienti.indexOf(al) < 0) clienti.unshift(al);
-    var html = '<label class="camp"><span>Trimit CMR-ul pentru clientul</span><select id="ceCl">' + clienti.map(function (c) { return '<option' + (c === al ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select></label>' +
-      '<div id="ceAdrese" role="status" style="margin-top:10px"></div>';
-    function arata(rad) {
-      var cl = rad.querySelector('#ceCl').value, a = adreseCmr(cl);
-      rad.querySelector('#ceAdrese').innerHTML = a.catre ?
-        '<div class="nota"><b>Către:</b> ' + esc(a.catre) + (a.copie ? '<br><b>CC:</b> ' + esc(a.copie) : '') +
-          (a.proprii ? '' : '<div class="mic">' + esc(cl) + ' nu are adrese proprii: se folosesc cele implicite.</div>') + '</div>' :
-        '<div class="nota rau">Nu sunt setate adrese de email pentru ' + esc(cl) + ' și nici adrese implicite. ' + (eAdmin() ? 'Le completezi în Administrare → CMR — adrese de email.' : 'Administratorul le completează în Administrare → CMR — adrese de email.') + '</div>';
+    var cl = String(x.cl || '').toUpperCase(), a = adreseCmr(cl);
+    if (!a.catre) {
+      toast('Emailul nu s-a deschis: nu sunt setate adrese de email pentru ' + cl + ' și nici adrese implicite. ' + (eAdmin() ? 'Le completezi în Administrare → CMR — adrese de email.' : 'Administratorul le completează în Administrare → CMR — adrese de email.'), 'rau');
+      return false;
     }
-    return modal({
-      titlu: 'CMR pe email — ' + (x.de || ''), html: html,
-      laDeschidere: function (rad) { arata(rad); rad.querySelector('#ceCl').addEventListener('change', function () { arata(rad); }); },
-      butoane: [{ t: 'Renunță', v: null }, {
-        t: 'Deschide emailul', cls: 'pri', fn: function (rad) {
-          var cl = rad.querySelector('#ceCl').value, a = adreseCmr(cl);
-          if (!a.catre) { toast('Nu sunt adrese de email pentru ' + cl + '.', 'rau'); return false; }
-          var l = document.createElement('a');
-          l.href = 'mailto:' + adreseMailto(a.catre) + '?' + (a.copie ? 'cc=' + adreseMailto(a.copie) + '&' : '') +
-            'subject=' + encodeURIComponent('CMR ' + x.de + ' ' + x.nc[0]) + '&body=' + encodeURIComponent('Buna ziua,\n\nAtasat regasiti CMR-ul pentru ' + x.de + '.\n\nMultumesc.\nO zi buna.');
-          l.click();
-          return true;
-        }
-      }]
-    });
+    var l = document.createElement('a');
+    l.href = 'mailto:' + adreseMailto(a.catre) + '?' + (a.copie ? 'cc=' + adreseMailto(a.copie) + '&' : '') +
+      'subject=' + encodeURIComponent('CMR ' + x.de + ' ' + x.nc[0]) + '&body=' + encodeURIComponent('Buna ziua,\n\nAtasat regasiti CMR-ul pentru ' + x.de + '.\n\nMultumesc.\nO zi buna.');
+    l.click();
+    return true;
   }
   $('btnCmrLista').onclick = function () {
     if (!poate()) return;
@@ -3579,6 +3570,7 @@
     h += '<div class="card"><h2>Clienți și reguli</h2><p>Lista de clienți din formulare și regula de greutate finală automată (greutate + paleți reali × kg/palet).</p>' +
       '<div class="rand-form"><label class="camp" style="flex:1;min-width:260px"><span>Clienți (separați prin virgulă)</span><input type="text" id="cClienti" value="' + esc(SC.config.clienti.join(', ')) + '"></label>' +
       '<label class="camp"><span>Client cu greutate automată</span><input type="text" id="cAuto" value="' + esc(SC.config.clientGreutateAuto) + '" style="width:150px"></label>' +
+      '<label class="camp"><span>Clienți cu FPP = 0 din oficiu (despărțiți prin virgulă)</span><input type="text" id="cFpp0" value="' + esc(SC.config.clientiFpp0 || '') + '" style="width:220px"></label>' +
       '<label class="camp"><span>Kg / palet</span><input type="text" id="cKg" value="' + esc(SC.config.kgPalet) + '" style="width:80px"></label>' +
       '<label class="camp"><span>Toleranță paleți (±)</span><input type="text" id="cTol" value="' + esc(SC.config.tolerantaPaleti) + '" style="width:80px"></label>' +
       '<label class="camp" style="flex:1 1 100%"><span>Texte din lista de la Observații (separate prin virgulă)</span><input type="text" id="cObs" value="' + esc((SC.config.observatii || []).join(', ')) + '"></label>' +
@@ -3589,7 +3581,7 @@
       return '<tr><td><b>' + esc(nume) + '</b></td><td><input type="text" data-ce="' + esc(cheie) + '" data-f="catre" value="' + esc(v.catre || '') + '" style="width:100%" aria-label="Către, ' + esc(nume) + '"></td>' +
         '<td><input type="text" data-ce="' + esc(cheie) + '" data-f="copie" value="' + esc(v.copie || '') + '" style="width:100%" aria-label="CC, ' + esc(nume) + '"></td></tr>';
     }
-    h += '<div class="card"><h2>CMR — adrese de email</h2><p>Adresele la care se trimite CMR-ul, pentru fiecare client (mai multe adrese se despart prin „;”). La apăsarea pe Email în fereastra CMR se alege clientul și se folosesc adresele lui; ' +
+    h += '<div class="card"><h2>CMR — adrese de email</h2><p>Adresele la care se trimite CMR-ul, pentru fiecare client (mai multe adrese se despart prin „;”). La „Salvează, tipărește și email” din fereastra CMR se deschide emailul cu adresele clientului comenzilor; ' +
       'un client fără adrese proprii le folosește pe cele implicite.</p><div class="derulare-x"><table class="simplu" id="ceTabel" style="width:100%;min-width:640px"><tr><th style="width:170px">Client</th><th>Către</th><th>În copie (CC)</th></tr>' +
       ceRand('', 'Implicit (ceilalți clienți)', { catre: SC.config.cmrCatre, copie: SC.config.cmrCopie }) +
       SC.config.clienti.map(function (c) { return ceRand(c, c, ceE[c] || {}); }).join('') + '</table></div>' +
@@ -3664,7 +3656,7 @@
       var clienti = $('cClienti').value.split(',').map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean);
       var kg = SC.parseNum($('cKg').value), tol = SC.parseNum($('cTol').value);
       if (!clienti.length || kg == null || tol == null) return toast('Verifică valorile.', 'rau');
-      var cfg = Object.assign({}, SC.config, { clienti: clienti, clientGreutateAuto: $('cAuto').value.trim().toUpperCase(), kgPalet: kg, tolerantaPaleti: tol,
+      var cfg = Object.assign({}, SC.config, { clienti: clienti, clientGreutateAuto: $('cAuto').value.trim().toUpperCase(), clientiFpp0: $('cFpp0').value.split(',').map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean).join(', '), kgPalet: kg, tolerantaPaleti: tol,
         observatii: $('cObs').value.split(',').map(function (x) { return x.trim(); }).filter(Boolean) });
       SC.store.tx(function (t) { t.set('meta', 'config', cfg); t.log('Configurare: clienți / reguli modificate'); }).then(function () { toast('Salvat.', 'bun'); }, arataEroare);
     } else if (b.id === 'ceSalveaza') {
