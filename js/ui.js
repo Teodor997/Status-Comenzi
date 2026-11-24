@@ -2186,6 +2186,24 @@
     }, 0);
   });
   var incAmanat = false;
+  /* camioanele bifate pentru tiparirea mai multor borderouri deodata (cheia: data + camion) */
+  var incSel = {};
+  function incAfisate() { return Object.keys(camioaneAfisate).map(function (k) { return camioaneAfisate[k]; }).filter(Boolean); }
+  function incBifate() { return incAfisate().filter(function (x) { return incSel[(x.data || '') + '|' + x.cheie]; }); }
+  function incSelArata() {
+    var n = incBifate().length, alte = Object.keys(incSel).length - n;
+    $('incSelBara').classList.toggle('ascuns', !Object.keys(incSel).length);
+    $('incSelText').innerHTML = 'Bifate: <b>' + n + (n === 1 ? ' camion' : ' camioane') + '</b>' + (alte > 0 ? ' <span class="mic">(+ ' + alte + ' care nu sunt în lista afișată acum și nu se tipăresc)</span>' : '');
+    $('incSelPrint').disabled = !n;
+    var tot = $('incSelTot'); if (tot) { var afis = incAfisate().length; tot.checked = afis > 0 && n === afis; tot.indeterminate = n > 0 && n < afis; }
+  }
+  $('incSelGol').onclick = function () { incSel = {}; deseneazaIncarcari(); };
+  $('incSelPrint').onclick = function () { var l = incBifate(); if (l.length) tiparesteCamioane(l).then(function () { incSel = {}; deseneazaIncarcari(); }); };
+  $('incLista').addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.id === 'incSelTot') { incAfisate().forEach(function (x) { var k = (x.data || '') + '|' + x.cheie; if (t.checked) incSel[k] = 1; else delete incSel[k]; }); deseneazaIncarcari(); return; }
+    if (t.dataset && t.dataset.bsel != null) { var x = camioaneAfisate[+t.dataset.bsel]; if (!x) return; var k = (x.data || '') + '|' + x.cheie; if (t.checked) incSel[k] = 1; else delete incSel[k]; incSelArata(); }
+  });
   function deseneazaIncarcari() {
     /* cat timp Transportul scrie un loc nesalvat, lista nu se reface sub el; se reface imediat dupa */
     var activ = document.activeElement, focusPe = null;
@@ -2222,7 +2240,7 @@
     if (!l.length) {
       h = '<div class="mic" style="padding:10px">' + (inAlteZile ? 'Niciun camion găsit în ' + (zileAlese.length === 1 ? 'ziua aleasă' : 'zilele alese') + '; căutarea se potrivește cu ' + inAlteZile + (inAlteZile === 1 ? ' camion' : ' camioane') + ' din alte zile — apasă „Toate datele” ca să le vezi.</div>' : 'Niciun camion pentru filtrele alese. Data încărcării vine din fișierul de transport (TMS): dacă ziua căutată lipsește, importă fișierul la zi.</div>');
     } else {
-      h = '<table class="simplu"><tr><th title="Ordinea în care se încarcă mașinile, stabilită de Transport">Ordine</th><th>Data</th><th>Nr AUTO</th><th>Nr transport</th><th>De încărcat</th><th>În lucru</th><th>Doar transport</th><th>Început încărcare</th><th>Încărcat</th><th class="nr">Paleți reali</th><th class="nr">Amprente</th><th class="nr">Greutate finală</th><th></th></tr>';
+      h = '<table class="simplu"><tr><th class="incB"><input type="checkbox" id="incSelTot" title="Bifează / debifează toate camioanele afișate" aria-label="Bifează toate camioanele afișate"></th><th title="Ordinea în care se încarcă mașinile, stabilită de Transport">Ordine</th><th>Data</th><th>Nr AUTO</th><th>Nr transport</th><th>De încărcat</th><th>În lucru</th><th>Doar transport</th><th>Început încărcare</th><th>Încărcat</th><th class="nr">Paleți reali</th><th class="nr">Amprente</th><th class="nr">Greutate finală</th><th></th></tr>';
       l.slice(0, 300).forEach(function (x, i) {
         camioaneAfisate[i] = x;
         var baza = x.deIncarcat.length ? x.deIncarcat : x.incarcate;
@@ -2231,7 +2249,8 @@
         var durata = info && info.bt && sfarsit.length > 10 && sfarsit >= info.bt ? Math.round((SC.msDin(sfarsit.slice(0, 10), sfarsit.slice(11, 16)) - SC.msDin(info.bt.slice(0, 10), info.bt.slice(11, 16))) / 60000) : null;
         function oraScurta(dt) { return dt ? (dt.slice(0, 10) === SC.azi() ? dt.slice(11, 16) : SC.fmtDT(dt)) : ''; }
         var loc = ordineCamion(x);
-        h += '<tr data-cheie="' + esc((x.data || '') + '|' + x.cheie) + '"><td class="ordC">' + (ordonez ?
+        var chSel = (x.data || '') + '|' + x.cheie;
+        h += '<tr data-cheie="' + esc(chSel) + '"><td class="incB"><input type="checkbox" data-bsel="' + i + '"' + (incSel[chSel] ? ' checked' : '') + ' aria-label="Bifează camionul ' + esc(x.na) + ' pentru tipărirea borderoului"></td><td class="ordC">' + (ordonez ?
             '<input type="number" class="ordIn" min="1" step="1" inputmode="numeric" data-ord="' + i + '" value="' + (loc || '') + '" aria-label="Locul la încărcare pentru ' + esc(x.na) + '">' :
             (loc ? '<span class="ordB">' + loc + '</span>' : '<span class="mic">—</span>')) + '</td>' +
           '<td>' + esc(x.data ? SC.fmtDataLunga(x.data) : '—') + '</td><td><b>' + esc(x.na) + '</b></td><td>' + esc(x.nt) + '</td><td>' +
@@ -2248,6 +2267,7 @@
       h += '</table>' + (l.length > 300 ? '<div class="mic" style="padding:8px">Afișate primele 300 din ' + l.length + ' camioane — restrânge cu filtrul de date sau cu căutarea.</div>' : '');
     }
     $('incLista').innerHTML = h;
+    incSelArata();
     if (focusPe) {
       var randF = Array.prototype.filter.call($('incLista').querySelectorAll('tr[data-cheie]'), function (tr) { return tr.dataset.cheie === focusPe.cheie; })[0];
       var inapoi = randF && (randF.querySelector(focusPe.ce) || randF.querySelector('.ordIn, button'));
@@ -2560,7 +2580,26 @@
   }
   /* Borderoul camionului: toate comenzile lui, indiferent de status. La cele neterminate
      paletii reali, amprentele si greutatea finala raman goale (se vad doar paletii estimati). */
-  function tiparesteCamion(x) {
+  function tiparesteCamion(x) { return tiparesteCamioane([x]); }
+  /* Unul sau mai multe borderouri intr-o singura tiparire, cate unul pe pagina (A4 pe lat). Ora la care s-a tiparit borderoul =
+     inceputul incarcarii; se inregistreaza automat pentru fiecare camion (Administrator / Incarcari). */
+  function tiparesteCamioane(lista) {
+    var pagini = [], nereusite = 0, p = Promise.resolve();
+    lista.forEach(function (x) {
+      var fa = htmlBorderou(x);
+      p = p.then(function () {
+        if (!poateIncarca()) { pagini.push(fa(L.infoCamion(x))); return; }
+        return L.marcheazaBorderou(x).then(function (info) { pagini.push(fa(info)); }, function () { nereusite++; pagini.push(fa(L.infoCamion(x))); });
+      });
+    });
+    return p.then(function () {
+      if (nereusite) toast((lista.length === 1 ? 'Borderoul se tipărește' : 'Borderourile se tipăresc') + ', dar ora de început nu a putut fi înregistrată' + (lista.length > 1 ? ' pentru ' + nereusite + ' dintre ele' : '') + '.', 'rau');
+      $('tiparire').innerHTML = pagini.join('');
+      window.print();
+      if (stare.tab === 'incarcari') deseneazaIncarcari();
+    });
+  }
+  function htmlBorderou(x) {
     var l = x.toate.slice().sort(function (a, b) { return (a.extra ? 1 : 0) - (b.extra ? 1 : 0) || (a.n || 0) - (b.n || 0); }).concat(x.retururi || []);
     var nrRetur = (x.retururi || []).length;
     function gata(o) { return o.extra || o.st === ST.TER || o.st === ST.SELF || o.inc === 'DA'; }
@@ -2596,17 +2635,9 @@
     h += '<tr><th colspan="6">TOTAL (' + (l.length - nrRetur) + (l.length - nrRetur === 1 ? ' linie' : ' linii') + (neterminate ? ', din care ' + neterminate + (neterminate === 1 ? ' nepregătită' : ' nepregătite') : '') + (nrRetur ? '; ' + nrRetur + (nrRetur === 1 ? ' retur neinclus' : ' retururi neincluse') : '') + ')</th><th class="nr">' + SC.fmtNum(tot('ca'), 'int') +
       '</th><th class="nr">' + SC.fmtNum(tot('pe'), 'num') + fppPick(areF ? suma(reg, 'fpp') : null, areP ? suma(reg, 'pk') : null) + '</th><th class="nr">' + SC.fmtNum(tot('pr'), 'int') + '</th><th class="nr">' + SC.fmtNum(tot('am'), 'int') + '</th><th class="nr">' + SC.fmtNum(tot('gf'), 'num') + '</th></tr></table>' +
       '<div class="semnaturi"><div>Stare camion: ' + esc(incarcat.sc || '________') + ' · Temperatură: ' + esc(incarcat.te || '________') + '</div><div>Semnătură depozit: ' + esc(incarcat.se || '________________') + '</div><div>Semnătură șofer: ________________</div></div>';
-    /* ora la care s-a tiparit borderoul = inceputul incarcarii; se inregistreaza automat (Administrator / Incarcari) */
-    function tipareste(info) {
-      $('tiparire').innerHTML = h.replace('<!--inceput-->', (info && info.o > 0 ? ' · Locul la încărcare: <b>' + info.o + '</b>' : '') + (info && info.bt ? ' · Început încărcare: <b>' + esc(SC.fmtDT(info.bt).replace(/^(\d\d\.\d\d)\.(\d\d) /, '$1.20$2 ')) + '</b>' : ''));
-      window.print();
-      if (stare.tab === 'incarcari') deseneazaIncarcari();
-    }
-    if (!poateIncarca()) return tipareste(L.infoCamion(x));
-    L.marcheazaBorderou(x).then(tipareste, function (e) {
-      toast('Borderoul se tipărește, dar ora de început nu a putut fi înregistrată: ' + (e && e.message ? e.message : e), 'rau');
-      tipareste(L.infoCamion(x));
-    });
+    return function (info) {
+      return '<div class="bord-pag">' + h.replace('<!--inceput-->', (info && info.o > 0 ? ' · Locul la încărcare: <b>' + info.o + '</b>' : '') + (info && info.bt ? ' · Început încărcare: <b>' + esc(SC.fmtDT(info.bt).replace(/^(\d\d\.\d\d)\.(\d\d) /, '$1.20$2 ')) + '</b>' : '')) + '</div>';
+    };
   }
   $('btnTransport2').onclick = function () { $('btnTransport').onclick(); };
   /* Administrator: sterge tot ce a venit pana acum din fisierele de transport, ca urmatorul import sa porneasca de la zero */

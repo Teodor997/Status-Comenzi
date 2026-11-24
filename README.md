@@ -217,6 +217,12 @@ camioanele deja încărcate.
 La clienții trecuți în Administrare → Configurare → „Clienți cu FPP = 0 din oficiu” (implicit NATURA), câmpul FPP apare completat
 cu 0 în fereastra de terminare și în „FPP și Pick”, dacă nu are deja o valoare. Se poate modifica înainte de salvare.
 
+## Mai multe borderouri într-o singură tipărire
+În tabul *Încărcări*, fiecare camion are o bifă în prima coloană (bifa din capul tabelului le ia pe toate cele afișate). Deasupra
+listei apare „Tipărește borderourile bifate”: se deschide o singură fereastră de tipărire, cu câte un borderou pe pagină. Ora de
+început a încărcării se înregistrează pentru fiecare camion, ca la tipărirea unuia singur. Borderourile se tipăresc mereu pe lat
+(A4 Landscape), indiferent de ce era ales ultima dată în fereastra de tipărire.
+
 ## Ordinea la încărcare
 
 În tabul Încărcări, prima coloană („Ordine”) arată în ce ordine se încarcă mașinile unei zile. O stabilește **Transportul**

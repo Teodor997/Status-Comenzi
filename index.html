@@ -296,6 +296,10 @@
   #cmrPrint { display: none; }
   body.tip-cmr #cmrPrint { display: block; position: fixed; left: -400mm; top: 0; }
   @page cmr { size: A4 portrait; margin: 0; }
+  @page bord { size: A4 landscape; margin: 10mm; }
+  .inc-sel-bara { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 8px; }
+  .inc-sel-bara.ascuns { display: none; }
+  td.incB, th.incB { width: 30px; text-align: center; }
   .cmr-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; }
   .cmr-form .camp { margin: 0; } .cmr-form .l2 { grid-column: span 2; } .cmr-form .l4 { grid-column: 1 / -1; }
   .cmr-form h4 { grid-column: 1 / -1; margin: 8px 0 0; font-size: 13px; color: var(--navy); border-bottom: 1px solid var(--line); padding-bottom: 3px; }
@@ -310,7 +314,9 @@
     .cmr-pag { page: cmr; break-after: page; }
     .cmr-pag:last-child { break-after: auto; }
     #aplicatie, #ecranLogin, #toasturi, .fundal { display: none !important; }
-    #tiparire { display: block; padding: 0; font-size: 12px; }
+    #tiparire { display: block; padding: 0; font-size: 12px; page: bord; }
+    #tiparire .bord-pag { break-after: page; page-break-after: always; }
+    #tiparire .bord-pag:last-child { break-after: auto; page-break-after: auto; }
     #tiparire h1 { font-size: 18px; margin: 0 0 4px; }
     #tiparire table { border-collapse: collapse; width: 100%; margin-top: 10px; }
     #tiparire th, #tiparire td { border: 1px solid #444; padding: 4px 6px; text-align: left; }
@@ -459,6 +465,7 @@
           <div class="card" id="cardCam">
             <h2>Camioane <span class="inc-sub" id="incTitlu"></span></h2>
             <p>Comenzile cu Nr AUTO, grupate pe camion. Încărcarea se confirmă doar pentru comenzile cu statusul Terminata.</p>
+            <div class="inc-sel-bara ascuns" id="incSelBara"><span id="incSelText"></span><button class="btn mic pri" id="incSelPrint">Tipărește borderourile bifate</button><button class="btn mic" id="incSelGol">Debifează tot</button></div>
             <div class="derulare-x" id="incLista"></div>
           </div>
           <div class="card ascuns" id="cardExtra">
@@ -524,12 +531,12 @@
 <div id="cmrPrint"></div>
 <input type="file" id="fisier" class="ascuns" accept=".xlsx,.xlsm,.xls">
 
-<script src="config.js?v=2.52"></script>
-<script src="js/xlsx.full.min.js?v=2.52"></script>
-<script src="js/util.js?v=2.52"></script>
-<script src="js/store.js?v=2.52"></script>
-<script src="js/logic.js?v=2.52"></script>
-<script src="js/cmr-sablon.js?v=2.52"></script>
-<script src="js/ui.js?v=2.52"></script>
+<script src="config.js?v=2.53"></script>
+<script src="js/xlsx.full.min.js?v=2.53"></script>
+<script src="js/util.js?v=2.53"></script>
+<script src="js/store.js?v=2.53"></script>
+<script src="js/logic.js?v=2.53"></script>
+<script src="js/cmr-sablon.js?v=2.53"></script>
+<script src="js/ui.js?v=2.53"></script>
 </body>
 </html>
