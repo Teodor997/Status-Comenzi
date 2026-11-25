@@ -3,7 +3,7 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '2.53';
+  SC.VERSIUNE = '2.56';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
   SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
@@ -28,7 +28,6 @@
     { k: 'cl', x: 'Client', t: 'Client', w: 104, typ: 'txt' },
     { k: 'st', x: 'Status', t: 'Status', w: 112, typ: 'txt' },
     { k: 'nc', x: 'Nr. Comanda', t: 'Nr. Comandă', w: 116, typ: 'txt' },
-    { k: 'cc', x: 'Cod Client', t: 'Cod Client', w: 112, typ: 'txt' },
     { k: 'dc', x: 'Data Comanda', t: 'Data Comandă', w: 84, typ: 'date' },
     { k: 'dl', x: 'Data Livrare Solicitata', t: 'Livrare solicitată', w: 84, typ: 'date' },
     { k: 'de', x: 'Destinatar', t: 'Destinatar', w: 240, typ: 'txt' },
@@ -51,7 +50,8 @@
     { k: 'di', x: 'Data incarcare', t: 'Data încărcare', w: 112, typ: 'dt' },
     { k: 'na', x: 'Nr AUTO', t: 'Nr AUTO', w: 100, typ: 'txt' },
     { k: 'nt', x: 'Numar Transport', t: 'Nr transport', w: 100, typ: 'txt' },
-    { k: 'im', x: 'Import', t: 'Import', w: 168, typ: 'txt' }
+    { k: 'im', x: 'Import', t: 'Import', w: 168, typ: 'txt' },
+    { k: 'cc', x: 'Cod Client', t: 'Cod Client', w: 112, typ: 'txt' }       /* ultima coloana din lista (in fisierele Excel ramane dupa Nr. Comanda) */
   ];
   /* coloane proprii incarcarii (in Excel erau doar in "Status Incarcari") */
   SC.COLS_INC = [

@@ -92,6 +92,8 @@
   function poateTms() { return poate() || rol() === 'transport'; }
   /* fisierul de import in TMS il face Transportul (si Administratorul) */
   function poateTmsExport() { return rol() === 'transport' || rol() === 'admin'; }
+  /* raportul „Paleți”: Administratorul si utilizatorii carora el le-a bifat dreptul in Administrare → Utilizatori */
+  function poatePaleti() { var u = SC.store.user; return !!u && (u.rol === 'admin' || u.rolReal === 'admin' || !!u.rapPal); }
   /* ordinea in care se incarca masinile o pune Transportul (si Administratorul); o vad toti */
   function poateOrdona() { return rol() === 'transport' || rol() === 'admin'; }
   /* bifarea mai multor comenzi, cu totaluri (Transport; si Administratorul, ca sa poata verifica) */
@@ -204,6 +206,7 @@
     $('btnTransport').classList.toggle('ascuns', !poateTms());
     $('btnTransport2').classList.toggle('ascuns', u.rol !== 'transport');
     $('btnTmsExport').classList.toggle('ascuns', !poateTmsExport());
+    $('btnPaleti').classList.toggle('ascuns', !poatePaleti());
     $('btnGolesteInc').classList.toggle('ascuns', !eAdmin());
     stare.sel = {};
     var b = $('banda');
@@ -877,6 +880,75 @@
     SC.comenzi.forEach(function (o) { if (!o.tx) return; var e = m[o.tx] = m[o.tx] || { ts: o.tx, u: o.txu || '?', n: 0, manual: !!o.txm }; e.n++; });
     return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 15);
   }
+  $('btnPaleti').onclick = function () {
+    if (!poatePaleti()) return;
+    var azi = SC.azi(), date = null, cheieCitita = '', sel = null;
+    var html = '<div class="rand-form">' +
+      '<label class="camp"><span>Client</span><select id="rpCl"><option value="">Toți clienții</option>' + SC.config.clienti.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="camp"><span>Perioada după</span><select id="rpDupa"><option value="dp">Data pregătire (închidere)</option><option value="dl">Livrare solicitată</option><option value="di">Data încărcare</option></select></label>' +
+      '<label class="camp"><span>De la</span><input type="date" id="rpDe" value="' + SC.ziPlus(azi, -1) + '"></label>' +
+      '<label class="camp"><span>Până la</span><input type="date" id="rpPana" value="' + SC.ziPlus(azi, -1) + '"></label>' +
+      '<button type="button" class="btn" id="rpCauta">Caută comenzile</button></div>' +
+      '<div class="mic" style="margin-top:6px">În raport intră comenzile închise (Terminata și Self-Pick) din perioada aleasă, cu FPP, Pick, paleți reali și amprente. Perioada este obligatorie (cel mult ' + L.PALETI_ZILE_MAX + ' de zile).</div>' +
+      '<fieldset class="tms-ce"><legend>Ce comenzi intră în raport</legend>' +
+      '<label class="bifa"><input type="radio" name="rpCe" value="toate" checked> <span><b>Toate comenzile închise</b> din filtru, și cele care au mai fost în raport <span class="tms-nr" id="rpNrToate"></span></span></label>' +
+      '<label class="bifa"><input type="radio" name="rpCe" value="noi"> <span><b>Doar comenzile care nu au mai fost în raport</b> <span class="tms-nr" id="rpNrNoi"></span></span></label></fieldset>' +
+      '<div class="tms-rez" id="rpRez" role="status"></div>';
+    function citeste(rad) {
+      var f = { cl: rad.querySelector('#rpCl').value, dupa: rad.querySelector('#rpDupa').value, a: rad.querySelector('#rpDe').value, b: rad.querySelector('#rpPana').value, noi: rad.querySelector('input[name=rpCe]:checked').value === 'noi' };
+      f.eroare = !f.a || !f.b ? 'Alege ambele zile ale perioadei.' : f.b < f.a ? '„Până la” este înaintea zilei de început.' : Math.round((SC.msDin(f.b, '00:00') - SC.msDin(f.a, '00:00')) / 86400000) + 1 > L.PALETI_ZILE_MAX ? 'Perioada este mai lungă de ' + L.PALETI_ZILE_MAX + ' de zile. Fă raportul pe bucăți.' : '';
+      return f;
+    }
+    function arata(rad) {
+      var f = citeste(rad), rez = rad.querySelector('#rpRez'), cheie = f.a + '|' + f.b;
+      sel = null; rad.querySelector('#rpNrToate').textContent = ''; rad.querySelector('#rpNrNoi').textContent = '';
+      if (f.eroare) { rez.innerHTML = '<div class="nota rau">' + esc(f.eroare) + '</div>'; return; }
+      if (!date || cheieCitita !== cheie) { rez.innerHTML = '<div class="nota">Apasă „Caută comenzile” ca să citesc comenzile din perioada ' + esc(SC.fmtDataLunga(f.a)) + ' – ' + esc(SC.fmtDataLunga(f.b)) + '.</div>'; return; }
+      var potrivite = date.comenzi.filter(function (o) {
+        if (!L.paletiInchisa(o)) return false;
+        if (f.cl && String(o.cl || '').toUpperCase() !== f.cl) return false;
+        var d = String(o[f.dupa] || '').slice(0, 10);
+        return !!d && d >= f.a && d <= f.b;
+      });
+      var noi = potrivite.filter(function (o) { return !o.rp; }), l = f.noi ? noi : potrivite;
+      rad.querySelector('#rpNrToate').textContent = '— ' + nCom(potrivite.length); rad.querySelector('#rpNrNoi').textContent = '— ' + nCom(noi.length);
+      var faraPal = l.filter(function (o) { return !SC.esteNum(o.pr); }).length;
+      sel = { f: f, l: l };
+      rez.innerHTML = '<div class="nota"><span class="mare"><b>' + nCom(l.length) + '</b> în raport</span>' + (l.length ? ' · FPP ' + SC.fmtNum(suma(l, 'fpp'), 'int') + ' · Pick ' + SC.fmtNum(suma(l, 'pk'), 'int') + ' · paleți reali <b>' + SC.fmtNum(suma(l, 'pr'), 'int') + '</b> · amprente ' + SC.fmtNum(suma(l, 'am'), 'int') : '') +
+        (potrivite.length - noi.length ? '<div>Din cele ' + potrivite.length + ' din filtru, <b>' + (potrivite.length - noi.length) + '</b> au mai fost într-un raport.</div>' : '') +
+        '<div class="mic">Citite din baza de date: ' + date.documente + ' documente (comenzi primite cu până la ' + L.PALETI_MARJA_ZILE + ' de zile înaintea perioadei).</div></div>' +
+        (faraPal ? '<div class="nota atentie">' + nCom(faraPal) + ' fără paleți reali trecuți; în Excel celula rămâne goală.</div>' : '');
+    }
+    modal({
+      titlu: 'Raport paleți — comenzi închise', html: html, lat: true,
+      laDeschidere: function (rad) {
+        function cauta() {
+          var f = citeste(rad); if (f.eroare) { arata(rad); return; }
+          rad.querySelector('#rpRez').innerHTML = '<div class="mic" role="status">Se citesc comenzile din perioada aleasă…</div>';
+          L.paletiCiteste(f.a, f.b).then(function (d) { date = d; cheieCitita = f.a + '|' + f.b; arata(rad); }, function (e) { rad.querySelector('#rpRez').innerHTML = '<div class="nota rau">Comenzile nu au putut fi citite: ' + esc(e && e.message ? e.message : e) + '</div>'; });
+        }
+        rad.querySelector('#rpCauta').onclick = cauta;
+        ['#rpCl', '#rpDupa', '#rpDe', '#rpPana'].forEach(function (s) { rad.querySelector(s).addEventListener('change', function () { arata(rad); }); });
+        Array.prototype.forEach.call(rad.querySelectorAll('[name=rpCe]'), function (x) { x.onchange = function () { arata(rad); }; });
+        cauta();
+      },
+      butoane: [{ t: 'Închide', v: null }, {
+        t: 'Descarcă raportul (Excel)', cls: 'pri', fn: function (rad) {
+          if (!sel) { toast('Caută întâi comenzile din perioada aleasă.', 'rau'); return false; }
+          if (!sel.l.length) { toast('Nicio comandă închisă în filtrul ales.', 'rau'); return false; }
+          var f = sel.f, l = sel.l, text = (f.cl || 'toți clienții') + ' · ' + { dp: 'data pregătirii', dl: 'livrare solicitată', di: 'data încărcării' }[f.dupa] + ' ' + SC.fmtDataLunga(f.a) + ' – ' + SC.fmtDataLunga(f.b) + (f.noi ? ' · doar comenzile care nu au mai fost în raport' : '');
+          var x = L.paletiExcel(l, text);
+          XLSX.writeFile(x.wb, 'Raport paleti ' + f.a + (f.b !== f.a ? ' - ' + f.b : '') + (f.cl ? ' ' + f.cl : '') + '.xlsx');
+          var deMarcat = l.filter(function (o) { return !o.rp; }).map(function (o) { return o.n; });
+          if (!deMarcat.length) { toast('Raport descărcat: ' + nCom(l.length) + '.', 'bun'); return null; }
+          toast('Raport descărcat. Marchez comenzile ca trecute prin raport…');
+          return L.paletiMarcheaza(deMarcat, 'Raport Paleți: ' + nCom(l.length) + ' (' + text + ')').then(function () {
+            toast('Raport descărcat: ' + nCom(l.length) + '; ' + deMarcat.length + ' marcate ca trecute prin raport.', 'bun');
+          }, function (e) { toast('Raportul a fost descărcat, dar marcarea comenzilor nu a reușit: ' + (e && e.message ? e.message : e) + '. La următorul raport vor apărea din nou ca „noi”.', 'rau'); });
+        }
+      }]
+    });
+  };
   $('btnTmsExport').onclick = function () {
     if (!poateTmsExport()) return;
     var html = '<div class="rand-form">' +
@@ -3585,12 +3657,12 @@
     var h = '<div class="card"><h2>Utilizatori</h2><p>Fiecare coleg intră cu numele lui și un PIN de 6 cifre. PIN-ul uitat se rezolvă dezactivând contul și creând unul nou cu același nume.<br>' +
       '<b>Administrator</b>: toate drepturile. <b>Operator date</b>: comenzi (adaugă, modifică, statusuri), importuri borderou / Excel / fișier TMS, adrese. ' +
       '<b>Încărcări</b>: doar tabul Încărcări (confirmă camioane, tipărește borderoul). <b>Transport</b>: vede comenzile și poate modifica doar Nr AUTO.</p>' +
-      '<div class="derulare-x"><table class="simplu"><tr><th>Nume</th><th>Rol</th><th>Stare</th><th></th></tr>' +
+      '<div class="derulare-x"><table class="simplu"><tr><th>Nume</th><th>Rol</th><th title="Cine vede butonul „Paleți” (raportul comenzilor închise). Administratorul îl are mereu.">Raport „Paleți”</th><th>Stare</th><th></th></tr>' +
       stare.utilizatori.map(function (d) {
         var u = d.data, eu = d.id === SC.store.user.uid;
         return '<tr><td>' + esc(u.nume) + (eu ? ' (tu)' : '') + '</td><td><select data-rol="' + d.id + '"' + (eu ? ' disabled' : '') + '>' +
           Object.keys(SC.ROLURI).map(function (r) { return '<option value="' + r + '"' + (r === u.rol ? ' selected' : '') + '>' + SC.ROLURI[r] + '</option>'; }).join('') +
-          '</select></td><td>' + (u.activ ? '<span class="eticheta ok">activ</span>' : '<span class="eticheta asteapta">dezactivat</span>') + '</td><td>' +
+          '</select></td><td><input type="checkbox" data-rappal="' + d.id + '"' + (u.rol === 'admin' ? ' checked disabled' : (u.rapPal ? ' checked' : '')) + ' aria-label="Raport Paleți pentru ' + esc(u.nume) + '"></td><td>' + (u.activ ? '<span class="eticheta ok">activ</span>' : '<span class="eticheta asteapta">dezactivat</span>') + '</td><td>' +
           (eu ? '' : '<button class="btn mic" data-activ="' + d.id + '">' + (u.activ ? 'Dezactivează' : 'Activează') + '</button>') + '</td></tr>';
       }).join('') + '</table></div>' +
       '<div class="rand-form" style="margin-top:10px"><label class="camp"><span>Nume</span><input type="text" id="uNume" maxlength="40"></label>' +
@@ -3668,6 +3740,8 @@
   $('pag-admin').addEventListener('change', function (e) {
     var s = e.target.closest('[data-rol]');
     if (s) { var v = s.value; schimbaUtilizator(s.dataset.rol, function (u) { u.rol = v; }).then(function () { toast('Rol schimbat.', 'bun'); }, arataEroare); }
+    var rp = e.target.closest('[data-rappal]');
+    if (rp) { var da = rp.checked; schimbaUtilizator(rp.dataset.rappal, function (u) { if (da) u.rapPal = true; else delete u.rapPal; }).then(function () { toast(da ? 'Utilizatorul vede butonul „Paleți” de la următoarea intrare în aplicație.' : 'Utilizatorul nu mai vede butonul „Paleți” de la următoarea intrare în aplicație.', 'bun'); }, arataEroare); }
   });
   $('pag-admin').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;

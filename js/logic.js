@@ -60,7 +60,7 @@
     Object.keys(chei).forEach(function (k) {
       var x = a[k] == null ? '' : a[k], y = b[k] == null ? '' : b[k];
       if (String(x) === String(y)) return;
-      var nume = SC.COL[k] ? SC.COL[k].t : (k === 'ar' ? 'Arhivată' : k === 'ipr' ? 'Paleți numărați la încărcare' : k === 'iam' ? 'Amprente numărate la încărcare' : k === 'xnt' ? 'Scoasă la încărcare de pe transportul' : k === 'mnt' ? 'Trecută de mână pe transportul' : k);
+      var nume = SC.COL[k] ? SC.COL[k].t : (k === 'ar' ? 'Arhivată' : k === 'ipr' ? 'Paleți numărați la încărcare' : k === 'iam' ? 'Amprente numărate la încărcare' : k === 'xnt' ? 'Scoasă la încărcare de pe transportul' : k === 'mnt' ? 'Trecută de mână pe transportul' : k === 'rp' ? 'Trecută în raportul Paleți' : k === 'rpu' ? 'Raport Paleți făcut de' : k);
       parti.push(nume + ': ' + (x === '' ? '(gol)' : scurt(x)) + ' → ' + (y === '' ? '(gol)' : scurt(y)));
     });
     return parti.join('; ');
@@ -1220,6 +1220,53 @@
     }
     return pas(0).then(function () { return { ts: ts }; }, function (e) { return { ts: ts, eroare: e }; });
   };
+  /* ---------- raportul „Paleți”: comenzile inchise (Terminata / Self-Pick) dintr-o perioada, in Excel ---------- */
+  L.PALETI_ZILE_MAX = 92;         // perioada maxima a unui raport (citirile din arhiva cresc cu perioada)
+  L.PALETI_MARJA_ZILE = 45;       // comenzile inchise in perioada pot fi primite cu pana la atatea zile inainte
+  L.paletiInchisa = function (o) { return !!o && (o.st === ST.TER || o.st === ST.SELF); };
+  /* toate comenzile care pot intra in raport: arhiva (citita pe perioada) + ce este in memorie (mai proaspat) */
+  L.paletiCiteste = function (a, b) {
+    var dela = SC.msDin(SC.ziPlus(a, -L.PALETI_MARJA_ZILE), '00:00'), panala = SC.msDin(SC.ziPlus(b, 1), '23:59');
+    return SC.store.cautaGrupe(dela, panala).then(function (docs) {
+      var harta = {}, dupa = {};
+      docs.forEach(function (d) { harta[d.id] = d.data; });
+      L.comenziDinGrupe(harta).forEach(function (o) { dupa[o.n] = o; });
+      SC.comenzi.forEach(function (o) { dupa[o.n] = o; });
+      return { comenzi: Object.keys(dupa).map(function (n) { return dupa[n]; }), documente: docs.length };
+    });
+  };
+  /* foaia „Comenzi”: toate coloanele din status (aceleasi ca in registrul Excel), plus FPP, Pick, Nr transport, data incarcarii din
+     transport, starea camionului, temperatura, semnatura, soferul, remorca, Self-Pick si cumulul — cate un rand pe comanda */
+  L.paletiExcel = function (comenzi, filtru) {
+    var l = comenzi.slice().sort(function (a, b) { return a.n - b.n; });
+    var ws = L.registruExcel(l, []).Sheets.Sheet1;
+    if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
+    /* sumar pe client */
+    var pe = {}, ordine = [];
+    function ad(s, o) { s.n++; ['fpp', 'pk', 'pr', 'am'].forEach(function (k) { if (SC.esteNum(o[k])) s[k] += o[k]; }); if (SC.esteNum(o.gf)) s.gf += o.gf; }
+    function gol() { return { n: 0, fpp: 0, pk: 0, pr: 0, am: 0, gf: 0 }; }
+    var total = gol();
+    l.forEach(function (o) { var c = o.cl || '(fără client)'; if (!pe[c]) { pe[c] = gol(); ordine.push(c); } ad(pe[c], o); ad(total, o); });
+    var sum = [['Raport paleți — comenzi închise'], [filtru || ''], [], ['Client', 'Comenzi', 'FPP', 'Pick', 'Paleți reali', 'Amprente', 'Greutate finală']];
+    ordine.forEach(function (c) { var s = pe[c]; sum.push([c, s.n, s.fpp, s.pk, s.pr, s.am, SC.rotunjeste(s.gf)]); });
+    sum.push(['TOTAL', total.n, total.fpp, total.pk, total.pr, total.am, SC.rotunjeste(total.gf)]);
+    var ws2 = XLSX.utils.aoa_to_sheet(sum); ws2['!cols'] = [{ wch: 30 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 16 }];
+    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Comenzi'); XLSX.utils.book_append_sheet(wb, ws2, 'Sumar');
+    return { wb: wb, total: total };
+  };
+  /* dupa descarcare: comenzile sunt marcate ca trecute prin raport (rp = momentul, rpu = cine), ca la exportul pentru TMS */
+  L.paletiMarcheaza = function (numere, text) {
+    var ts = Date.now(), user = SC.store.user ? SC.store.user.nume : '?', peGrupa = {};
+    numere.forEach(function (n) { var id = SC.idGrupa(n); (peGrupa[id] = peGrupa[id] || []).push(n); });
+    var ids = Object.keys(peGrupa).sort(), loturi = [];
+    for (var i = 0; i < ids.length; i += 8) loturi.push(ids.slice(i, i + 8).reduce(function (a, id) { return a.concat(peGrupa[id]); }, []));
+    function pas(k) {
+      if (k >= loturi.length) return Promise.resolve();
+      return L.modifica(loturi[k].map(function (n) { return { n: n, fn: function (x) { if (x.rp) return; x.rp = ts; x.rpu = user; } }; }), k === 0 ? text : '', { faraDetalii: true }).then(function () { return pas(k + 1); });
+    }
+    return pas(0).then(function () { return { ts: ts, documente: ids.length }; });
+  };
+
   L.tmsExportate = function (ts) { return SC.comenzi.filter(function (o) { return o.tx === ts; }); };
   /* anuleaza marcajul unui export: comenzile lui redevin „de exportat” */
   L.tmsAnuleaza = function (ts, text) {
@@ -1235,7 +1282,7 @@
   };
 
   L.exportExcel = function (comenzi, numeFisier) {
-    var cols = SC.COLS.concat(SC.COLS_INC);
+    var cols = SC.COLS.filter(function (c) { return c.k !== 'cc'; }); cols.splice(cols.map(function (c) { return c.k; }).indexOf('nc') + 1, 0, SC.COL.cc); cols = cols.concat(SC.COLS_INC);
     var aoa = [cols.map(function (c) { return c.x; })];
     comenzi.forEach(function (o) {
       aoa.push(cols.map(function (c) {

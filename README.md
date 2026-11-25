@@ -223,6 +223,19 @@ listei apare „Tipărește borderourile bifate”: se deschide o singură ferea
 început a încărcării se înregistrează pentru fiecare camion, ca la tipărirea unuia singur. Borderourile se tipăresc mereu pe lat
 (A4 Landscape), indiferent de ce era ales ultima dată în fereastra de tipărire.
 
+## Raportul „Paleți” (comenzi închise)
+- Butonul **Paleți** din tabul *Comenzi* îl văd Administratorul și utilizatorii cărora el le bifează coloana „Raport Paleți” în
+  Administrare → Utilizatori (bifa se aplică de la următoarea intrare în aplicație a acelui utilizator).
+- Fereastra seamănă cu exportul pentru TMS: client, „Perioada după” (data pregătirii, livrare solicitată sau data încărcării),
+  de la / până la (obligatoriu, cel mult 92 de zile) și alegerea între *toate comenzile închise* sau *doar cele care nu au mai
+  fost în raport*. Intră comenzile Terminata și Self-Pick.
+- Excelul are foaia *Comenzi* — câte un rând pe comandă, cu toate coloanele din status (aceleași ca în registrul Excel) plus FPP,
+  Pick, Nr AUTO, Nr transport, data din transport, șofer, remorcă, starea camionului, temperatură, semnătură, Self-Pick și cumul —
+  și foaia *Sumar* (pe client: comenzi, FPP, Pick, paleți reali, amprente, greutate finală).
+- După descărcare, comenzile sunt marcate ca trecute prin raport (rămâne în jurnal cine și când).
+- Consum: comenzile vechi se citesc din baza de date la fiecare „Caută comenzile” — cam 5–6 documente pentru fiecare zi din
+  perioadă plus 45 de zile înainte (o comandă primită cu mai mult de 45 de zile înaintea perioadei și scoasă deja din lista activă nu este găsită); marcarea scrie câte un document la 25 de comenzi.
+
 ## Ordinea la încărcare
 
 În tabul Încărcări, prima coloană („Ordine”) arată în ce ordine se încarcă mașinile unei zile. O stabilește **Transportul**

@@ -87,7 +87,7 @@
   };
   StoreDemo.prototype._intra = function (uid) {
     var u = this.docs['utilizatori/' + uid];
-    this.user = { uid: uid, nume: u.nume, rol: u.rol };
+    this.user = { uid: uid, nume: u.nume, rol: u.rol, rapPal: !!u.rapPal };
     try { sessionStorage.setItem('sc-demo-uid', uid); } catch (e) { /* ignor */ }
     SC.onAuth(this.user);
   };
@@ -257,7 +257,7 @@
       if (!s.exists()) throw eroare('Contul nu are drepturi în aplicație. Cere administratorului să te adauge.');
       var u = s.data();
       if (!u.activ) throw eroare('Contul este dezactivat.');
-      self.user = { uid: fu.uid, nume: u.nume, rol: u.rol };
+      self.user = { uid: fu.uid, nume: u.nume, rol: u.rol, rapPal: !!u.rapPal };
       SC.onAuth(self.user);
     });
   };
