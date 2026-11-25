@@ -885,15 +885,29 @@
     var azi = SC.azi(), date = null, cheieCitita = '', sel = null;
     var html = '<div class="rand-form">' +
       '<label class="camp"><span>Client</span><select id="rpCl"><option value="">Toți clienții</option>' + SC.config.clienti.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></label>' +
-      '<label class="camp"><span>Perioada după</span><select id="rpDupa"><option value="dp">Data pregătire (închidere)</option><option value="dl">Livrare solicitată</option><option value="di">Data încărcare</option></select></label>' +
+      '<label class="camp"><span>Perioada după</span><select id="rpDupa"><option value="dl">Livrare solicitată</option><option value="dp">Data pregătire (închidere)</option><option value="di">Data încărcare</option></select></label>' +
       '<label class="camp"><span>De la</span><input type="date" id="rpDe" value="' + SC.ziPlus(azi, -1) + '"></label>' +
       '<label class="camp"><span>Până la</span><input type="date" id="rpPana" value="' + SC.ziPlus(azi, -1) + '"></label>' +
       '<button type="button" class="btn" id="rpCauta">Caută comenzile</button></div>' +
-      '<div class="mic" style="margin-top:6px">În raport intră comenzile închise (Terminata și Self-Pick) din perioada aleasă, cu FPP, Pick, paleți reali și amprente. Perioada este obligatorie (cel mult ' + L.PALETI_ZILE_MAX + ' de zile).</div>' +
+      '<div class="mic" style="margin-top:6px">În raport intră comenzile închise (Terminata și Self-Pick) din perioada aleasă, câte un rând pe comandă, cu paleții estimați și paleții reali. Perioada este obligatorie (cel mult ' + L.PALETI_ZILE_MAX + ' de zile).</div>' +
       '<fieldset class="tms-ce"><legend>Ce comenzi intră în raport</legend>' +
       '<label class="bifa"><input type="radio" name="rpCe" value="toate" checked> <span><b>Toate comenzile închise</b> din filtru, și cele care au mai fost în raport <span class="tms-nr" id="rpNrToate"></span></span></label>' +
       '<label class="bifa"><input type="radio" name="rpCe" value="noi"> <span><b>Doar comenzile care nu au mai fost în raport</b> <span class="tms-nr" id="rpNrNoi"></span></span></label></fieldset>' +
-      '<div class="tms-rez" id="rpRez" role="status"></div>';
+      '<div class="tms-rez" id="rpRez" role="status"></div><div class="tms-vechi" id="rpIstoric"></div>';
+    var istoric = [];
+    /* rapoartele facute: din comenzile citite acum (perioada cautata + 45 de zile inainte) si din lista activa */
+    function arataIstoric(rad) {
+      var el = rad.querySelector('#rpIstoric');
+      if (!date) { el.innerHTML = ''; return; }
+      istoric = L.paletiIstoric(date.comenzi).slice(0, 20);
+      el.innerHTML = '<b>Rapoarte făcute</b> <span class="mic">— pentru comenzile citite acum; cele mai noi primele</span>' + (istoric.length ?
+        '<div class="lista-mica" style="margin-top:6px"><table class="simplu"><tr><th>Când</th><th>Cine</th><th class="nr">Comenzi</th><th class="nr">Paleți reali</th><th>Livrare solicitată</th><th></th></tr>' +
+        istoric.map(function (x, i) {
+          var zile = x.l.map(function (o) { return String(o.dl || '').slice(0, 10); }).filter(Boolean).sort(), a = zile[0], b = zile[zile.length - 1];
+          return '<tr><td>' + esc(tmsMoment(x.ts)) + '</td><td>' + esc(x.u) + '</td><td class="nr">' + x.l.length + '</td><td class="nr">' + SC.fmtNum(suma(x.l, 'pr'), 'int') + '</td><td>' + (a ? esc(SC.fmtDataLunga(a)) + (b !== a ? ' – ' + esc(SC.fmtDataLunga(b)) : '') : '—') +
+            '</td><td><button type="button" class="btn mic" data-rpi="' + i + '">Descarcă din nou</button></td></tr>';
+        }).join('') + '</table></div>' : '<div class="mic" style="margin-top:4px">Niciun raport făcut pentru comenzile din perioada căutată.</div>');
+    }
     function citeste(rad) {
       var f = { cl: rad.querySelector('#rpCl').value, dupa: rad.querySelector('#rpDupa').value, a: rad.querySelector('#rpDe').value, b: rad.querySelector('#rpPana').value, noi: rad.querySelector('input[name=rpCe]:checked').value === 'noi' };
       f.eroare = !f.a || !f.b ? 'Alege ambele zile ale perioadei.' : f.b < f.a ? '„Până la” este înaintea zilei de început.' : Math.round((SC.msDin(f.b, '00:00') - SC.msDin(f.a, '00:00')) / 86400000) + 1 > L.PALETI_ZILE_MAX ? 'Perioada este mai lungă de ' + L.PALETI_ZILE_MAX + ' de zile. Fă raportul pe bucăți.' : '';
@@ -925,9 +939,14 @@
         function cauta() {
           var f = citeste(rad); if (f.eroare) { arata(rad); return; }
           rad.querySelector('#rpRez').innerHTML = '<div class="mic" role="status">Se citesc comenzile din perioada aleasă…</div>';
-          L.paletiCiteste(f.a, f.b).then(function (d) { date = d; cheieCitita = f.a + '|' + f.b; arata(rad); }, function (e) { rad.querySelector('#rpRez').innerHTML = '<div class="nota rau">Comenzile nu au putut fi citite: ' + esc(e && e.message ? e.message : e) + '</div>'; });
+          L.paletiCiteste(f.a, f.b).then(function (d) { date = d; cheieCitita = f.a + '|' + f.b; arata(rad); arataIstoric(rad); }, function (e) { rad.querySelector('#rpRez').innerHTML = '<div class="nota rau">Comenzile nu au putut fi citite: ' + esc(e && e.message ? e.message : e) + '</div>'; });
         }
         rad.querySelector('#rpCauta').onclick = cauta;
+        rad.querySelector('#rpIstoric').addEventListener('click', function (e) {
+          var bt = e.target.closest('[data-rpi]'), x = bt && istoric[+bt.dataset.rpi]; if (!x) return;
+          XLSX.writeFile(L.paletiExcel(x.l, 'raportul făcut la ' + tmsMoment(x.ts) + ' de ' + x.u).wb, 'Raport paleti (din nou) ' + SC.ymd(new Date(x.ts)) + ' ' + SC.p2(new Date(x.ts).getHours()) + SC.p2(new Date(x.ts).getMinutes()) + '.xlsx');
+          toast('Raportul din ' + tmsMoment(x.ts) + ' a fost descărcat din nou: ' + nCom(x.l.length) + '.', 'bun');
+        });
         ['#rpCl', '#rpDupa', '#rpDe', '#rpPana'].forEach(function (s) { rad.querySelector(s).addEventListener('change', function () { arata(rad); }); });
         Array.prototype.forEach.call(rad.querySelectorAll('[name=rpCe]'), function (x) { x.onchange = function () { arata(rad); }; });
         cauta();
@@ -3318,11 +3337,20 @@
       instr: cmrText(c.instr), instr2: cmrText(c.instr2), stab_tara: cmrText(c.st), stab_oras: cmrText(c.so)
     };
   }
+  /* Formularul din sablon are 197 x 223 mm; pe A4 ramaneau cate 36 mm goi sus si jos. La tiparire randurile se inalta
+     (CMR_INALT) si textul creste (CMR_TEXT), ca formularul sa umple pagina: aprox. 201 x 272 mm. */
+  var CMR_INALT = 1.21, CMR_TEXT = 1.10, cmrSablonMare = null;
+  function cmrSablon() {
+    if (!cmrSablonMare) cmrSablonMare = SC.CMR_SABLON
+      .replace(/height:([0-9.]+)mm/g, function (_, x) { return 'height:' + (parseFloat(x) * CMR_INALT).toFixed(2) + 'mm'; })
+      .replace(/font-size:([0-9.]+)pt/g, function (_, x) { return 'font-size:' + (parseFloat(x) * CMR_TEXT).toFixed(2) + 'pt'; });
+    return cmrSablonMare;
+  }
   function htmlCmr(c) {
     var v = cmrValori(c);
     return CMR_COPII.map(function (k) {
       v.nr = k[1]; v.copie_ro = k[2]; v.copie_en = k[3];
-      return '<div class="cmr-pag ' + k[0] + '">' + SC.CMR_SABLON.replace(/\{\{(\w+)\}\}/g, function (_, cheie) { return v[cheie] == null ? '' : v[cheie]; }) + '</div>';
+      return '<div class="cmr-pag ' + k[0] + '">' + cmrSablon().replace(/\{\{(\w+)\}\}/g, function (_, cheie) { return v[cheie] == null ? '' : v[cheie]; }) + '</div>';
     }).join('');
   }
   /* textele scrise de operator care nu incap in caseta lor se micsoreaza pana incap */

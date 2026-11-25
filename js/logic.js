@@ -1235,11 +1235,17 @@
       return { comenzi: Object.keys(dupa).map(function (n) { return dupa[n]; }), documente: docs.length };
     });
   };
-  /* foaia „Comenzi”: toate coloanele din status (aceleasi ca in registrul Excel), plus FPP, Pick, Nr transport, data incarcarii din
-     transport, starea camionului, temperatura, semnatura, soferul, remorca, Self-Pick si cumulul — cate un rand pe comanda */
+  /* coloanele raportului, in ordinea ceruta: Client, Status, Nr. Comanda, Data Comanda, Livrare solicitata, Destinatar, Adresa, Oras, Paleti estimati, Paleti reali */
+  L.PALETI_COLOANE = ['cl', 'st', 'nc', 'dc', 'dl', 'de', 'ad', 'or', 'pe', 'pr'];
+  /* rapoartele facute pana acum, dupa marcajul de pe comenzi (rp = momentul, rpu = cine); cele mai noi primele */
+  L.paletiIstoric = function (comenzi) {
+    var m = {};
+    comenzi.forEach(function (o) { if (!o.rp) return; var e = m[o.rp] = m[o.rp] || { ts: o.rp, u: o.rpu || '?', l: [] }; e.l.push(o); });
+    return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return b.ts - a.ts; });
+  };
   L.paletiExcel = function (comenzi, filtru) {
     var l = comenzi.slice().sort(function (a, b) { return a.n - b.n; });
-    var ws = L.registruExcel(l, []).Sheets.Sheet1;
+    var ws = L.registruExcel(l, [], L.PALETI_COLOANE).Sheets.Sheet1;
     if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
     /* sumar pe client */
     var pe = {}, ordine = [];
@@ -1435,8 +1441,8 @@
     });
     return l.sort(function (a, b) { return a.n - b.n; });
   };
-  L.registruExcel = function (comenzi, adreseDocs) {
-    var cols = L.REGISTRU_MODEL.concat(L.REGISTRU_IN_PLUS).map(function (k) { return SC.COL[k]; });
+  L.registruExcel = function (comenzi, adreseDocs, chei) {
+    var cols = (chei || L.REGISTRU_MODEL.concat(L.REGISTRU_IN_PLUS)).map(function (k) { return SC.COL[k]; });
     var aoa = [cols.map(function (c) { return c.x; })], cuFormat = [];
     comenzi.forEach(function (o, r) {
       aoa.push(cols.map(function (c, ci) {

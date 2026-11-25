@@ -275,10 +275,10 @@
   /* ---- tiparire ---- */
   #tiparire { display: none; }
   /* ---- formularul CMR (tiparire) ---- */
-  .cmr-pag { --cmr: #000; width: 210mm; height: 296mm; box-sizing: border-box; padding: 0 6.35mm; display: flex; align-items: center; justify-content: center; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
+  .cmr-pag { --cmr: #000; width: 210mm; height: 296mm; box-sizing: border-box; padding: 0 4.5mm; display: flex; align-items: center; justify-content: center; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
   .cmr-pag.c2 { --cmr: #ff0000; } .cmr-pag.c3 { --cmr: #00b0f0; } .cmr-pag.c4 { --cmr: #00b050; }
-  table.cmr-t { width: 197.3mm; border-collapse: collapse; table-layout: fixed; margin: 0; }
-  table.cmr-t td { border: 0 solid var(--cmr); padding: 0 0.5mm; line-height: 1.05; vertical-align: bottom; text-align: left; overflow: hidden; font-size: 4.6pt; word-break: normal; }
+  table.cmr-t { width: 201mm; border-collapse: collapse; table-layout: fixed; margin: 0; }
+  table.cmr-t td { border: 0 solid var(--cmr); padding: 0 0.5mm; line-height: 1.05; vertical-align: bottom; text-align: left; overflow: hidden; font-size: 5.05pt; word-break: normal; }
   table.cmr-t td.t1 { border-top-width: 0.2mm; } table.cmr-t td.t2 { border-top-width: 0.45mm; } table.cmr-t td.t3 { border-top-width: 0.8mm; }
   table.cmr-t td.b1 { border-bottom-width: 0.2mm; } table.cmr-t td.b2 { border-bottom-width: 0.45mm; } table.cmr-t td.b3 { border-bottom-width: 0.8mm; }
   table.cmr-t td.l1 { border-left-width: 0.2mm; } table.cmr-t td.l2 { border-left-width: 0.45mm; } table.cmr-t td.l3 { border-left-width: 0.8mm; }
@@ -291,7 +291,7 @@
   table.cmr-t .rot { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   table.cmr-t .rot span { writing-mode: vertical-rl; transform: rotate(180deg); line-height: 1.05; max-height: 100%; }
   table.cmr-t .rot.jos span { transform: none; }
-  .cmr-sigla { display: inline-block; border: 0.5mm solid #000; border-radius: 50%; padding: 0.6mm 2.2mm; font-size: 9pt; font-weight: 900; letter-spacing: 0.2mm; line-height: 1; }
+  .cmr-sigla { display: inline-block; border: 0.5mm solid #000; border-radius: 50%; padding: 0.6mm 2.2mm; font-size: 9.5pt; font-weight: 900; letter-spacing: 0.2mm; line-height: 1; }
   .cmr-pag { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #cmrPrint { display: none; }
   body.tip-cmr #cmrPrint { display: block; position: fixed; left: -400mm; top: 0; }
@@ -532,12 +532,12 @@
 <div id="cmrPrint"></div>
 <input type="file" id="fisier" class="ascuns" accept=".xlsx,.xlsm,.xls">
 
-<script src="config.js?v=2.56"></script>
-<script src="js/xlsx.full.min.js?v=2.56"></script>
-<script src="js/util.js?v=2.56"></script>
-<script src="js/store.js?v=2.56"></script>
-<script src="js/logic.js?v=2.56"></script>
-<script src="js/cmr-sablon.js?v=2.56"></script>
-<script src="js/ui.js?v=2.56"></script>
+<script src="config.js?v=2.58"></script>
+<script src="js/xlsx.full.min.js?v=2.58"></script>
+<script src="js/util.js?v=2.58"></script>
+<script src="js/store.js?v=2.58"></script>
+<script src="js/logic.js?v=2.58"></script>
+<script src="js/cmr-sablon.js?v=2.58"></script>
+<script src="js/ui.js?v=2.58"></script>
 </body>
 </html>
