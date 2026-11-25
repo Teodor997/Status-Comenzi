@@ -76,6 +76,10 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
   este printre comenzile încărcate în aplicație, se completează de mână.
 - Fiecare reclamație are Status: „Deschisă” (la înregistrare) sau „Închisă”; la închidere se rețin momentul și cine a închis-o.
   Lista se poate filtra pe status și arată câte reclamații sunt deschise.
+- Reclamația mai are: Observații (text liber), Responsabil și Completat (liste derulante), Eroare depozit (Da/Nu). Numele din
+  listele „Completat” și „Responsabil” se scriu o singură dată la butonul „Liste derulante…” și se păstrează în baza de date
+  (nu în codul aplicației, care este public). Cât timp o listă e goală, câmpul se completează scriind liber.
+- Dacă data de livrare este după ziua curentă, fereastra avertizează și cere confirmare la salvare.
 - Nr crt se dă automat și nu se refolosește după o ștergere. Dacă pentru același aviz mai există o reclamație, fereastra avertizează.
 - Lista se poate căuta, filtra pe client și exporta în Excel. Click pe un rând deschide reclamația pentru modificare sau ștergere;
   toate acestea rămân în jurnal.
