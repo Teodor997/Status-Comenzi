@@ -68,6 +68,21 @@ ora în care s-a lucrat: o zi înseamnă cel mult câteva zeci de citiri, o lun�
 modifica adrese (Administrator, Operator date), cine poate doar modifica comenzi existente (Încărcări, Transport) și cine
 administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar confirmarea) este impusă de aplicație.
 
+## Reclamații (meniu nou, deocamdată doar pentru Administrator)
+
+- Meniul „Reclamații” ține evidența reclamațiilor venite din livrări, pentru toți clienții. La „+ Reclamație nouă” se completează
+  de mână numărul de aviz, data primirii, motivul și numărul de baxuri. Clientul, denumirea clientului (destinatarul) și data
+  livrării se iau din comanda cu acel număr („AV 71350” găsește comanda AV000071350) și pot fi corectate de mână; dacă avizul nu
+  este printre comenzile încărcate în aplicație, se completează de mână.
+- Fiecare reclamație are Status: „Deschisă” (la înregistrare) sau „Închisă”; la închidere se rețin momentul și cine a închis-o.
+  Lista se poate filtra pe status și arată câte reclamații sunt deschise.
+- Nr crt se dă automat și nu se refolosește după o ștergere. Dacă pentru același aviz mai există o reclamație, fereastra avertizează.
+- Lista se poate căuta, filtra pe client și exporta în Excel. Click pe un rând deschide reclamația pentru modificare sau ștergere;
+  toate acestea rămân în jurnal.
+- Reclamațiile stau într-un singur document pe an (`meta/recl_AAAA`), deci regulile Firestore nu se schimbă. Un document are cel
+  mult 1 MB: încap în jur de 4.000 de reclamații pe an; aplicația avertizează de la 3.000.
+- Urmează: mod de finalizare, comentarii și responsabil pick (cu liste derulante).
+
 ## Regulile preluate din Excel
 
 - Statusuri: Initiata, In lucru, Terminata, Self-Pick, Anulata, cu aceleași întrebări și culori.
@@ -220,7 +235,7 @@ cu 0 în fereastra de terminare și în „FPP și Pick”, dacă nu are deja o 
 ## Mai multe borderouri într-o singură tipărire
 În tabul *Încărcări*, fiecare camion are o bifă în prima coloană (bifa din capul tabelului le ia pe toate cele afișate). Deasupra
 listei apare „Tipărește borderourile bifate”: se deschide o singură fereastră de tipărire, cu câte un borderou pe pagină. Ora de
-început a încărcării se înregistrează pentru fiecare camion, ca la tipărirea unuia singur. Borderourile se tipăresc mereu pe lat
+început a încărcării se înregistrează pentru fiecare camion, ca la tipărirea unuia singur. Liniile din borderou sunt așezate după destinatar (apoi oraș, client), cu retururile la sfârșit. Borderourile se tipăresc mereu pe lat
 (A4 Landscape), indiferent de ce era ales ultima dată în fereastra de tipărire.
 
 ## Raportul „Paleți” (comenzi închise)

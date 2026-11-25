@@ -197,6 +197,7 @@
     $('bandaRol').innerHTML = caAltul ? '<span>Vezi aplicația ca <b>' + esc(SC.ROLURI[u.rol]) + '</b>. Ecranul arată și permite exact ce are acest rol. Modificările pe care le faci sunt reale și se salvează pe numele tău.</span>' +
       '<button type="button" class="btn mic" id="veziCaInapoi">Înapoi la Administrator</button>' : '';
     $('tabAdmin').classList.toggle('ascuns', !eAdmin());
+    $('tabRecl').classList.toggle('ascuns', !eAdmin());
     var doarInc = u.rol === 'incarcari';
     /* Incarcari: vede si lista de comenzi, dar doar ca s-o citeasca (fara deschidere la click, fara modificari) */
     document.querySelector('.tab[data-tab=comenzi]').classList.remove('ascuns');
@@ -283,13 +284,15 @@
     $('adrClient').innerHTML = '<option value="">Toți clienții</option>' + opt; $('adrClient').value = v2;
   }
   function arataTab(t) {
+    if (t === 'reclamatii' && !eAdmin()) t = 'comenzi';
     stare.tab = t;
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) { b.classList.toggle('activ', b.dataset.tab === t); });
-    ['comenzi', 'incarcari', 'kpi', 'adrese', 'admin'].forEach(function (x) { $('pag-' + x).classList.toggle('ascuns', x !== t); });
+    ['comenzi', 'incarcari', 'kpi', 'adrese', 'reclamatii', 'admin'].forEach(function (x) { $('pag-' + x).classList.toggle('ascuns', x !== t); });
     if (t === 'comenzi') { redeseneaza(); mergiLaFinal(); }
     else if (t === 'incarcari') deseneazaIncarcari();
     else if (t === 'kpi') deseneazaKpi();
     else if (t === 'adrese') deseneazaAdrese();
+    else if (t === 'reclamatii') deseneazaReclamatii();
     else if (t === 'admin') deseneazaAdmin();
   }
   $('taburi').addEventListener('click', function (e) { var b = e.target.closest('.tab'); if (b) arataTab(b.dataset.tab); });
@@ -2691,7 +2694,14 @@
     });
   }
   function htmlBorderou(x) {
-    var l = x.toate.slice().sort(function (a, b) { return (a.extra ? 1 : 0) - (b.extra ? 1 : 0) || (a.n || 0) - (b.n || 0); }).concat(x.retururi || []);
+    /* liniile sunt asezate dupa destinatar (fara diferenta de litere mari/mici, diacritice sau semne: „CASH & CARRY” = „CASH&CARRY”), apoi oras, client, numar; retururile raman la sfarsit */
+    function chTxt(v) { return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); }
+    function chDest(o) { return chTxt(o.de).replace(/[^A-Z0-9]+/g, '') || '\uffff'; }
+    var l = x.toate.slice().sort(function (a, b) {
+      var da = chDest(a), db = chDest(b);
+      return (da < db ? -1 : da > db ? 1 : 0) || chTxt(a.or).localeCompare(chTxt(b.or)) || chTxt(a.cl).localeCompare(chTxt(b.cl)) || (a.n || 0) - (b.n || 0);
+    }).concat(x.retururi || []);
+    var cuSofer = l.filter(function (o) { return o.so; })[0];
     var nrRetur = (x.retururi || []).length;
     function gata(o) { return o.extra || o.st === ST.TER || o.st === ST.SELF || o.inc === 'DA'; }
     function val(o, k) {
@@ -2710,7 +2720,7 @@
     }
     var reg = l.filter(function (o) { return !o.extra; }), areF = reg.some(function (o) { return SC.esteNum(o.fpp); }), areP = reg.some(function (o) { return SC.esteNum(o.pk); });
     var h = '<h1>Borderou de încărcare</h1><div>Nr AUTO: <b>' + esc(x.na) + '</b>' + (x.nt ? ' · Nr transport: <b>' + esc(x.nt) + '</b>' : '') + (x.data ? ' · Data: <b>' + esc(SC.fmtDataLunga(x.data)) + '</b>' : '') +
-      (l[0] && l[0].so ? ' · Șofer: ' + esc(l[0].so) : '') + '<!--inceput--> · Tipărit: ' + esc(stampila()) + '</div><table><tr>' +
+      (cuSofer ? ' · Șofer: ' + esc(cuSofer.so) : '') + '<!--inceput--> · Tipărit: ' + esc(stampila()) + '</div><table><tr>' +
       cols.map(function (c) { return '<th' + (NUMERICE[c[0]] ? ' class="nr"' : '') + '>' + c[1] + '</th>'; }).join('') + '</tr>';
     l.forEach(function (o) {
       h += '<tr>' + cols.map(function (c) {
@@ -3672,6 +3682,146 @@
   }
   $('btnAdresaNoua').onclick = function () { formAdresa(null); };
   $('adrLista').addEventListener('click', function (e) { var r = e.target.closest('tr.clic'); if (r) formAdresa(adreseAfisate[+r.dataset.i]); });
+
+  /* ---------- Reclamatii din livrari (deocamdata doar Administratorul) ---------- */
+  var recl = { an: 0, doc: null, citit: false, afisate: [], filtrate: [] };
+  function reclAni() {
+    var acum = new Date().getFullYear(), l = [];
+    for (var a = acum; a >= L.RECL_AN_START; a--) l.push(a);
+    return l.length ? l : [acum];
+  }
+  function reclIncarca() {
+    recl.citit = false; $('reclLista').innerHTML = '<div class="mic">Se citesc reclamațiile…</div>'; $('reclNumar').textContent = '';
+    var an = recl.an;
+    return L.reclCiteste(an).then(function (d) { if (an !== recl.an) return; recl.doc = d; recl.citit = true; reclArata(); }, function (e) { $('reclLista').innerHTML = ''; arataEroare(e); });
+  }
+  function deseneazaReclamatii() {
+    if (!eAdmin()) return;
+    var ani = reclAni();
+    if (!recl.an) recl.an = ani[0];
+    $('reclAn').innerHTML = ani.map(function (a) { return '<option' + (a === recl.an ? ' selected' : '') + '>' + a + '</option>'; }).join('');
+    reclIncarca();   /* la fiecare deschidere a meniului lista se citeste din nou (o singura citire) */
+  }
+  function reclArata() {
+    var toate = L.reclLista(recl.doc), cl = $('reclClient').value, fs = $('reclStatus').value, cuv = SC.normText($('reclCauta').value).split(' ').filter(Boolean);
+    var clienti = SC.config.clienti.slice();
+    toate.forEach(function (r) { if (r.cl && clienti.indexOf(r.cl) < 0) clienti.push(r.cl); });
+    $('reclClient').innerHTML = '<option value="">Toți clienții</option>' + clienti.map(function (x) { return '<option' + (x === cl ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('');
+    var l = toate.filter(function (r) {
+      if (cl && r.cl !== cl) return false;
+      if (fs && L.reclStatus(r) !== fs) return false;
+      if (!cuv.length) return true;
+      var h = SC.normText([r.n, r.av, L.reclCheie(r.av), r.cl, r.de, r.mo, r.u, SC.fmtDataLunga(r.dp)].join(' '));
+      return cuv.every(function (c) { return h.indexOf(c) >= 0; });
+    });
+    recl.filtrate = l; recl.afisate = l.slice(0, 500);
+    var nDesc = toate.filter(function (r) { return L.reclStatus(r) === 'Deschisa'; }).length;
+    $('reclNumar').textContent = (l.length === 1 ? '1 reclamație' : l.length + ' reclamații') + (l.length !== toate.length ? ' din ' + toate.length : '') + ' · ' + (nDesc === 1 ? '1 deschisă' : nDesc + ' deschise') + ' în ' + recl.an + (l.length > 500 ? ' (afișate primele 500 — restrânge căutarea)' : '');
+    $('reclLista').innerHTML = toate.length ? '<table class="simplu"><tr><th class="nr">Nr crt</th><th>Data primire</th><th>Client</th><th>Denumire client</th><th>Nr aviz</th><th>Data livrare</th><th>Motiv reclamație</th><th class="nr">Nr baxuri</th><th>Status</th><th>Completat de</th></tr>' +
+      recl.afisate.map(function (r, i) {
+        var inchisa = L.reclStatus(r) === 'Inchisa';
+        return '<tr class="clic" data-i="' + i + '"><td class="nr">' + r.n + '</td><td>' + esc(SC.fmtDataLunga(r.dp)) + '</td><td>' + esc(r.cl || '') + '</td><td>' + esc(r.de || '') + '</td><td>' + esc(r.av) + '</td><td>' + esc(SC.fmtDataLunga(r.dl)) +
+          '</td><td>' + esc(r.mo || '') + '</td><td class="nr">' + (SC.esteNum(r.bx) ? SC.fmtNum(r.bx, 'int') : '') + '</td><td>' + (inchisa ? '<span title="Închisă ' + esc(tmsMoment(r.it)) + ' de ' + esc(r.iu || '?') + '">Închisă</span>' : '<b style="color:#b45309">Deschisă</b>') + '</td><td>' + esc(r.u || '') + '</td></tr>';
+      }).join('') + '</table>' : '<div class="mic">Nicio reclamație înregistrată în ' + recl.an + '. Apasă „+ Reclamație nouă”.</div>';
+  }
+  function formReclamatie(r) {
+    var nou = !r; r = r || { dp: SC.azi() };
+    var clienti = SC.config.clienti.concat(r.cl && SC.config.clienti.indexOf(r.cl) < 0 ? [r.cl] : []);
+    var motive = L.RECL_MOTIVE.slice();
+    L.reclLista(recl.doc).forEach(function (x) { if (x.mo && motive.indexOf(x.mo) < 0) motive.push(x.mo); });
+    var html = '<div class="grila">' +
+      '<label class="camp"><span>Nr aviz</span><input type="text" data-r="av" value="' + esc(r.av || '') + '" autocomplete="off"></label>' +
+      '<label class="camp"><span>Data primire reclamație</span><input type="date" data-r="dp" value="' + esc(r.dp || '') + '"></label>' +
+      '<label class="camp lat2"><span>Motiv reclamație</span><input type="text" data-r="mo" list="reclMotive" value="' + esc(r.mo || '') + '" autocomplete="off"><datalist id="reclMotive">' + motive.map(function (m) { return '<option value="' + esc(m) + '">'; }).join('') + '</datalist></label>' +
+      '<label class="camp"><span>Nr baxuri reclamate</span><input type="number" data-r="bx" min="0" step="1" value="' + (SC.esteNum(r.bx) ? r.bx : '') + '"></label>' +
+      '<label class="camp"><span>Status</span><select data-r="s"><option value="Deschisa">Deschisă</option><option value="Inchisa"' + (L.reclStatus(r) === 'Inchisa' ? ' selected' : '') + '>Închisă</option></select></label>' +
+      '</div>' + (r.s === 'Inchisa' && r.it ? '<div class="mic" style="margin-top:6px">Închisă ' + esc(tmsMoment(r.it)) + ' de ' + esc(r.iu || '?') + '.</div>' : '') + '<div class="tms-rez" id="reclGasit" role="status" style="margin:12px 0"></div>' +
+      '<div class="mic" style="margin-bottom:6px">Din comandă — se completează singure după numărul de aviz; le poți corecta de mână:</div><div class="grila">' +
+      '<label class="camp"><span>Client</span><select data-r="cl"><option value=""></option>' + clienti.map(function (x) { return '<option' + (x === r.cl ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="camp lat2"><span>Denumire client (destinatar)</span><input type="text" data-r="de" value="' + esc(r.de || '') + '"></label>' +
+      '<label class="camp"><span>Data livrare marfă</span><input type="date" data-r="dl" value="' + esc(String(r.dl || '').slice(0, 10)) + '"></label></div>';
+    var nrc = r.nrc || 0, gasite = [];
+    function el(rad, k) { return rad.querySelector('[data-r="' + k + '"]'); }
+    function pune(rad, o) {
+      nrc = o.n;
+      var s = el(rad, 'cl');
+      if (o.cl && !Array.prototype.some.call(s.options, function (x) { return x.value === o.cl; })) s.insertAdjacentHTML('beforeend', '<option>' + esc(o.cl) + '</option>');
+      s.value = o.cl || ''; el(rad, 'de').value = o.de || ''; el(rad, 'dl').value = String(o.dl || '').slice(0, 10);
+    }
+    function descr(o) { return 'Nr Crt ' + o.n + ' · ' + (o.cl || '?') + ' · ' + (o.de || '?') + (o.dl ? ' · livrare ' + SC.fmtDataLunga(o.dl) : '') + ' · ' + (o.st || ''); }
+    function cauta(rad, completeaza) {
+      var av = el(rad, 'av').value.trim(), cutie = rad.querySelector('#reclGasit'), k = L.reclCheie(av);
+      gasite = L.reclComenzi(av);
+      var altele = k ? L.reclLista(recl.doc).filter(function (x) { return x.n !== r.n && L.reclCheie(x.av) === k; }) : [];
+      var avert = altele.length ? '<div style="margin-top:6px"><b>Atenție:</b> pentru acest aviz ' + (altele.length === 1 ? 'mai există o reclamație' : 'mai există ' + altele.length + ' reclamații') + ' în ' + recl.an + ': ' +
+        altele.map(function (x) { return 'nr. ' + x.n + ' din ' + SC.fmtDataLunga(x.dp) + ' (' + esc(x.mo || '') + ')'; }).join('; ') + '.</div>' : '';
+      if (!av) { cutie.innerHTML = 'Scrie numărul de aviz și caut comanda.'; return; }
+      if (!gasite.length) { if (completeaza) nrc = 0; cutie.innerHTML = 'Nu am găsit avizul <b>' + esc(av) + '</b> printre comenzile încărcate în aplicație. Verifică numărul sau completează de mână clientul, destinatarul și data livrării.' + avert; return; }
+      if (completeaza) pune(rad, gasite[0]);
+      cutie.innerHTML = gasite.length === 1 ? 'Comanda găsită: <b>' + esc(descr(gasite[0])) + '</b>' + avert :
+        '<b>' + gasite.length + ' comenzi</b> au acest număr — alege-o pe cea reclamată: <select id="reclAlege">' + gasite.map(function (o, i) { return '<option value="' + i + '"' + (o.n === nrc ? ' selected' : '') + '>' + esc(descr(o)) + '</option>'; }).join('') + '</select>' + avert;
+      var a = cutie.querySelector('#reclAlege'); if (a) a.onchange = function () { pune(rad, gasite[+a.value]); };
+    }
+    function citeste(rad) {
+      var x = { n: r.n, an: r.an, nrc: nrc };
+      ['av', 'dp', 'mo', 'cl', 'de', 'dl', 's'].forEach(function (k) { x[k] = el(rad, k).value.trim(); });
+      var b = el(rad, 'bx').value.trim(); x.bx = b === '' ? '' : +b;
+      /* avizul se pastreaza scris ca in comanda gasita („av 71350” -> „AV000071350”) */
+      var o = L.reclComenzi(x.av).filter(function (c) { return c.n === nrc; })[0];
+      if (o) x.av = String(o.nc); else x.nrc = 0;
+      return x;
+    }
+    function dupa(rez, mesaj) { recl.doc = rez.doc; reclArata(); toast(mesaj, 'bun'); if (L.reclLista(rez.doc).length > L.RECL_PRAG) toast('Atenție: sunt peste ' + L.RECL_PRAG + ' reclamații în ' + recl.an + ' — lista se apropie de mărimea maximă a unui document din baza de date. Anunță administratorul aplicației.', 'rau'); }
+    var butoane = [{ t: 'Închide', v: null }];
+    if (!nou) butoane.push({
+      t: 'Șterge', cls: 'rosu', fn: function () {
+        return confirma('Ștergi reclamația nr. ' + r.n + ' (aviz ' + r.av + ')? Ștergerea rămâne în jurnal, dar reclamația nu mai poate fi adusă înapoi.').then(function (ok) {
+          return ok ? L.reclSalveaza({ n: r.n, an: r.an }, true).then(function (rez) { dupa(rez, 'Reclamația nr. ' + r.n + ' a fost ștearsă.'); }) : false;
+        });
+      }
+    });
+    butoane.push({
+      t: 'Salvează', cls: 'pri', fn: function (rad) {
+        if (!eAdmin()) return false;
+        var x = citeste(rad);
+        if (!x.av) { toast('Completează numărul de aviz.', 'rau'); return false; }
+        if (!x.dp) { toast('Completează data primirii reclamației.', 'rau'); return false; }
+        if (x.dp > SC.azi()) { toast('Data primirii reclamației nu poate fi în viitor.', 'rau'); return false; }
+        if (!x.mo) { toast('Completează motivul reclamației.', 'rau'); return false; }
+        if (x.bx !== '' && (!isFinite(x.bx) || x.bx < 0)) { toast('Numărul de baxuri trebuie să fie un număr pozitiv.', 'rau'); return false; }
+        return L.reclSalveaza(x).then(function (rez) { dupa(rez, nou ? 'Reclamația a fost înregistrată cu nr. ' + rez.r.n + '.' : 'Reclamația nr. ' + rez.r.n + ' a fost salvată.'); });
+      }
+    });
+    modal({
+      titlu: nou ? 'Reclamație nouă' : 'Reclamația nr. ' + r.n, html: html, lat: true, butoane: butoane,
+      laDeschidere: function (rad) {
+        var av = el(rad, 'av'), ceas;
+        av.addEventListener('input', function () { clearTimeout(ceas); ceas = setTimeout(function () { cauta(rad, true); }, 300); });
+        av.addEventListener('change', function () { clearTimeout(ceas); cauta(rad, true); });
+        cauta(rad, false);
+      }
+    });
+  }
+  $('btnReclNoua').onclick = function () {
+    if (!eAdmin()) return;
+    /* numarul nou se da in anul curent: daca e deschis alt an, trec pe cel curent */
+    var acum = new Date().getFullYear();
+    if (recl.an !== acum || !recl.citit) { recl.an = acum; $('reclAn').value = String(acum); reclIncarca().then(function () { if (recl.citit) formReclamatie(null); }); }
+    else formReclamatie(null);
+  };
+  $('reclLista').addEventListener('click', function (e) { var x = e.target.closest('tr.clic'); if (x && eAdmin()) formReclamatie(recl.afisate[+x.dataset.i]); });
+  $('reclCauta').addEventListener('input', function () { if (recl.citit) reclArata(); });
+  $('reclClient').onchange = function () { if (recl.citit) reclArata(); };
+  $('reclStatus').onchange = function () { if (recl.citit) reclArata(); };
+  $('reclAn').onchange = function () { recl.an = +$('reclAn').value; reclIncarca(); };
+  $('btnReclReincarca').onclick = function () { reclIncarca(); };
+  $('btnReclExport').onclick = function () {
+    if (!recl.citit) return;
+    var l = recl.filtrate;   /* ce se vede in lista, cu filtrele puse */
+    if (!l.length) { toast('Nu există nicio reclamație de exportat.'); return; }
+    XLSX.writeFile(L.reclExcel(l), 'Reclamatii ' + recl.an + ' ' + SC.azi() + '.xlsx');
+    toast((l.length === 1 ? '1 reclamație exportată.' : l.length + ' reclamații exportate.'), 'bun');
+  };
 
   /* ================= ADMINISTRARE ================= */
   function candidatiArhivare(zile) {

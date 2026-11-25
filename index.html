@@ -391,6 +391,7 @@
       <button class="tab" data-tab="incarcari">Încărcări</button>
       <button class="tab" data-tab="kpi">KPI's</button>
       <button class="tab" data-tab="adrese">Adrese</button>
+      <button class="tab ascuns" data-tab="reclamatii" id="tabRecl">Reclamații</button>
       <button class="tab" data-tab="admin" id="tabAdmin">Administrare</button>
     </nav>
     <div class="dreapta">
@@ -522,6 +523,26 @@
       <div class="card derulare-x"><div id="adrLista"></div></div>
     </section>
 
+    <!-- RECLAMATII (deocamdata doar Administratorul) -->
+    <section class="pagina derulabila ascuns" id="pag-reclamatii">
+      <div class="card">
+        <h2>Reclamații din livrări</h2>
+        <p>Se completează numărul de aviz, data primirii, motivul și numărul de baxuri; clientul, destinatarul și data livrării se iau din comandă.</p>
+        <div class="rand-form">
+          <button class="btn pri" id="btnReclNoua">+ Reclamație nouă</button>
+          <input type="search" id="reclCauta" placeholder="Caută aviz, client, destinatar, motiv…" aria-label="Caută reclamație">
+          <select id="reclClient" aria-label="Client"><option value="">Toți clienții</option></select>
+          <select id="reclStatus" aria-label="Status"><option value="">Toate statusurile</option><option>Deschisa</option><option>Inchisa</option></select>
+          <select id="reclAn" aria-label="Anul"></select>
+          <span class="mic" id="reclNumar"></span>
+          <span style="flex:1"></span>
+          <button class="btn" id="btnReclReincarca" title="Citește din nou lista din baza de date">Reîncarcă</button>
+          <button class="btn" id="btnReclExport">Export (Excel)</button>
+        </div>
+      </div>
+      <div class="card derulare-x"><div id="reclLista"></div></div>
+    </section>
+
     <!-- ADMIN -->
     <section class="pagina derulabila ascuns" id="pag-admin"></section>
   </main>
@@ -532,12 +553,12 @@
 <div id="cmrPrint"></div>
 <input type="file" id="fisier" class="ascuns" accept=".xlsx,.xlsm,.xls">
 
-<script src="config.js?v=2.58"></script>
-<script src="js/xlsx.full.min.js?v=2.58"></script>
-<script src="js/util.js?v=2.58"></script>
-<script src="js/store.js?v=2.58"></script>
-<script src="js/logic.js?v=2.58"></script>
-<script src="js/cmr-sablon.js?v=2.58"></script>
-<script src="js/ui.js?v=2.58"></script>
+<script src="config.js?v=2.61"></script>
+<script src="js/xlsx.full.min.js?v=2.61"></script>
+<script src="js/util.js?v=2.61"></script>
+<script src="js/store.js?v=2.61"></script>
+<script src="js/logic.js?v=2.61"></script>
+<script src="js/cmr-sablon.js?v=2.61"></script>
+<script src="js/ui.js?v=2.61"></script>
 </body>
 </html>

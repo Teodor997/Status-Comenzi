@@ -497,6 +497,92 @@
       });
     });
   };
+  /* ---------- Reclamatii din livrari ----------
+     Un document pe an, meta/recl_AAAA: { n: ultimul numar dat, r: { numar: reclamatie } }.
+     Reclamatia: n (Nr crt), an, dp (data primirii), av (nr aviz, cum a fost scris), cl, de (denumire client), dl (data livrarii),
+     mo (motiv), bx (baxuri), nrc (Nr Crt al comenzii gasite), u/ts (cine si cand a inregistrat), mu/mt (ultima modificare). */
+  L.RECL_AN_START = 2026;
+  L.RECL_MOTIVE = ['Marfa lipsa la livrare', 'Marfa inversata', 'Marfa deteriorata', 'Marfa in plus', 'Retur la cererea clientului'];
+  L.RECL_STATUSURI = ['Deschisa', 'Inchisa'];
+  /* statusul unei reclamatii: s = 'Inchisa' (cu it/iu = cand si cine a inchis-o); altfel este deschisa */
+  L.reclStatus = function (r) { return r && r.s === 'Inchisa' ? 'Inchisa' : 'Deschisa'; };
+  L.RECL_PRAG = 3000;   /* peste atatea reclamatii intr-un an documentul se apropie de limita de 1 MB a unui document Firestore */
+  L.reclDoc = function (an) { return 'recl_' + an; };
+  /* „AV 71350”, „av000071350” si „AV000071350” sunt acelasi aviz: fara spatii/semne si fara zerourile dintre litere si cifre */
+  L.reclCheie = function (v) {
+    var s = String(v == null ? '' : v).toUpperCase().replace(/[^A-Z0-9]+/g, ''), m = /^([A-Z]*)0*(\d+)$/.exec(s);
+    return m ? m[1] + m[2] : s;
+  };
+  /* comenzile incarcate care au acest numar; cele mai noi primele */
+  L.reclComenzi = function (aviz) {
+    var k = L.reclCheie(aviz);
+    if (!k) return [];
+    return SC.comenzi.filter(function (o) { return o.nc != null && o.nc !== '' && L.reclCheie(o.nc) === k; }).sort(function (a, b) { return b.n - a.n; });
+  };
+  L.reclLista = function (doc) {
+    var r = (doc && doc.r) || {};
+    return Object.keys(r).map(function (k) { return r[k]; }).sort(function (a, b) { return b.n - a.n; });
+  };
+  L.reclCiteste = function (an) { return SC.store.citesteDoc('meta', L.reclDoc(an)); };
+  /* salveaza (noua sau modificata) ori sterge o reclamatie; intoarce { doc, r } cu documentul anului dupa scriere */
+  L.reclSalveaza = function (date, sterge) {
+    var nou = !date.n, an = nou ? new Date().getFullYear() : date.an, cine = SC.store.user ? SC.store.user.nume : '?';
+    return SC.store.tx(function (t) {
+      return t.get('meta', L.reclDoc(an)).then(function (d) {
+        /* primul numar dintr-un an nou continua numaratoarea anului trecut */
+        if (d || !nou) return d;
+        return t.get('meta', L.reclDoc(an - 1)).then(function (v) { return { n: v && v.n ? v.n : 0, r: {} }; });
+      }).then(function (d) {
+        d = d || { n: 0, r: {} }; d.r = d.r || {};
+        var r;
+        if (nou) {
+          d.n = (d.n || 0) + 1;
+          r = { n: d.n, an: an, u: cine, ts: Date.now() };
+        } else {
+          r = d.r[date.n];
+          if (!r) throw eroare('Reclamația nr. ' + date.n + ' nu mai există (a fost ștearsă între timp). Apasă „Reîncarcă”.');
+          if (sterge) {
+            delete d.r[date.n];
+            t.set('meta', L.reclDoc(an), d);
+            t.log('Reclamații: ștearsă nr. ' + r.n + ' — aviz ' + r.av + ', ' + (r.cl || '?') + ' / ' + (r.de || '?') + ', ' + r.mo);
+            return { doc: d, r: null };
+          }
+          r = JSON.parse(JSON.stringify(r)); r.mu = cine; r.mt = Date.now();
+        }
+        var NUME = { dp: 'Data primire', av: 'Nr aviz', cl: 'Client', de: 'Denumire client', dl: 'Data livrare', mo: 'Motiv', bx: 'Baxuri' }, p = [];
+        Object.keys(NUME).forEach(function (k) {
+          var v = date[k] == null ? '' : date[k];
+          if (!nou && String(r[k] == null ? '' : r[k]) !== String(v)) p.push(NUME[k] + ': ' + (r[k] == null || r[k] === '' ? '(gol)' : r[k]) + ' → ' + (v === '' ? '(gol)' : v));
+          if (v === '') delete r[k]; else r[k] = v;
+        });
+        if (date.nrc) r.nrc = date.nrc; else delete r.nrc;
+        var sv = L.reclStatus(r), sn = date.s === 'Inchisa' ? 'Inchisa' : 'Deschisa';
+        if (sn !== sv || nou) {
+          if (!nou) p.push('Status: ' + sv + ' → ' + sn);
+          if (sn === 'Inchisa') { r.s = 'Inchisa'; r.it = Date.now(); r.iu = cine; } else { delete r.s; delete r.it; delete r.iu; }
+        }
+        d.r[r.n] = r;
+        t.set('meta', L.reclDoc(an), d);
+        t.log('Reclamații: ' + (nou ? 'înregistrată nr. ' + r.n + ' — aviz ' + r.av + ', ' + (r.cl || '?') + ' / ' + (r.de || '?') + ', ' + r.mo + (r.bx != null ? ', ' + r.bx + ' baxuri' : '') + (r.s ? ', închisă' : '') : 'modificată nr. ' + r.n + (p.length ? ' — ' + p.join('; ') : '')));
+        return { doc: d, r: r };
+      });
+    });
+  };
+  L.RECL_ANTET = ['Nr crt', 'Data primire reclamatie', 'Client', 'Denumire client', 'Nr aviz', 'Data livrare marfa', 'Motiv reclamatie', 'Nr baxuri reclamate', 'Status', 'Completat de'];
+  L.reclExcel = function (lista) {
+    var aoa = [L.RECL_ANTET.slice()], l = lista.slice().sort(function (a, b) { return a.n - b.n; });
+    function zi(v) { return /^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? serialZi(String(v)) : null; }
+    l.forEach(function (r) { aoa.push([r.n, zi(r.dp), r.cl || null, r.de || null, r.av != null ? String(r.av) : null, zi(r.dl), r.mo || null, SC.esteNum(r.bx) ? r.bx : null, L.reclStatus(r), r.u || null]); });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    for (var i = 1; i < aoa.length; i++) {
+      [1, 5].forEach(function (c) { var x = ws[XLSX.utils.encode_cell({ r: i, c: c })]; if (x && x.t === 'n') x.z = FMT_REGISTRU.date; });
+      var a = ws[XLSX.utils.encode_cell({ r: i, c: 4 })]; if (a) { a.t = 's'; a.z = '@'; }
+    }
+    ws['!cols'] = [{ wch: 7 }, { wch: 13 }, { wch: 12 }, { wch: 40 }, { wch: 16 }, { wch: 13 }, { wch: 30 }, { wch: 10 }, { wch: 10 }, { wch: 16 }];
+    if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
+    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Reclamatii');
+    return wb;
+  };
   L.adreseInDocumente = function (randuri) {
     var docs = [];
     for (var i = 0; i < randuri.length; i += MARIME_ADRESE) {
