@@ -9,6 +9,13 @@ service cloud.firestore {
     function poateScrie() { return activ() && get(caleProfil()).data.rol in ['admin', 'operator']; }
     // Incarcari si Transport modifica doar comenzi existente (ce camp anume: limiteaza aplicatia)
     function atingeComenzi() { return activ() && get(caleProfil()).data.rol in ['admin', 'operator', 'incarcari', 'transport']; }
+    // reclamatiile din livrari: le inregistreaza si le modifica doar rolul Receptii (si Administratorul)
+    function poateReclama() { return activ() && get(caleProfil()).data.rol in ['admin', 'receptii']; }
+    function scrieJurnal() { return activ() && get(caleProfil()).data.rol in ['admin', 'operator', 'incarcari', 'transport', 'receptii']; }
+    // meta/recl_AAAA (reclamatiile unui an) si meta/reclpv_AAAA_K (articolele pentru PV)
+    function docRecl(doc) { return doc.matches('recl(pv)?_.*'); }
+    // meta/pv (antet, sigla, stampila) si meta/articole (nomenclatorul pentru PV): doar Administratorul
+    function docPv(doc) { return doc == 'pv' || doc == 'articole'; }
     // adevarat doar pana la crearea primului administrator
     function neconfigurat() { return !exists(/databases/$(database)/documents/meta/setup); }
 
@@ -29,9 +36,13 @@ service cloud.firestore {
       allow read: if activ();
       allow create: if (doc == 'setup' && logat() && neconfigurat())
                     || (doc == 'config' && eAdmin())
-                    || (doc != 'setup' && doc != 'config' && poateScrie());
+                    || (docRecl(doc) && poateReclama())
+                    || (docPv(doc) && eAdmin())
+                    || (doc != 'setup' && doc != 'config' && !docRecl(doc) && !docPv(doc) && poateScrie());
       allow update: if (doc == 'config' && eAdmin())
-                    || (doc != 'setup' && doc != 'config' && poateScrie());
+                    || (docRecl(doc) && poateReclama())
+                    || (docPv(doc) && eAdmin())
+                    || (doc != 'setup' && doc != 'config' && !docRecl(doc) && !docPv(doc) && poateScrie());
       allow delete: if false;
     }
 
@@ -74,7 +85,7 @@ service cloud.firestore {
     // jurnalul de modificari (un document pe ora): scriu toti cei care modifica, citeste doar administratorul
     match /jurnal/{ora} {
       allow read: if eAdmin();
-      allow create, update: if atingeComenzi();
+      allow create, update: if scrieJurnal();
       allow delete: if false;
     }
   }

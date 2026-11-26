@@ -82,6 +82,8 @@
   function citesteFisier(f) { return f.arrayBuffer().then(function (b) { return L.citesteExcel(new Uint8Array(b)); }); }
   function poate() { var u = SC.store.user; return !!u && (u.rol === 'admin' || u.rol === 'operator'); }
   function eAdmin() { var u = SC.store.user; return !!u && u.rol === 'admin'; }
+  /* reclamatiile le inregistreaza si le modifica rolul Receptii (si Administratorul); ceilalti doar le vad */
+  function poateRecl() { return L.reclPoate(rol()); }
   function rol() { return SC.store.user ? SC.store.user.rol : ''; }
   /* Administratorul poate vedea aplicatia ca alt rol: user.rol devine rolul ales, iar rolReal ramane 'admin'.
      Drepturile din baza de date raman cele de administrator; se schimba doar ce arata si ce permite ecranul. */
@@ -197,9 +199,9 @@
     $('bandaRol').innerHTML = caAltul ? '<span>Vezi aplicația ca <b>' + esc(SC.ROLURI[u.rol]) + '</b>. Ecranul arată și permite exact ce are acest rol. Modificările pe care le faci sunt reale și se salvează pe numele tău.</span>' +
       '<button type="button" class="btn mic" id="veziCaInapoi">Înapoi la Administrator</button>' : '';
     $('tabAdmin').classList.toggle('ascuns', !eAdmin());
-    $('tabRecl').classList.toggle('ascuns', !eAdmin());
-    var doarInc = u.rol === 'incarcari';
-    /* Incarcari: vede si lista de comenzi, dar doar ca s-o citeasca (fara deschidere la click, fara modificari) */
+    $('tabRecl').classList.remove('ascuns');
+    /* Incarcari si Receptii: vad lista de comenzi doar ca s-o citeasca (fara deschidere la click, fara modificari) */
+    var doarInc = u.rol === 'incarcari' || u.rol === 'receptii';
     document.querySelector('.tab[data-tab=comenzi]').classList.remove('ascuns');
     $('tabel').classList.toggle('doarCitire', doarInc);
     document.querySelector('.tab[data-tab=adrese]').classList.toggle('ascuns', doarInc);
@@ -284,7 +286,6 @@
     $('adrClient').innerHTML = '<option value="">Toți clienții</option>' + opt; $('adrClient').value = v2;
   }
   function arataTab(t) {
-    if (t === 'reclamatii' && !eAdmin()) t = 'comenzi';
     stare.tab = t;
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) { b.classList.toggle('activ', b.dataset.tab === t); });
     ['comenzi', 'incarcari', 'kpi', 'adrese', 'reclamatii', 'admin'].forEach(function (x) { $('pag-' + x).classList.toggle('ascuns', x !== t); });
@@ -600,7 +601,7 @@
       return;
     }
     /* Incarcari: lista de comenzi este doar de citit - click-ul nu deschide si nu modifica nimic */
-    if (rol() === 'incarcari') return;
+    if (rol() === 'incarcari' || rol() === 'receptii') return;
     /* Transport: comanda nu se deschide; click pe Nr AUTO sau pe Nr transport deschide fereastra camionului */
     if (rol() === 'transport') {
       var cel = e.target.closest('[data-k=na],[data-k=nt]'), celDl = e.target.closest('[data-k=dl]');
@@ -3725,7 +3726,12 @@
     return L.reclCiteste(an).then(function (d) { if (an !== recl.an) return; recl.doc = d; recl.citit = true; reclArata(); }, function (e) { $('reclLista').innerHTML = ''; arataEroare(e); });
   }
   function deseneazaReclamatii() {
-    if (!eAdmin()) return;
+    var scrie = poateRecl(), adm = rol() === 'admin';
+    $('btnReclNoua').classList.toggle('ascuns', !scrie);
+    $('btnReclListe').classList.toggle('ascuns', !adm);
+    $('btnReclPv').classList.toggle('ascuns', !adm);
+    $('reclNota').textContent = scrie ? 'Se completează numărul de aviz, data primirii, motivul și numărul de baxuri; clientul, destinatarul și data livrării se iau din comandă.' + (adm ? ' Motivele, modurile de finalizare și numele din liste se schimbă doar de aici, de la „Liste derulante…”.' : '') :
+      'Reclamațiile sunt înregistrate și modificate de Recepții. Aici le poți vedea, căuta și exporta; click pe un rând arată toate detaliile.';
     var ani = reclAni();
     if (!recl.an) recl.an = ani[0];
     $('reclAn').innerHTML = ani.map(function (a) { return '<option' + (a === recl.an ? ' selected' : '') + '>' + a + '</option>'; }).join('');
@@ -3751,12 +3757,14 @@
         var inchisa = L.reclStatus(r) === 'Inchisa';
         return '<tr class="clic" data-i="' + i + '"><td class="nr">' + r.n + '</td><td>' + esc(SC.fmtDataLunga(r.dp)) + '</td><td>' + esc(r.cl || '') + '</td><td>' + esc(r.de || '') + '</td><td>' + esc(r.av) + '</td><td>' + esc(SC.fmtDataLunga(r.dl)) +
           '</td><td>' + esc(r.mo || '') + '</td><td class="nr">' + (SC.esteNum(r.bx) ? SC.fmtNum(r.bx, 'int') : '') + '</td><td>' + (inchisa ? '<span title="Închisă ' + esc(tmsMoment(r.it)) + ' de ' + esc(r.iu || '?') + '">Închisă</span>' : '<b style="color:#b45309">Deschisă</b>') + '</td><td>' + esc(r.fi || '') + '</td><td>' + esc(r.ob || '') + '</td><td>' + esc(r.rs || '') + '</td><td>' + esc(r.ed || '') + '</td><td title="Înregistrată de ' + esc(r.u || '?') + '">' + esc(r.co || '') + '</td><td class="nr"' + (r.pvd ? ' title="PV din ' + esc(SC.fmtDataLunga(r.pvd)) + '">' + L.reclPvNumar(r) : '>') + '</td></tr>';
-      }).join('') + '</table>' : '<div class="mic">Nicio reclamație înregistrată în ' + recl.an + '. Apasă „+ Reclamație nouă”.</div>';
+      }).join('') + '</table>' : '<div class="mic">Nicio reclamație înregistrată în ' + recl.an + '.' + (poateRecl() ? ' Apasă „+ Reclamație nouă”.' : '') + '</div>';
   }
   function formReclamatie(r, liniiCitite) {
     /* articolele unei reclamatii stau in alt document: le citesc inainte de a deschide fereastra */
     if (r && r.nl && !liniiCitite) return L.reclLiniiCiteste(r).then(function (li) { formReclamatie(r, li); }, arataEroare);
     var nou = !r; r = r || { dp: SC.azi() };
+    var ro = !poateRecl();   /* doar vizualizare pentru cei care nu inregistreaza reclamatii */
+    if (ro && nou) return;
     var linii = (liniiCitite || []).map(function (x) { return { c: x.c || '', q: x.q == null ? '' : x.q, l: x.l || '', d: x.d || '' }; }), art = null;
     var clienti = SC.config.clienti.concat(r.cl && SC.config.clienti.indexOf(r.cl) < 0 ? [r.cl] : []);
     var liste = L.reclListe();
@@ -3829,7 +3837,8 @@
             '<td><input type="number" data-li="' + i + '" data-f="q" min="0" step="1" value="' + esc(x.q) + '"></td><td><input type="text" data-li="' + i + '" data-f="l" value="' + esc(x.l) + '" autocomplete="off"></td>' +
             '<td><button type="button" class="btn mic" data-lx="' + i + '" title="Scoate articolul" aria-label="Scoate articolul ' + (i + 1) + '">×</button></td></tr>';
         }).join('') + '</table>' : '';
-      rad.querySelector('#reclLinieNoua').disabled = linii.length >= L.RECL_PV_LINII;
+      rad.querySelector('#reclLinieNoua').disabled = ro || linii.length >= L.RECL_PV_LINII;
+      if (ro) Array.prototype.forEach.call(rad.querySelectorAll('#reclLinii input, #reclLinii button'), function (c) { c.disabled = true; });
       totalBax(rad);
     }
     function liniiBune() { return linii.filter(function (x) { return String(x.c).trim() || String(x.q).trim() || String(x.l).trim() || String(x.d).trim(); }); }
@@ -3926,24 +3935,25 @@
     }
     function dupa(rez, mesaj) { recl.doc = rez.doc; reclArata(); toast(mesaj, 'bun'); if (L.reclLista(rez.doc).length > L.RECL_PRAG) toast('Atenție: sunt peste ' + L.RECL_PRAG + ' reclamații în ' + recl.an + ' — lista se apropie de mărimea maximă a unui document din baza de date. Anunță administratorul aplicației.', 'rau'); }
     var butoane = [{ t: 'Închide', v: null }];
-    if (!nou) butoane.push({
+    /* stergerea ramane doar la Administrator */
+    if (!nou && !ro && rol() === 'admin') butoane.push({
       t: 'Șterge', cls: 'rosu', fn: function () {
         return confirma('Ștergi reclamația nr. ' + r.n + ' (aviz ' + r.av + ')? Ștergerea rămâne în jurnal, dar reclamația nu mai poate fi adusă înapoi.').then(function (ok) {
           return ok ? L.reclSalveaza({ n: r.n, an: r.an }, true).then(function (rez) { dupa(rez, 'Reclamația nr. ' + r.n + ' a fost ștearsă.'); }) : false;
         });
       }
     });
-    butoane.push({ t: 'Salvează', cls: 'pri', fn: function (rad) { if (!eAdmin()) return false; var x = verifica(rad, false); return x ? salveazaCu(x) : false; } });
+    if (!ro) butoane.push({ t: 'Salvează', cls: 'pri', fn: function (rad) { if (!poateRecl()) return false; var x = verifica(rad, false); return x ? salveazaCu(x) : false; } });
     /* PV-ul nu se tipareste singur: doar de la acest buton, care intai salveaza reclamatia */
-    butoane.push({
+    if (!ro) butoane.push({
       t: 'Salvează și tipărește PV', cls: 'pv-btn ascuns', fn: function (rad) {
-        if (!eAdmin()) return false;
+        if (!poateRecl()) return false;
         var x = verifica(rad, true);
         return x ? salveazaCu(x, function (rez) { return tiparestePv(rez.r, rez.li || []).catch(arataEroare); }) : false;
       }
     });
     modal({
-      titlu: nou ? 'Reclamație nouă' : 'Reclamația nr. ' + r.n, html: html, lat: true, butoane: butoane,
+      titlu: nou ? 'Reclamație nouă' : 'Reclamația nr. ' + r.n + (ro ? ' — doar vizualizare' : ''), html: html, lat: true, butoane: butoane,
       laDeschidere: function (rad) {
         var av = el(rad, 'av'), ceas;
         av.addEventListener('input', function () { clearTimeout(ceas); ceas = setTimeout(function () { cauta(rad, true); }, 300); });
@@ -3970,6 +3980,8 @@
         });
         rad.querySelector('#reclLinii').addEventListener('click', function (e) { var b = e.target.closest('[data-lx]'); if (b) { linii.splice(+b.dataset.lx, 1); liniiArata(rad); } });
         pvArata(rad);
+        /* doar vizualizare: nimic nu se poate schimba */
+        if (ro) Array.prototype.forEach.call(rad.querySelectorAll('input, select, textarea, button'), function (c) { c.disabled = true; });
       }
     });
   }
@@ -4070,13 +4082,13 @@
     });
   };
   $('btnReclNoua').onclick = function () {
-    if (!eAdmin()) return;
+    if (!poateRecl()) return;
     /* numarul nou se da in anul curent: daca e deschis alt an, trec pe cel curent */
     var acum = new Date().getFullYear();
     if (recl.an !== acum || !recl.citit) { recl.an = acum; $('reclAn').value = String(acum); reclIncarca().then(function () { if (recl.citit) formReclamatie(null); }); }
     else formReclamatie(null);
   };
-  $('reclLista').addEventListener('click', function (e) { var x = e.target.closest('tr.clic'); if (x && eAdmin()) formReclamatie(recl.afisate[+x.dataset.i]); });
+  $('reclLista').addEventListener('click', function (e) { var x = e.target.closest('tr.clic'); if (x) formReclamatie(recl.afisate[+x.dataset.i]); });
   $('reclCauta').addEventListener('input', function () { if (recl.citit) reclArata(); });
   $('reclClient').onchange = function () { if (recl.citit) reclArata(); };
   $('reclStatus').onchange = function () { if (recl.citit) reclArata(); };
@@ -4112,7 +4124,7 @@
       }).join('') + '</table></div>' +
       '<div class="rand-form" style="margin-top:10px"><label class="camp"><span>Nume</span><input type="text" id="uNume" maxlength="40"></label>' +
       '<label class="camp"><span>PIN (6 cifre)</span><input type="text" id="uPin" inputmode="numeric" maxlength="6" style="width:110px"></label>' +
-      '<label class="camp"><span>Rol</span><select id="uRol">' + ['operator', 'incarcari', 'transport', 'admin'].map(function (x) { return '<option value="' + x + '">' + SC.ROLURI[x] + '</option>'; }).join('') + '</select></label>' +
+      '<label class="camp"><span>Rol</span><select id="uRol">' + ['operator', 'incarcari', 'transport', 'receptii', 'admin'].map(function (x) { return '<option value="' + x + '">' + SC.ROLURI[x] + '</option>'; }).join('') + '</select></label>' +
       '<button class="btn pri" id="uAdauga">Adaugă utilizator</button></div></div>';
 
     h += '<div class="card"><h2>Clienți și reguli</h2><p>Lista de clienți din formulare și regula de greutate finală automată (greutate + paleți reali × kg/palet).</p>' +

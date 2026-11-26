@@ -591,7 +591,15 @@
   };
   L.reclCiteste = function (an) { return SC.store.citesteDoc('meta', L.reclDoc(an)); };
   /* salveaza (noua sau modificata) ori sterge o reclamatie; intoarce { doc, r } cu documentul anului dupa scriere */
+  /* cine inregistreaza / modifica reclamatii: rolul Receptii si Administratorul (la fel in firestore.rules) */
+  L.reclPoate = function (rol) { return rol === 'receptii' || rol === 'admin'; };
   L.reclSalveaza = function (date, sterge) {
+    return reclScrie(date, sterge).catch(function (e) {
+      if (e && (e.code === 'permission-denied' || /drepturi/.test(String(e.message)))) throw eroare('Baza de date nu a permis salvarea reclamației. Dacă ești pe rolul Recepții, regulile noi ale bazei de date (fișierul firestore.rules din această versiune) nu au fost încă publicate în Firebase.');
+      throw e;
+    });
+  };
+  function reclScrie(date, sterge) {
     var nou = !date.n, an = nou ? new Date().getFullYear() : date.an, cine = SC.store.user ? SC.store.user.nume : '?';
     return SC.store.tx(function (t) {
       return t.get('meta', L.reclDoc(an)).then(function (d) {
@@ -656,7 +664,7 @@
         });
       });
     });
-  };
+  }
   L.RECL_ANTET = ['Nr crt', 'Data primire reclamatie', 'Client', 'Denumire client', 'Nr aviz', 'Data livrare marfa', 'Motiv reclamatie', 'Nr baxuri reclamate', 'Status', 'Mod finalizare reclamatie', 'Observatii', 'Responsabil', 'Eroare depozit', 'Completat', 'Retur integral', 'Numar PV', 'Data PV', 'Inregistrat de'];
   /* numele din listele derulante se tin in configurare (meta/config), nu in codul aplicatiei */
   L.reclListe = function () {

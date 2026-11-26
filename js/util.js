@@ -3,10 +3,10 @@
   'use strict';
   var SC = window.SC = window.SC || {};
 
-  SC.VERSIUNE = '2.65';
+  SC.VERSIUNE = '2.66';
   SC.ST = { INI: 'Initiata', LUC: 'In lucru', TER: 'Terminata', ANU: 'Anulata', SELF: 'Self-Pick' };
   SC.STATUSURI = [SC.ST.INI, SC.ST.LUC, SC.ST.TER, SC.ST.SELF, SC.ST.ANU];
-  SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport' };
+  SC.ROLURI = { admin: 'Administrator', operator: 'Operator date', incarcari: 'Încărcări', transport: 'Transport', receptii: 'Recepții' };
   /* campurile care tin de confirmarea incarcarii (le completeaza doar Administrator / Incarcari) */
   SC.CAMPURI_INCARCARE = { inc: 1, di: 1, sc: 1, te: 1, se: 1 };
   SC.MARIME_GRUPA = 25;            // comenzi per document Firestore

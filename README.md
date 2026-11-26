@@ -68,7 +68,15 @@ ora în care s-a lucrat: o zi înseamnă cel mult câteva zeci de citiri, o lun�
 modifica adrese (Administrator, Operator date), cine poate doar modifica comenzi existente (Încărcări, Transport) și cine
 administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar confirmarea) este impusă de aplicație.
 
-## Reclamații (meniu nou, deocamdată doar pentru Administrator)
+## Reclamații
+
+- Meniul „Reclamații” îl văd toți utilizatorii. Reclamațiile le înregistrează și le modifică doar rolul **Recepții** (și
+  Administratorul); ceilalți le pot vedea, căuta și exporta, iar click pe un rând arată detaliile fără posibilitate de modificare.
+  Ștergerea unei reclamații, „Liste derulante…” și „Setări PV…” rămân doar la Administrator.
+- Rolul **Recepții** vede Comenzile și Încărcările doar ca să le citească (fără deschidere, fără modificări), ca rolul Încărcări
+  în lista de comenzi. Rolul se alege în Administrare, la utilizator.
+- **Regulile Firestore s-au schimbat în v2.66** (prima dată de la v2.17): fără publicarea fișierului `firestore.rules` în Firebase
+  (Firestore Database → Rules → se înlocuiește tot textul → Publish), un utilizator cu rolul Recepții nu poate salva reclamații.
 
 - Meniul „Reclamații” ține evidența reclamațiilor venite din livrări, pentru toți clienții. La „+ Reclamație nouă” se completează
   de mână numărul de aviz, data primirii, motivul și numărul de baxuri. Clientul, denumirea clientului (destinatarul) și data
