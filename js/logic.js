@@ -571,6 +571,20 @@
   };
   L.pvSetariCiteste = function () { return SC.store.citesteDoc('meta', 'pv').then(function (d) { return d || {}; }); };
   L.pvSetariSalveaza = function (s) { return SC.store.tx(function (t) { t.set('meta', 'pv', s); t.log('Reclamații: setările PV modificate (antet' + (s.logo ? ', siglă' : '') + (s.stampila ? ', ștampilă' : '') + ')'); return s; }); };
+  /* comenzile de pe un camion, cautate dupa Nr transport (TRA) sau Nr AUTO; cele mai noi primele.
+     „tra0715506”, „TRA 0715506” si „715506” gasesc TRA0715506; numarul auto se scrie intreg, cu sau fara spatii/liniute. */
+  L.reclComenziCamion = function (text) {
+    var k = String(text == null ? '' : text).toUpperCase().replace(/[^A-Z0-9]+/g, '');
+    if (k.length < 4) return [];
+    var cifre = /^\d+$/.test(k) ? k.replace(/^0+/, '') : '';
+    function ch(v) { return String(v == null ? '' : v).toUpperCase().replace(/[^A-Z0-9]+/g, ''); }
+    function zi(o) { return String(o.dtr || o.di || o.dl || '').slice(0, 10); }
+    return SC.comenzi.filter(function (o) {
+      if (o.nc == null || o.nc === '') return false;
+      var nt = ch(o.nt), na = ch(o.na);
+      return (nt && (nt === k || cifre && cifre.length >= 5 && nt.replace(/^[A-Z]+0*/, '') === cifre)) || (na && na === k);
+    }).sort(function (a, b) { return zi(a) < zi(b) ? 1 : zi(a) > zi(b) ? -1 : SC.normText(a.de) < SC.normText(b.de) ? -1 : SC.normText(a.de) > SC.normText(b.de) ? 1 : a.n - b.n; });
+  };
   L.reclLista = function (doc) {
     var r = (doc && doc.r) || {};
     return Object.keys(r).map(function (k) { return r[k]; }).sort(function (a, b) { return b.n - a.n; });

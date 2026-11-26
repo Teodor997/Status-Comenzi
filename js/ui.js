@@ -3776,7 +3776,7 @@
       rad.querySelector('#reclMoAdauga').innerHTML = '<option value="" disabled hidden selected>' + (motiveAlese.length ? '+ adaugă încă un motiv…' : 'alege motivul…') + '</option>' + rest.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('');
     }
     var html = '<div class="grila">' +
-      '<label class="camp"><span>Nr aviz</span><input type="text" data-r="av" value="' + esc(r.av || '') + '" autocomplete="off"></label>' +
+      '<label class="camp"><span>Nr aviz — sau nr. TRA / nr. auto</span><input type="text" data-r="av" value="' + esc(r.av || '') + '" autocomplete="off" placeholder="aviz, TRA sau nr. auto"></label>' +
       '<label class="camp"><span>Data primire reclamație</span><input type="date" data-r="dp" value="' + esc(r.dp || '') + '"></label>' +
       '<div class="camp lat2"><span>Motiv reclamație — unul sau mai multe</span><div class="recl-alese" id="reclMoAlese"></div><select id="reclMoAdauga" aria-label="Adaugă motiv"></select></div>' +
       '<label class="camp"><span>Nr baxuri reclamate</span><input type="number" data-r="bx" min="0" step="1" value="' + (SC.esteNum(r.bx) ? r.bx : '') + '"></label>' +
@@ -3857,8 +3857,21 @@
       var altele = k ? L.reclLista(recl.doc).filter(function (x) { return x.n !== r.n && L.reclCheie(x.av) === k; }) : [];
       var avert = altele.length ? '<div style="margin-top:6px"><b>Atenție:</b> pentru acest aviz ' + (altele.length === 1 ? 'mai există o reclamație' : 'mai există ' + altele.length + ' reclamații') + ' în ' + recl.an + ': ' +
         altele.map(function (x) { return 'nr. ' + x.n + ' din ' + SC.fmtDataLunga(x.dp) + ' (' + esc(x.mo || '') + ')'; }).join('; ') + '.</div>' : '';
-      if (!av) { cutie.innerHTML = 'Scrie numărul de aviz și caut comanda.'; return; }
-      if (!gasite.length) { if (completeaza) nrc = 0; cutie.innerHTML = 'Nu am găsit avizul <b>' + esc(av) + '</b> printre comenzile încărcate în aplicație. Verifică numărul sau completează de mână clientul, destinatarul și data livrării.' + avert; return; }
+      if (!av) { cutie.innerHTML = 'Scrie numărul de aviz și caut comanda. Dacă nu știi avizul, scrie numărul de transport (TRA) sau numărul auto și alegi comanda din lista camionului.'; return; }
+      /* nu e un aviz: poate e un TRA sau un numar auto — arat comenzile de pe camion si avizul se alege din lista */
+      var camion = gasite.length ? [] : L.reclComenziCamion(av);
+      if (camion.length) {
+        if (completeaza) nrc = 0;
+        var arat = camion.slice(0, 80), zile = {};
+        arat.forEach(function (o) { zile[String(o.dtr || o.di || o.dl || '').slice(0, 10)] = 1; });
+        cutie.innerHTML = '<b>' + esc(av) + '</b> este un număr de transport sau auto: ' + (camion.length === 1 ? 'o comandă' : camion.length + ' comenzi') + (Object.keys(zile).length > 1 ? ', din ' + Object.keys(zile).length + ' zile' : '') + (camion.length > arat.length ? ' (arăt cele mai noi ' + arat.length + ')' : '') +
+          '. Alege comanda reclamată: <select id="reclCamion" style="max-width:100%"><option value="" disabled hidden selected>alege comanda…</option>' + arat.map(function (o, i) {
+            return '<option value="' + i + '">' + esc('aviz ' + o.nc + ' · ' + (o.cl || '?') + ' · ' + (o.de || '?') + (o.dl ? ' · livrare ' + SC.fmtDataLunga(o.dl) : '') + ' · ' + [o.nt, o.na].filter(Boolean).join(' / ')) + '</option>';
+          }).join('') + '</select>';
+        cutie.querySelector('#reclCamion').onchange = function () { var o = arat[+this.value]; if (!o) return; el(rad, 'av').value = String(o.nc); pune(rad, o); cauta(rad, false); };
+        return;
+      }
+      if (!gasite.length) { if (completeaza) nrc = 0; cutie.innerHTML = 'Nu am găsit avizul <b>' + esc(av) + '</b> printre comenzile încărcate în aplicație (nici ca aviz, nici ca număr de transport sau auto). Verifică numărul sau completează de mână clientul, destinatarul și data livrării.' + avert; return; }
       if (completeaza) pune(rad, gasite[0]);
       cutie.innerHTML = gasite.length === 1 ? 'Comanda găsită: <b>' + esc(descr(gasite[0])) + '</b>' + avert :
         '<b>' + gasite.length + ' comenzi</b> au acest număr — alege-o pe cea reclamată: <select id="reclAlege">' + gasite.map(function (o, i) { return '<option value="' + i + '"' + (o.n === nrc ? ' selected' : '') + '>' + esc(descr(o)) + '</option>'; }).join('') + '</select>' + avert;
@@ -3884,6 +3897,7 @@
     function verifica(rad, pentruPv) {
       var x = citeste(rad);
       if (!x.av) { toast('Completează numărul de aviz.', 'rau'); return null; }
+      if (!L.reclComenzi(x.av).length && L.reclComenziCamion(x.av).length) { toast('„' + x.av + '” este un număr de transport sau auto, nu un aviz. Alege comanda din lista de sub câmp.', 'rau'); return null; }
       if (!x.dp) { toast('Completează data primirii reclamației.', 'rau'); return null; }
       if (x.dp > SC.azi()) { toast('Data primirii reclamației nu poate fi în viitor.', 'rau'); return null; }
       if (!x.mo) { toast('Alege cel puțin un motiv al reclamației.', 'rau'); return null; }

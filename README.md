@@ -93,6 +93,8 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - Articolele stau în documente separate (`meta/reclpv_AAAA_K`, câte 200 de reclamații), nomenclatorul în `meta/articole`,
   setările PV în `meta/pv`; regulile Firestore nu se schimbă.
 - Dacă data de livrare este după ziua curentă, fereastra avertizează și cere confirmare la salvare.
+- În câmpul de aviz se poate scrie și numărul de transport (TRA) sau numărul auto: apar comenzile de pe acel camion (cele mai
+  noi primele) și avizul se alege din listă.
 - Nr crt se dă automat și nu se refolosește după o ștergere. Dacă pentru același aviz mai există o reclamație, fereastra avertizează.
 - Lista se poate căuta, filtra pe client și exporta în Excel. Click pe un rând deschide reclamația pentru modificare sau ștergere;
   toate acestea rămân în jurnal.
