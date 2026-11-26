@@ -3711,17 +3711,17 @@
       if (cl && r.cl !== cl) return false;
       if (fs && L.reclStatus(r) !== fs) return false;
       if (!cuv.length) return true;
-      var h = SC.normText([r.n, r.av, L.reclCheie(r.av), r.cl, r.de, r.mo, r.ob, r.rs, r.co, r.u, SC.fmtDataLunga(r.dp)].join(' '));
+      var h = SC.normText([r.n, r.av, L.reclCheie(r.av), r.cl, r.de, r.mo, r.fi, r.ob, r.rs, r.co, r.u, SC.fmtDataLunga(r.dp)].join(' '));
       return cuv.every(function (c) { return h.indexOf(c) >= 0; });
     });
     recl.filtrate = l; recl.afisate = l.slice(0, 500);
     var nDesc = toate.filter(function (r) { return L.reclStatus(r) === 'Deschisa'; }).length;
     $('reclNumar').textContent = (l.length === 1 ? '1 reclamație' : l.length + ' reclamații') + (l.length !== toate.length ? ' din ' + toate.length : '') + ' · ' + (nDesc === 1 ? '1 deschisă' : nDesc + ' deschise') + ' în ' + recl.an + (l.length > 500 ? ' (afișate primele 500 — restrânge căutarea)' : '');
-    $('reclLista').innerHTML = toate.length ? '<table class="simplu"><tr><th class="nr">Nr crt</th><th>Data primire</th><th>Client</th><th>Denumire client</th><th>Nr aviz</th><th>Data livrare</th><th>Motiv reclamație</th><th class="nr">Nr baxuri</th><th>Status</th><th>Observații</th><th>Responsabil</th><th>Eroare depozit</th><th>Completat</th></tr>' +
+    $('reclLista').innerHTML = toate.length ? '<table class="simplu"><tr><th class="nr">Nr crt</th><th>Data primire</th><th>Client</th><th>Denumire client</th><th>Nr aviz</th><th>Data livrare</th><th>Motiv reclamație</th><th class="nr">Nr baxuri</th><th>Status</th><th>Finalizare</th><th>Observații</th><th>Responsabil</th><th>Eroare depozit</th><th>Completat</th></tr>' +
       recl.afisate.map(function (r, i) {
         var inchisa = L.reclStatus(r) === 'Inchisa';
         return '<tr class="clic" data-i="' + i + '"><td class="nr">' + r.n + '</td><td>' + esc(SC.fmtDataLunga(r.dp)) + '</td><td>' + esc(r.cl || '') + '</td><td>' + esc(r.de || '') + '</td><td>' + esc(r.av) + '</td><td>' + esc(SC.fmtDataLunga(r.dl)) +
-          '</td><td>' + esc(r.mo || '') + '</td><td class="nr">' + (SC.esteNum(r.bx) ? SC.fmtNum(r.bx, 'int') : '') + '</td><td>' + (inchisa ? '<span title="Închisă ' + esc(tmsMoment(r.it)) + ' de ' + esc(r.iu || '?') + '">Închisă</span>' : '<b style="color:#b45309">Deschisă</b>') + '</td><td>' + esc(r.ob || '') + '</td><td>' + esc(r.rs || '') + '</td><td>' + esc(r.ed || '') + '</td><td title="Înregistrată de ' + esc(r.u || '?') + '">' + esc(r.co || '') + '</td></tr>';
+          '</td><td>' + esc(r.mo || '') + '</td><td class="nr">' + (SC.esteNum(r.bx) ? SC.fmtNum(r.bx, 'int') : '') + '</td><td>' + (inchisa ? '<span title="Închisă ' + esc(tmsMoment(r.it)) + ' de ' + esc(r.iu || '?') + '">Închisă</span>' : '<b style="color:#b45309">Deschisă</b>') + '</td><td>' + esc(r.fi || '') + '</td><td>' + esc(r.ob || '') + '</td><td>' + esc(r.rs || '') + '</td><td>' + esc(r.ed || '') + '</td><td title="Înregistrată de ' + esc(r.u || '?') + '">' + esc(r.co || '') + '</td></tr>';
       }).join('') + '</table>' : '<div class="mic">Nicio reclamație înregistrată în ' + recl.an + '. Apasă „+ Reclamație nouă”.</div>';
   }
   function formReclamatie(r) {
@@ -3729,26 +3729,34 @@
     var clienti = SC.config.clienti.concat(r.cl && SC.config.clienti.indexOf(r.cl) < 0 ? [r.cl] : []);
     var liste = L.reclListe();
     /* lista derulanta din numele puse la „Liste derulante…”; daca lista e goala, camp de scris liber */
-    function ales(k, titlu, lista) {
+    /* listele nu au rand gol: pana se alege ceva campul arata gol, dar randul gol nu apare in lista */
+    var GOL = '<option value="" disabled hidden' + ' selected></option>';
+    function ales(k, titlu, lista, lat) {
       if (!lista.length) return '<label class="camp"><span>' + titlu + '</span><input type="text" data-r="' + k + '" value="' + esc(r[k] || '') + '" placeholder="pune numele la „Liste derulante…”"></label>';
       var l = lista.concat(r[k] && lista.indexOf(r[k]) < 0 ? [r[k]] : []);
-      return '<label class="camp"><span>' + titlu + '</span><select data-r="' + k + '"><option value=""></option>' + l.map(function (x) { return '<option' + (x === r[k] ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>';
+      return '<label class="camp' + (lat ? ' lat2' : '') + '"><span>' + titlu + '</span><select data-r="' + k + '">' + GOL + l.map(function (x) { return '<option' + (x === r[k] ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>';
     }
-    var motive = L.RECL_MOTIVE.slice();
-    L.reclLista(recl.doc).forEach(function (x) { if (x.mo && motive.indexOf(x.mo) < 0) motive.push(x.mo); });
+    /* motivele alese (unul sau mai multe); cele vechi, care nu mai sunt in lista, raman pe reclamatie */
+    var motiveAlese = L.reclMotive(r.mo);
+    function motiveArata(rad) {
+      rad.querySelector('#reclMoAlese').innerHTML = motiveAlese.map(function (m, i) { return '<span class="recl-chip">' + esc(m) + '<button type="button" data-mx="' + i + '" title="Scoate motivul" aria-label="Scoate motivul ' + esc(m) + '">×</button></span>'; }).join('');
+      var rest = liste.motive.filter(function (m) { return motiveAlese.indexOf(m) < 0; });
+      rad.querySelector('#reclMoAdauga').innerHTML = '<option value="" disabled hidden selected>' + (motiveAlese.length ? '+ adaugă încă un motiv…' : 'alege motivul…') + '</option>' + rest.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('');
+    }
     var html = '<div class="grila">' +
       '<label class="camp"><span>Nr aviz</span><input type="text" data-r="av" value="' + esc(r.av || '') + '" autocomplete="off"></label>' +
       '<label class="camp"><span>Data primire reclamație</span><input type="date" data-r="dp" value="' + esc(r.dp || '') + '"></label>' +
-      '<label class="camp lat2"><span>Motiv reclamație</span><input type="text" data-r="mo" list="reclMotive" value="' + esc(r.mo || '') + '" autocomplete="off"><datalist id="reclMotive">' + motive.map(function (m) { return '<option value="' + esc(m) + '">'; }).join('') + '</datalist></label>' +
+      '<div class="camp lat2"><span>Motiv reclamație — unul sau mai multe</span><div class="recl-alese" id="reclMoAlese"></div><select id="reclMoAdauga" aria-label="Adaugă motiv"></select></div>' +
       '<label class="camp"><span>Nr baxuri reclamate</span><input type="number" data-r="bx" min="0" step="1" value="' + (SC.esteNum(r.bx) ? r.bx : '') + '"></label>' +
       '<label class="camp"><span>Status</span><select data-r="s"><option value="Deschisa">Deschisă</option><option value="Inchisa"' + (L.reclStatus(r) === 'Inchisa' ? ' selected' : '') + '>Închisă</option></select></label>' +
       ales('rs', 'Responsabil', liste.responsabil) +
-      '<label class="camp"><span>Eroare depozit</span><select data-r="ed"><option value=""></option>' + ['Da', 'Nu'].map(function (x) { return '<option' + (x === r.ed ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>' +
+      '<label class="camp"><span>Eroare depozit</span><select data-r="ed">' + GOL + ['Da', 'Nu'].map(function (x) { return '<option' + (x === r.ed ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>' +
       ales('co', 'Completat', liste.completat) +
-      '<label class="camp lat2"><span>Observații</span><input type="text" data-r="ob" value="' + esc(r.ob || '') + '" autocomplete="off"></label>' +
+      ales('fi', 'Finalizare reclamație', liste.finalizare, true) +
+      '<label class="camp lat2"><span>Observații — alegi din listă sau scrii liber</span><input type="text" data-r="ob" list="reclObsLista" value="' + esc(r.ob || '') + '" autocomplete="off"><datalist id="reclObsLista">' + liste.observatii.map(function (m) { return '<option value="' + esc(m) + '">'; }).join('') + '</datalist></label>' +
       '</div>' + (!nou && r.u ? '<div class="mic" style="margin-top:6px">Înregistrată ' + esc(tmsMoment(r.ts)) + ' de ' + esc(r.u) + '.</div>' : '') + (r.s === 'Inchisa' && r.it ? '<div class="mic" style="margin-top:6px">Închisă ' + esc(tmsMoment(r.it)) + ' de ' + esc(r.iu || '?') + '.</div>' : '') + '<div class="tms-rez" id="reclGasit" role="status" style="margin:12px 0"></div>' +
       '<div class="mic" style="margin-bottom:6px">Din comandă — se completează singure după numărul de aviz; le poți corecta de mână:</div><div class="grila">' +
-      '<label class="camp"><span>Client</span><select data-r="cl"><option value=""></option>' + clienti.map(function (x) { return '<option' + (x === r.cl ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="camp"><span>Client</span><select data-r="cl">' + GOL + clienti.map(function (x) { return '<option' + (x === r.cl ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
       '<label class="camp lat2"><span>Denumire client (destinatar)</span><input type="text" data-r="de" value="' + esc(r.de || '') + '"></label>' +
       '<label class="camp"><span>Data livrare marfă</span><input type="date" data-r="dl" value="' + esc(String(r.dl || '').slice(0, 10)) + '"></label></div>' +
       '<div id="reclAvertDl" class="ascuns" role="alert" style="margin-top:10px;padding:8px 10px;border-radius:8px;background:#fef3c7;color:#92400e"></div>';
@@ -3781,7 +3789,8 @@
     }
     function citeste(rad) {
       var x = { n: r.n, an: r.an, nrc: nrc };
-      ['av', 'dp', 'mo', 'cl', 'de', 'dl', 's', 'ob', 'rs', 'ed', 'co'].forEach(function (k) { x[k] = el(rad, k).value.trim(); });
+      ['av', 'dp', 'cl', 'de', 'dl', 's', 'fi', 'ob', 'rs', 'ed', 'co'].forEach(function (k) { x[k] = el(rad, k).value.trim(); });
+      x.mo = motiveAlese.join('; ');
       var b = el(rad, 'bx').value.trim(); x.bx = b === '' ? '' : +b;
       /* avizul se pastreaza scris ca in comanda gasita („av 71350” -> „AV000071350”) */
       var o = L.reclComenzi(x.av).filter(function (c) { return c.n === nrc; })[0];
@@ -3804,7 +3813,7 @@
         if (!x.av) { toast('Completează numărul de aviz.', 'rau'); return false; }
         if (!x.dp) { toast('Completează data primirii reclamației.', 'rau'); return false; }
         if (x.dp > SC.azi()) { toast('Data primirii reclamației nu poate fi în viitor.', 'rau'); return false; }
-        if (!x.mo) { toast('Completează motivul reclamației.', 'rau'); return false; }
+        if (!x.mo) { toast('Alege cel puțin un motiv al reclamației.', 'rau'); return false; }
         if (x.bx !== '' && (!isFinite(x.bx) || x.bx < 0)) { toast('Numărul de baxuri trebuie să fie un număr pozitiv.', 'rau'); return false; }
         function salveaza() { return L.reclSalveaza(x).then(function (rez) { dupa(rez, nou ? 'Reclamația a fost înregistrată cu nr. ' + rez.r.n + '.' : 'Reclamația nr. ' + rez.r.n + ' a fost salvată.'); }); }
         /* marfa care inca nu a fost livrata nu prea are cum sa fie reclamata: intreb inainte de salvare */
@@ -3819,6 +3828,9 @@
         av.addEventListener('input', function () { clearTimeout(ceas); ceas = setTimeout(function () { cauta(rad, true); }, 300); });
         av.addEventListener('change', function () { clearTimeout(ceas); cauta(rad, true); });
         cauta(rad, false);
+        motiveArata(rad);
+        rad.querySelector('#reclMoAdauga').onchange = function () { if (this.value && motiveAlese.indexOf(this.value) < 0) motiveAlese.push(this.value); motiveArata(rad); };
+        rad.querySelector('#reclMoAlese').addEventListener('click', function (e) { var b = e.target.closest('[data-mx]'); if (b) { motiveAlese.splice(+b.dataset.mx, 1); motiveArata(rad); } });
         el(rad, 'dl').addEventListener('input', function () { avertLivrare(rad); });
         avertLivrare(rad);
       }
@@ -3828,15 +3840,20 @@
   $('btnReclListe').onclick = function () {
     if (!eAdmin()) return;
     var l = L.reclListe();
-    function zona(id, titlu, v) { return '<label class="camp"><span>' + titlu + ' — câte un nume pe rând</span><textarea id="' + id + '" rows="7" style="width:100%">' + esc(v.join('\n')) + '</textarea></label>'; }
-    function linii(rad, id) { var vazut = {}; return rad.querySelector('#' + id).value.split('\n').map(function (x) { return x.trim(); }).filter(function (x) { var k = x.toLowerCase(); if (!x || vazut[k]) return false; vazut[k] = 1; return true; }); }
+    var CAMPURI = [['motive', 'Motiv reclamație'], ['finalizare', 'Finalizare reclamație'], ['observatii', 'Observații (propuneri; se poate scrie și liber)'], ['completat', 'Completat'], ['responsabil', 'Responsabil']];
+    function zona(k, titlu, v) { return '<label class="camp"><span>' + titlu + ' — câte una pe rând</span><textarea data-rl="' + k + '" rows="9" style="width:100%">' + esc(v.join('\n')) + '</textarea></label>'; }
+    function linii(rad, k) { var vazut = {}; return rad.querySelector('[data-rl="' + k + '"]').value.split('\n').map(function (x) { return x.replace(/;/g, ',').replace(/\s+/g, ' ').trim(); }).filter(function (x) { var c = x.toLowerCase(); if (!x || vazut[c]) return false; vazut[c] = 1; return true; }); }
     modal({
       titlu: 'Liste derulante pentru reclamații', lat: true,
-      html: '<div class="grila">' + zona('rlCompletat', 'Completat', l.completat) + zona('rlResponsabil', 'Responsabil', l.responsabil) + '</div>' +
-        '<div class="mic" style="margin-top:8px">Numele scrise aici apar în listele derulante din fereastra reclamației. Dacă o listă rămâne goală, câmpul respectiv se completează scriind liber. Numele șterse de aici rămân pe reclamațiile deja salvate.</div>',
+      html: '<div class="grila">' + CAMPURI.map(function (c) { return zona(c[0], c[1], l[c[0]]); }).join('') + '</div>' +
+        '<div class="mic" style="margin-top:8px">Ce scrii aici apare în listele din fereastra reclamației; rândurile repetate se păstrează o singură dată. La Motiv și Finalizare se poate alege doar din listă. Ce ștergi de aici rămâne pe reclamațiile deja salvate. Dacă lista Completat sau Responsabil e goală, câmpul se completează scriind liber.</div>',
       butoane: [{ t: 'Închide', v: null }, {
         t: 'Salvează', cls: 'pri', fn: function (rad) {
-          return L.reclSalveazaListe(linii(rad, 'rlCompletat'), linii(rad, 'rlResponsabil')).then(function (c) { SC.config = Object.assign({}, SC.config, { reclCompletat: c.reclCompletat, reclResponsabil: c.reclResponsabil }); toast('Listele au fost salvate.', 'bun'); });
+          if (!eAdmin()) return false;
+          var liste = {}; CAMPURI.forEach(function (c) { liste[c[0]] = linii(rad, c[0]); });
+          if (!liste.motive.length) { toast('Lista de motive nu poate rămâne goală.', 'rau'); return false; }
+          if (!liste.finalizare.length) { toast('Lista de finalizare nu poate rămâne goală.', 'rau'); return false; }
+          return L.reclSalveazaListe(liste).then(function (c) { var plus = {}; Object.keys(L.RECL_LISTE).forEach(function (k) { plus[L.RECL_LISTE[k]] = c[L.RECL_LISTE[k]]; }); SC.config = Object.assign({}, SC.config, plus); toast('Listele au fost salvate.', 'bun'); });
         }
       }]
     });

@@ -32,8 +32,8 @@
     border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; background: #fff; min-width: 0;
   }
   input[readonly], textarea[readonly], select:disabled { background: #f0f2f6; color: #4a5263; }
-  label.camp { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
-  label.camp > span { font-weight: 600; }
+  label.camp, div.camp { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+  label.camp > span, div.camp > span { font-weight: 600; }
   /* campul Judet: eticheta + sugestie pe acelasi rand, deasupra casutei */
   .camp-ju { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
   .camp-ju .camp-sus { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 15px; }
@@ -42,7 +42,7 @@
   .sug-ju { border: 1px solid #b9c8ef; background: #eaf0ff; color: var(--navy); border-radius: 999px; padding: 0 8px; font: inherit; font-size: 11.5px; font-weight: 700; line-height: 15px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .sug-ju.tare { border-color: #d9a400; background: #ffe9a8; color: #5a3d00; }
   .sug-ju.ascuns { display: none; }
-  label.camp input, label.camp select, label.camp textarea { font-size: 14px; color: var(--text); }
+  label.camp input, label.camp select, label.camp textarea, div.camp select { font-size: 14px; color: var(--text); }
 
   /* ---- autentificare ---- */
   #ecranLogin { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -250,6 +250,11 @@
   .fereastra > .jos { padding: 12px 16px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
   .grila { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
   .grila .lat2 { grid-column: span 2; }
+  .recl-alese { display: flex; flex-wrap: wrap; gap: 6px; }
+  .recl-alese:not(:empty) { margin-bottom: 6px; }
+  .recl-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 999px; background: #e0e7ff; color: #1e3a8a; font-size: 13px; font-weight: 600; }
+  .recl-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 6px; border-radius: 999px; }
+  .recl-chip button:hover { background: #c7d2fe; }
   .nota { background: #eef3fb; border-radius: 8px; padding: 9px 11px; font-size: 13px; }
   .nota.atentie { background: #fff3cd; color: #5c4400; }
   .nota.rau { background: #fde2e0; color: #7a1b15; }
@@ -527,7 +532,7 @@
     <section class="pagina derulabila ascuns" id="pag-reclamatii">
       <div class="card">
         <h2>Reclamații din livrări</h2>
-        <p>Se completează numărul de aviz, data primirii, motivul și numărul de baxuri; clientul, destinatarul și data livrării se iau din comandă. Numele din listele „Completat” și „Responsabil” se pun o singură dată la „Liste derulante…”.</p>
+        <p>Se completează numărul de aviz, data primirii, motivul și numărul de baxuri; clientul, destinatarul și data livrării se iau din comandă. Motivele, modurile de finalizare și numele din liste se schimbă doar de aici, de la „Liste derulante…”.</p>
         <div class="rand-form">
           <button class="btn pri" id="btnReclNoua">+ Reclamație nouă</button>
           <input type="search" id="reclCauta" placeholder="Caută aviz, client, destinatar, motiv…" aria-label="Caută reclamație">
@@ -536,7 +541,7 @@
           <select id="reclAn" aria-label="Anul"></select>
           <span class="mic" id="reclNumar"></span>
           <span style="flex:1"></span>
-          <button class="btn" id="btnReclListe" title="Numele din listele derulante „Completat” și „Responsabil”">Liste derulante…</button>
+          <button class="btn" id="btnReclListe" title="Ce se poate alege la Motiv, Finalizare, Observații, Completat și Responsabil">Liste derulante…</button>
           <button class="btn" id="btnReclReincarca" title="Citește din nou lista din baza de date">Reîncarcă</button>
           <button class="btn" id="btnReclExport">Export (Excel)</button>
         </div>
@@ -554,12 +559,12 @@
 <div id="cmrPrint"></div>
 <input type="file" id="fisier" class="ascuns" accept=".xlsx,.xlsm,.xls">
 
-<script src="config.js?v=2.62"></script>
-<script src="js/xlsx.full.min.js?v=2.62"></script>
-<script src="js/util.js?v=2.62"></script>
-<script src="js/store.js?v=2.62"></script>
-<script src="js/logic.js?v=2.62"></script>
-<script src="js/cmr-sablon.js?v=2.62"></script>
-<script src="js/ui.js?v=2.62"></script>
+<script src="config.js?v=2.63"></script>
+<script src="js/xlsx.full.min.js?v=2.63"></script>
+<script src="js/util.js?v=2.63"></script>
+<script src="js/store.js?v=2.63"></script>
+<script src="js/logic.js?v=2.63"></script>
+<script src="js/cmr-sablon.js?v=2.63"></script>
+<script src="js/ui.js?v=2.63"></script>
 </body>
 </html>

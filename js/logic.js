@@ -500,9 +500,17 @@
   /* ---------- Reclamatii din livrari ----------
      Un document pe an, meta/recl_AAAA: { n: ultimul numar dat, r: { numar: reclamatie } }.
      Reclamatia: n (Nr crt), an, dp (data primirii), av (nr aviz, cum a fost scris), cl, de (denumire client), dl (data livrarii),
-     mo (motiv), bx (baxuri), ob (observatii), rs (responsabil), ed (eroare depozit: 'Da'/'Nu'), co (completat de), nrc (Nr Crt al comenzii gasite), u/ts (cine si cand a inregistrat), mu/mt (ultima modificare). */
+     mo (motivele, despartite prin „; ”), bx (baxuri), fi (mod de finalizare), ob (observatii), rs (responsabil), ed (eroare depozit: 'Da'/'Nu'), co (completat de), nrc (Nr Crt al comenzii gasite), u/ts (cine si cand a inregistrat), mu/mt (ultima modificare). */
   L.RECL_AN_START = 2026;
-  L.RECL_MOTIVE = ['Marfa lipsa la livrare', 'Marfa inversata', 'Marfa deteriorata', 'Marfa in plus', 'Retur la cererea clientului'];
+  /* listele de pornire (din fisierul „Lista derulanta”); Administratorul le poate schimba la „Liste derulante…” (se tin in meta/config) */
+  L.RECL_MOTIVE = ['EAN invalid', 'Marfa lipsa la livrare', 'Marfa neconforma', 'Marfa trimisa in plus la client', 'Retur la cererea clientului', 'Refuz de calitate', 'Marfa inversata',
+    'Marfa necomandata', 'Termen scurt', 'Marfa plus fata de comanda', 'Ambalaj deteriorat', 'Lipsa Comanda', 'Lipsa traducere', 'Declaratie neconforma', 'Paletizare neconforma', 'Eroare receptie',
+    'Marfa nelistata', 'Comanda gresita', 'Marfa deteriorata', 'Livrare gresita', 'Lipsa in bax', 'Etichetarea ilizibila', 'Comanda dublata', 'Eroare sistem', 'TLV Eronat', 'Produs neconform',
+    'Baxare gresita', 'Retur integral', 'Marfa delistata', 'Marfa neavizata'];
+  L.RECL_FINALIZARE = ['Marfa se receptioneaza in stoc', 'Imputare transportator', 'Reclamatie nefondata', 'Marfa se livreaza la urmatoarea livrare', 'Marfa s-a pus pe plusuri', 'Marfa se receptioneaza in stoc Damage', 'Imputare DSV'];
+  L.RECL_OBSERVATII = ['Marfa a ramas in depozit', 'Lipsa stampila pe avize', 'Lipsa stoc', 'Lipsa etichetare', 'Eroare Sistem', 'Retur Integral', 'Marfa rasturnata'];
+  /* mai multe motive pe o reclamatie: se pastreaza intr-un singur text, despartite prin „; ” */
+  L.reclMotive = function (v) { return String(v == null ? '' : v).split(';').map(function (x) { return x.trim(); }).filter(Boolean); };
   L.RECL_STATUSURI = ['Deschisa', 'Inchisa'];
   /* statusul unei reclamatii: s = 'Inchisa' (cu it/iu = cand si cine a inchis-o); altfel este deschisa */
   L.reclStatus = function (r) { return r && r.s === 'Inchisa' ? 'Inchisa' : 'Deschisa'; };
@@ -549,7 +557,7 @@
           }
           r = JSON.parse(JSON.stringify(r)); r.mu = cine; r.mt = Date.now();
         }
-        var NUME = { dp: 'Data primire', av: 'Nr aviz', cl: 'Client', de: 'Denumire client', dl: 'Data livrare', mo: 'Motiv', bx: 'Baxuri', ob: 'Observații', rs: 'Responsabil', ed: 'Eroare depozit', co: 'Completat' }, p = [];
+        var NUME = { dp: 'Data primire', av: 'Nr aviz', cl: 'Client', de: 'Denumire client', dl: 'Data livrare', mo: 'Motiv', bx: 'Baxuri', fi: 'Finalizare', ob: 'Observații', rs: 'Responsabil', ed: 'Eroare depozit', co: 'Completat' }, p = [];
         Object.keys(NUME).forEach(function (k) {
           var v = date[k] == null ? '' : date[k];
           if (!nou && String(r[k] == null ? '' : r[k]) !== String(v)) p.push(NUME[k] + ': ' + (r[k] == null || r[k] === '' ? '(gol)' : r[k]) + ' → ' + (v === '' ? '(gol)' : v));
@@ -568,19 +576,25 @@
       });
     });
   };
-  L.RECL_ANTET = ['Nr crt', 'Data primire reclamatie', 'Client', 'Denumire client', 'Nr aviz', 'Data livrare marfa', 'Motiv reclamatie', 'Nr baxuri reclamate', 'Status', 'Observatii', 'Responsabil', 'Eroare depozit', 'Completat', 'Inregistrat de'];
+  L.RECL_ANTET = ['Nr crt', 'Data primire reclamatie', 'Client', 'Denumire client', 'Nr aviz', 'Data livrare marfa', 'Motiv reclamatie', 'Nr baxuri reclamate', 'Status', 'Mod finalizare reclamatie', 'Observatii', 'Responsabil', 'Eroare depozit', 'Completat', 'Inregistrat de'];
   /* numele din listele derulante se tin in configurare (meta/config), nu in codul aplicatiei */
   L.reclListe = function () {
     function l(v) { return (Array.isArray(v) ? v : []).map(function (x) { return String(x).trim(); }).filter(Boolean); }
+    function sau(v, implicit) { var x = l(v); return x.length ? x : implicit.slice(); }
     var c = SC.config || {};
-    return { completat: l(c.reclCompletat), responsabil: l(c.reclResponsabil) };
+    return { motive: sau(c.reclMotive, L.RECL_MOTIVE), finalizare: sau(c.reclFinalizare, L.RECL_FINALIZARE), observatii: Array.isArray(c.reclObservatii) ? l(c.reclObservatii) : L.RECL_OBSERVATII.slice(),
+      completat: l(c.reclCompletat), responsabil: l(c.reclResponsabil) };
   };
-  L.reclSalveazaListe = function (completat, responsabil) {
+  L.RECL_LISTE = { motive: 'reclMotive', finalizare: 'reclFinalizare', observatii: 'reclObservatii', completat: 'reclCompletat', responsabil: 'reclResponsabil' };
+  /* liste = { motive: [...], finalizare: [...], observatii: [...], completat: [...], responsabil: [...] } */
+  L.reclSalveazaListe = function (liste) {
     return SC.store.tx(function (t) {
       return t.get('meta', 'config').then(function (c) {
-        c = Object.assign({}, c || SC.config, { reclCompletat: completat, reclResponsabil: responsabil });
+        var plus = {}, text = [];
+        Object.keys(L.RECL_LISTE).forEach(function (k) { plus[L.RECL_LISTE[k]] = liste[k] || []; text.push(k + ': ' + (liste[k] || []).length); });
+        c = Object.assign({}, c || SC.config, plus);
         t.set('meta', 'config', c);
-        t.log('Reclamații: liste derulante modificate (Completat: ' + completat.length + ', Responsabil: ' + responsabil.length + ')');
+        t.log('Reclamații: liste derulante modificate (' + text.join(', ') + ')');
         return c;
       });
     });
@@ -588,13 +602,13 @@
   L.reclExcel = function (lista) {
     var aoa = [L.RECL_ANTET.slice()], l = lista.slice().sort(function (a, b) { return a.n - b.n; });
     function zi(v) { return /^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? serialZi(String(v)) : null; }
-    l.forEach(function (r) { aoa.push([r.n, zi(r.dp), r.cl || null, r.de || null, r.av != null ? String(r.av) : null, zi(r.dl), r.mo || null, SC.esteNum(r.bx) ? r.bx : null, L.reclStatus(r), r.ob || null, r.rs || null, r.ed || null, r.co || null, r.u || null]); });
+    l.forEach(function (r) { aoa.push([r.n, zi(r.dp), r.cl || null, r.de || null, r.av != null ? String(r.av) : null, zi(r.dl), r.mo || null, SC.esteNum(r.bx) ? r.bx : null, L.reclStatus(r), r.fi || null, r.ob || null, r.rs || null, r.ed || null, r.co || null, r.u || null]); });
     var ws = XLSX.utils.aoa_to_sheet(aoa);
     for (var i = 1; i < aoa.length; i++) {
       [1, 5].forEach(function (c) { var x = ws[XLSX.utils.encode_cell({ r: i, c: c })]; if (x && x.t === 'n') x.z = FMT_REGISTRU.date; });
       var a = ws[XLSX.utils.encode_cell({ r: i, c: 4 })]; if (a) { a.t = 's'; a.z = '@'; }
     }
-    ws['!cols'] = [{ wch: 7 }, { wch: 13 }, { wch: 12 }, { wch: 40 }, { wch: 16 }, { wch: 13 }, { wch: 30 }, { wch: 10 }, { wch: 10 }, { wch: 34 }, { wch: 20 }, { wch: 9 }, { wch: 20 }, { wch: 16 }];
+    ws['!cols'] = [{ wch: 7 }, { wch: 13 }, { wch: 12 }, { wch: 40 }, { wch: 16 }, { wch: 13 }, { wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 34 }, { wch: 34 }, { wch: 20 }, { wch: 9 }, { wch: 20 }, { wch: 16 }];
     if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
     var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Reclamatii');
     return wb;
