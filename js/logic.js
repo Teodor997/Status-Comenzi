@@ -49,6 +49,32 @@
   };
   L.golesteCache = function () { SC.grupe = {}; SC.comenzi = []; SC.dupaNr = {}; };
 
+  /* ---------- Incarcari partiale ----------
+     O comanda poate pleca in mai multe bucati, cu camioane diferite. Fiecare bucata este tinuta pe comanda:
+       o.pt = [ { na, nt, d (ziua camionului), di (cand s-a confirmat), pr (paleti), am (amprente), sc, te, se, f } ]
+     f = 1 doar la ultima bucata (restul, incarcat fara „Partial” — atunci comanda devine Incarcata).
+     Dupa o incarcare partiala comanda este scoasa de pe camion (ca la „Nu pleaca”), ca Transportul sa planifice restul.
+     Totalul comenzii = suma bucatilor. */
+  L.partiPlecate = function (o) { return (o && Array.isArray(o.pt) ? o.pt : []).filter(function (x) { return !x.f; }); };
+  L.partiSuma = function (lista) { var s = { pr: 0, am: 0 }; lista.forEach(function (x) { s.pr += +x.pr || 0; s.am += +x.am || 0; }); return s; };
+  L.partiText = function (pt) { return (Array.isArray(pt) ? pt : []).map(function (x) { return (x.f ? 'rest ' : '') + (+x.pr || 0) + ' pal / ' + (+x.am || 0) + ' amp cu ' + (x.na || '?') + (x.nt ? ' (' + x.nt + ')' : ''); }).join(', '); };
+  /* comanda asa cum apare pe camionul ei de acum: cu ce a mai ramas din ea (sau, dupa incarcare, cu bucata plecata cu el) */
+  L.comandaRest = function (o) {
+    var plecate = L.partiPlecate(o); if (!plecate.length) return o;
+    var s = L.partiSuma(plecate), ultima = o.pt.filter(function (x) { return x.f; })[0], c = Object.assign({}, o, { _rest: 1, gf: null });
+    if (o.inc === 'DA' && ultima) { c.pr = ultima.pr; c.am = ultima.am; }
+    else if (!SC.esteDeschisa(o)) { if (SC.esteNum(o.pr)) c.pr = Math.max(0, o.pr - s.pr); if (SC.esteNum(o.am)) c.am = Math.max(0, o.am - s.am); }
+    return c;
+  };
+  /* bucatile deja plecate, ca linii ale camioanelor cu care au plecat */
+  L.comenziParti = function (o) {
+    var l = [];
+    (Array.isArray(o.pt) ? o.pt : []).forEach(function (x, i) {
+      if (x.f || !x.na) return;
+      l.push(Object.assign({}, o, { na: x.na, nt: x.nt || '', dtr: x.d || '', inc: 'DA', di: x.di, pr: x.pr, am: x.am, gf: null, sc: x.sc, te: x.te, se: x.se, _parte: i }));
+    });
+    return l;
+  };
   /* Modifica una sau mai multe comenzi existente intr-o singura tranzactie.
      modificari: [{n, fn(o)}]; fn poate arunca eroare (tranzactia se anuleaza). */
   var FARA_JURNAL = { ut: 1, uu: 1, ct: 1, cu: 1, n: 1, _h: 1, jd: 1, tr: 1, prm: 1, gfm: 1, _zi: 1, _k: 1, tx: 1, txu: 1, txm: 1 };
@@ -59,6 +85,7 @@
     Object.keys(a).concat(Object.keys(b)).forEach(function (k) { if (!FARA_JURNAL[k]) chei[k] = 1; });
     Object.keys(chei).forEach(function (k) {
       var x = a[k] == null ? '' : a[k], y = b[k] == null ? '' : b[k];
+      if (k === 'pt') { x = L.partiText(x); y = L.partiText(y); if (x === y) return; parti.push('Încărcări parțiale: ' + (x || '(gol)') + ' → ' + (y || '(gol)')); return; }
       if (String(x) === String(y)) return;
       var nume = SC.COL[k] ? SC.COL[k].t : (k === 'ar' ? 'Arhivată' : k === 'ipr' ? 'Paleți numărați la încărcare' : k === 'iam' ? 'Amprente numărate la încărcare' : k === 'xnt' ? 'Scoasă la încărcare de pe transportul' : k === 'mnt' ? 'Trecută de mână pe transportul' : k === 'rp' ? 'Trecută în raportul Paleți' : k === 'rpu' ? 'Raport Paleți făcut de' : k);
       parti.push(nume + ': ' + (x === '' ? '(gol)' : scurt(x)) + ' → ' + (y === '' ? '(gol)' : scurt(y)));
@@ -138,6 +165,27 @@
         return lista.length;
       });
     });
+  };
+  /* Incarcari partiale: notificare pentru Transport ca restul comenzii a ramas fara camion si trebuie planificat.
+     Intoarce optiunile pentru L.modifica (notificarea se scrie in aceeasi tranzactie cu incarcarea).
+     partiale = [{ n, pal, am }]; camion = { na, nt } */
+  L.notificaResturi = function (partiale, camion) {
+    var acum = Date.now(), luna = L.lunaNotif(acum), user = SC.store.user ? SC.store.user.nume : '?';
+    return {
+      citeste: function (t) { return t.get('notificari', luna); },
+      scrie: function (t, doc, schimbate) {
+        doc = doc || { e: {} }; doc.e = doc.e || {};
+        var pus = 0;
+        partiale.forEach(function (x, i) {
+          var s = schimbate[x.n]; if (!s) return;
+          doc.e[acum + '_r' + i] = L.curata({ t: acum, u: user, tip: 'rest', n: x.n, cl: s.dupa.cl, nc: s.dupa.nc, de: s.dupa.de, dl: s.dupa.dl, na: camion.na, nt: camion.nt || '', pr: x.pal, am: x.am });
+          pus++;
+        });
+        if (!pus) return;
+        doc.upd = acum;
+        t.set('notificari', luna, doc);
+      }
+    };
   };
   /* Transport: schimba data de livrare a unei comenzi; in aceeasi tranzactie se salveaza notificarea pentru Operatorul de date */
   L.schimbaLivrare = function (n, nou) {

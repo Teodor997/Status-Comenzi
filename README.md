@@ -68,6 +68,18 @@ ora în care s-a lucrat: o zi înseamnă cel mult câteva zeci de citiri, o lun�
 modifica adrese (Administrator, Operator date), cine poate doar modifica comenzi existente (Încărcări, Transport) și cine
 administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar confirmarea) este impusă de aplicație.
 
+## Încărcări parțiale
+
+- În fereastra „Confirmare încărcare”, fiecare comandă are butonul „Parțial” (nu și cumulurile și liniile doar din transport).
+  Cu „Parțial” apăsat se scriu paleții și amprentele care pleacă **acum** cu acest camion; ele sunt o bucată din comandă, nu
+  totalul ei. Comanda nu devine Încărcată: restul ei rămâne fără Nr AUTO (ca la „Nu pleacă”) până îl planifică Transportul.
+- Bucata plecată rămâne pe camionul ei (lista de camioane, borderou — cu mențiunea PARȚIAL). Când restul se încarcă pe alt
+  camion, fără „Parțial”, comanda devine Încărcată, iar totalul ei este suma bucăților: la comenzile neînchise suma devine
+  sugestia de paleți / amprente pentru Operator; la cele Terminata, pe al doilea camion apar paleții rămași.
+- La fiecare încărcare parțială Transportul primește o notificare (butonul „Notificări”): comanda, camionul cu care a plecat
+  o parte, câți paleți / amprente au plecat și faptul că restul trebuie planificat.
+- Administratorul poate anula și o încărcare parțială, din „Anulează încărcarea” de pe camionul respectiv.
+
 ## Reclamații
 
 - Meniul „Reclamații” îl văd toți utilizatorii. Reclamațiile le înregistrează și le modifică doar rolul **Recepții** (și
