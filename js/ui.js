@@ -3752,7 +3752,7 @@
     recl.filtrate = l; recl.afisate = l.slice(0, 500);
     var nDesc = toate.filter(function (r) { return L.reclStatus(r) === 'Deschisa'; }).length;
     $('reclNumar').textContent = (l.length === 1 ? '1 reclamație' : l.length + ' reclamații') + (l.length !== toate.length ? ' din ' + toate.length : '') + ' · ' + (nDesc === 1 ? '1 deschisă' : nDesc + ' deschise') + ' în ' + recl.an + (l.length > 500 ? ' (afișate primele 500 — restrânge căutarea)' : '');
-    $('reclLista').innerHTML = toate.length ? '<table class="simplu"><tr><th class="nr">Nr crt</th><th>Data primire</th><th>Client</th><th>Denumire client</th><th>Nr aviz</th><th>Data livrare</th><th>Motiv reclamație</th><th class="nr">Nr baxuri</th><th>Status</th><th>Finalizare</th><th>Observații</th><th>Responsabil</th><th>Eroare depozit</th><th>Completat</th><th class="nr">PV</th></tr>' +
+    $('reclLista').innerHTML = toate.length ? '<table class="simplu"><tr><th class="nr">Nr crt</th><th>Data primire</th><th>Client</th><th>Denumire client</th><th>Nr aviz</th><th>Data livrare</th><th>Motiv reclamație</th><th class="nr">Nr baxuri</th><th>Status</th><th>Finalizare</th><th>Observații</th><th>Responsabil</th><th>Departament responsabil</th><th>Completat</th><th class="nr">PV</th></tr>' +
       recl.afisate.map(function (r, i) {
         var inchisa = L.reclStatus(r) === 'Inchisa';
         return '<tr class="clic" data-i="' + i + '"><td class="nr">' + r.n + '</td><td>' + esc(SC.fmtDataLunga(r.dp)) + '</td><td>' + esc(r.cl || '') + '</td><td>' + esc(r.de || '') + '</td><td>' + esc(r.av) + '</td><td>' + esc(SC.fmtDataLunga(r.dl)) +
@@ -3772,7 +3772,7 @@
     /* listele nu au rand gol: pana se alege ceva campul arata gol, dar randul gol nu apare in lista */
     var GOL = '<option value="" disabled hidden' + ' selected></option>';
     function ales(k, titlu, lista, lat) {
-      if (!lista.length) return '<label class="camp"><span>' + titlu + '</span><input type="text" data-r="' + k + '" value="' + esc(r[k] || '') + '" placeholder="pune numele la „Liste derulante…”"></label>';
+      if (!lista.length) return '<label class="camp"><span>' + titlu + '</span><input type="text" data-r="' + k + '" value="' + esc(r[k] || '') + '" placeholder="scrie aici — lista se pune la „Liste derulante…”"></label>';
       var l = lista.concat(r[k] && lista.indexOf(r[k]) < 0 ? [r[k]] : []);
       return '<label class="camp' + (lat ? ' lat2' : '') + '"><span>' + titlu + '</span><select data-r="' + k + '">' + GOL + l.map(function (x) { return '<option' + (x === r[k] ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>';
     }
@@ -3790,7 +3790,7 @@
       '<label class="camp"><span>Nr baxuri reclamate</span><input type="number" data-r="bx" min="0" step="1" value="' + (SC.esteNum(r.bx) ? r.bx : '') + '"></label>' +
       '<label class="camp"><span>Status</span><select data-r="s"><option value="Deschisa">Deschisă</option><option value="Inchisa"' + (L.reclStatus(r) === 'Inchisa' ? ' selected' : '') + '>Închisă</option></select></label>' +
       ales('rs', 'Responsabil', liste.responsabil) +
-      '<label class="camp"><span>Eroare depozit</span><select data-r="ed">' + GOL + ['Da', 'Nu'].map(function (x) { return '<option' + (x === r.ed ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>' +
+      ales('ed', 'Departament responsabil', liste.departament) +
       ales('co', 'Completat', liste.completat) +
       ales('fi', 'Finalizare reclamație', liste.finalizare, true) +
       '<label class="camp lat2"><span>Observații — alegi din listă sau scrii liber</span><input type="text" data-r="ob" list="reclObsLista" value="' + esc(r.ob || '') + '" autocomplete="off"><datalist id="reclObsLista">' + liste.observatii.map(function (m) { return '<option value="' + esc(m) + '">'; }).join('') + '</datalist></label>' +
@@ -4063,13 +4063,13 @@
   $('btnReclListe').onclick = function () {
     if (!eAdmin()) return;
     var l = L.reclListe();
-    var CAMPURI = [['motive', 'Motiv reclamație'], ['finalizare', 'Finalizare reclamație'], ['observatii', 'Observații (propuneri; se poate scrie și liber)'], ['completat', 'Completat'], ['responsabil', 'Responsabil']];
+    var CAMPURI = [['motive', 'Motiv reclamație'], ['finalizare', 'Finalizare reclamație'], ['observatii', 'Observații (propuneri; se poate scrie și liber)'], ['completat', 'Completat'], ['responsabil', 'Responsabil'], ['departament', 'Departament responsabil']];
     function zona(k, titlu, v) { return '<label class="camp"><span>' + titlu + ' — câte una pe rând</span><textarea data-rl="' + k + '" rows="9" style="width:100%">' + esc(v.join('\n')) + '</textarea></label>'; }
     function linii(rad, k) { var vazut = {}; return rad.querySelector('[data-rl="' + k + '"]').value.split('\n').map(function (x) { return x.replace(/;/g, ',').replace(/\s+/g, ' ').trim(); }).filter(function (x) { var c = x.toLowerCase(); if (!x || vazut[c]) return false; vazut[c] = 1; return true; }); }
     modal({
       titlu: 'Liste derulante pentru reclamații', lat: true,
       html: '<div class="grila">' + CAMPURI.map(function (c) { return zona(c[0], c[1], l[c[0]]); }).join('') + '</div>' +
-        '<div class="mic" style="margin-top:8px">Ce scrii aici apare în listele din fereastra reclamației; rândurile repetate se păstrează o singură dată. La Motiv și Finalizare se poate alege doar din listă. Ce ștergi de aici rămâne pe reclamațiile deja salvate. Dacă lista Completat sau Responsabil e goală, câmpul se completează scriind liber.</div>',
+        '<div class="mic" style="margin-top:8px">Ce scrii aici apare în listele din fereastra reclamației; rândurile repetate se păstrează o singură dată. La Motiv și Finalizare se poate alege doar din listă. Ce ștergi de aici rămâne pe reclamațiile deja salvate. Dacă lista Completat, Responsabil sau Departament responsabil e goală, câmpul se completează scriind liber.</div>',
       butoane: [{ t: 'Închide', v: null }, {
         t: 'Salvează', cls: 'pri', fn: function (rad) {
           if (!eAdmin()) return false;

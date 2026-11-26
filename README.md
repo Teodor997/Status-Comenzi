@@ -86,7 +86,7 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
   Lista se poate filtra pe status și arată câte reclamații sunt deschise.
 - Motivul se alege doar din listă și pot fi mai multe pe aceeași reclamație (fiecare apare ca o etichetă care se poate scoate).
   „Finalizare reclamație” se alege tot doar din listă. La Observații se alege din propuneri sau se scrie liber. Mai sunt:
-  Responsabil și Completat (liste derulante), Eroare depozit (Da/Nu). Listele nu au rând gol.
+  Responsabil, Completat și Departament responsabil (liste derulante; fostul „Eroare depozit”). Listele nu au rând gol.
 - Toate listele se schimbă doar de Administrator, la butonul „Liste derulante…”, și se păstrează în baza de date. Motivele,
   finalizările și observațiile pornesc cu valorile din fișierul „Lista derulanta”; numele de persoane nu sunt în codul aplicației
   (care este public), se scriu o singură dată acolo.

@@ -500,7 +500,7 @@
   /* ---------- Reclamatii din livrari ----------
      Un document pe an, meta/recl_AAAA: { n: ultimul numar dat, r: { numar: reclamatie } }.
      Reclamatia: n (Nr crt), an, dp (data primirii), av (nr aviz, cum a fost scris), cl, de (denumire client), dl (data livrarii),
-     mo (motivele, despartite prin „; ”), bx (baxuri), fi (mod de finalizare), ob (observatii), rs (responsabil), ed (eroare depozit: 'Da'/'Nu'), co (completat de), nrc (Nr Crt al comenzii gasite), u/ts (cine si cand a inregistrat), mu/mt (ultima modificare). */
+     mo (motivele, despartite prin „; ”), bx (baxuri), fi (mod de finalizare), ob (observatii), rs (responsabil), ed (departamentul responsabil; pe reclamatiile vechi: 'Da'/'Nu' de la fostul camp „Eroare depozit”), co (completat de), nrc (Nr Crt al comenzii gasite), u/ts (cine si cand a inregistrat), mu/mt (ultima modificare). */
   L.RECL_AN_START = 2026;
   /* listele de pornire (din fisierul „Lista derulanta”); Administratorul le poate schimba la „Liste derulante…” (se tin in meta/config) */
   L.RECL_MOTIVE = ['EAN invalid', 'Marfa lipsa la livrare', 'Marfa neconforma', 'Marfa trimisa in plus la client', 'Retur la cererea clientului', 'Refuz de calitate', 'Marfa inversata',
@@ -630,7 +630,7 @@
           }
           r = JSON.parse(JSON.stringify(r)); r.mu = cine; r.mt = Date.now();
         }
-        var NUME = { dp: 'Data primire', av: 'Nr aviz', cl: 'Client', de: 'Denumire client', dl: 'Data livrare', mo: 'Motiv', bx: 'Baxuri', fi: 'Finalizare', ob: 'Observații', rs: 'Responsabil', ed: 'Eroare depozit', co: 'Completat' }, p = [];
+        var NUME = { dp: 'Data primire', av: 'Nr aviz', cl: 'Client', de: 'Denumire client', dl: 'Data livrare', mo: 'Motiv', bx: 'Baxuri', fi: 'Finalizare', ob: 'Observații', rs: 'Responsabil', ed: 'Departament responsabil', co: 'Completat' }, p = [];
         Object.keys(NUME).forEach(function (k) {
           var v = date[k] == null ? '' : date[k];
           if (!nou && String(r[k] == null ? '' : r[k]) !== String(v)) p.push(NUME[k] + ': ' + (r[k] == null || r[k] === '' ? '(gol)' : r[k]) + ' → ' + (v === '' ? '(gol)' : v));
@@ -665,16 +665,16 @@
       });
     });
   }
-  L.RECL_ANTET = ['Nr crt', 'Data primire reclamatie', 'Client', 'Denumire client', 'Nr aviz', 'Data livrare marfa', 'Motiv reclamatie', 'Nr baxuri reclamate', 'Status', 'Mod finalizare reclamatie', 'Observatii', 'Responsabil', 'Eroare depozit', 'Completat', 'Retur integral', 'Numar PV', 'Data PV', 'Inregistrat de'];
+  L.RECL_ANTET = ['Nr crt', 'Data primire reclamatie', 'Client', 'Denumire client', 'Nr aviz', 'Data livrare marfa', 'Motiv reclamatie', 'Nr baxuri reclamate', 'Status', 'Mod finalizare reclamatie', 'Observatii', 'Responsabil', 'Departament responsabil', 'Completat', 'Retur integral', 'Numar PV', 'Data PV', 'Inregistrat de'];
   /* numele din listele derulante se tin in configurare (meta/config), nu in codul aplicatiei */
   L.reclListe = function () {
     function l(v) { return (Array.isArray(v) ? v : []).map(function (x) { return String(x).trim(); }).filter(Boolean); }
     function sau(v, implicit) { var x = l(v); return x.length ? x : implicit.slice(); }
     var c = SC.config || {};
     return { motive: sau(c.reclMotive, L.RECL_MOTIVE), finalizare: sau(c.reclFinalizare, L.RECL_FINALIZARE), observatii: Array.isArray(c.reclObservatii) ? l(c.reclObservatii) : L.RECL_OBSERVATII.slice(),
-      completat: l(c.reclCompletat), responsabil: l(c.reclResponsabil) };
+      completat: l(c.reclCompletat), responsabil: l(c.reclResponsabil), departament: l(c.reclDepartament) };
   };
-  L.RECL_LISTE = { motive: 'reclMotive', finalizare: 'reclFinalizare', observatii: 'reclObservatii', completat: 'reclCompletat', responsabil: 'reclResponsabil' };
+  L.RECL_LISTE = { motive: 'reclMotive', finalizare: 'reclFinalizare', observatii: 'reclObservatii', completat: 'reclCompletat', responsabil: 'reclResponsabil', departament: 'reclDepartament' };
   /* liste = { motive: [...], finalizare: [...], observatii: [...], completat: [...], responsabil: [...] } */
   L.reclSalveazaListe = function (liste) {
     return SC.store.tx(function (t) {
@@ -697,7 +697,7 @@
       [1, 5, 16].forEach(function (c) { var x = ws[XLSX.utils.encode_cell({ r: i, c: c })]; if (x && x.t === 'n') x.z = FMT_REGISTRU.date; });
       var a = ws[XLSX.utils.encode_cell({ r: i, c: 4 })]; if (a) { a.t = 's'; a.z = '@'; }
     }
-    ws['!cols'] = [{ wch: 7 }, { wch: 13 }, { wch: 12 }, { wch: 40 }, { wch: 16 }, { wch: 13 }, { wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 34 }, { wch: 34 }, { wch: 20 }, { wch: 9 }, { wch: 20 }, { wch: 9 }, { wch: 10 }, { wch: 12 }, { wch: 16 }];
+    ws['!cols'] = [{ wch: 7 }, { wch: 13 }, { wch: 12 }, { wch: 40 }, { wch: 16 }, { wch: 13 }, { wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 34 }, { wch: 34 }, { wch: 20 }, { wch: 22 }, { wch: 20 }, { wch: 9 }, { wch: 10 }, { wch: 12 }, { wch: 16 }];
     if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
     var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Reclamatii');
     return wb;
