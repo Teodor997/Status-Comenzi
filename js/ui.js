@@ -3376,7 +3376,7 @@
     potrivesteCmr($('cmrPrint'));
     window.print();
   }
-  window.addEventListener('afterprint', function () { document.body.classList.remove('tip-cmr'); $('cmrPrint').innerHTML = ''; });
+  window.addEventListener('afterprint', function () { document.body.classList.remove('tip-cmr'); document.body.classList.remove('tip-pv'); $('cmrPrint').innerHTML = ''; });
   function cmrNou(l, setari) {
     var o = l[0], s = setari || {}, cheie = L.cheieClientCmr(o.cl);
     var pc = (s.cl && s.cl[cheie]) || CMR_IMPLICIT.cl[cheie] || {};
@@ -3684,7 +3684,36 @@
   $('adrLista').addEventListener('click', function (e) { var r = e.target.closest('tr.clic'); if (r) formAdresa(adreseAfisate[+r.dataset.i]); });
 
   /* ---------- Reclamatii din livrari (deocamdata doar Administratorul) ---------- */
-  var recl = { an: 0, doc: null, citit: false, afisate: [], filtrate: [] };
+  var recl = { an: 0, doc: null, citit: false, afisate: [], filtrate: [], art: null, pvSet: null };
+  /* nomenclatorul de articole si setarile PV se citesc o singura data pe sesiune (cate o citire), cand e nevoie de ele */
+  function reclArticole() { if (!recl.art) recl.art = L.articoleCiteste().catch(function (e) { recl.art = null; throw e; }); return recl.art; }
+  function reclPvSetari() { if (!recl.pvSet) recl.pvSet = L.pvSetariCiteste().catch(function (e) { recl.pvSet = null; throw e; }); return recl.pvSet; }
+  function pvAntet(s) { return [s.antet1 != null ? s.antet1 : L.RECL_PV_ANTET[0], s.antet2 != null ? s.antet2 : L.RECL_PV_ANTET[1]]; }
+  /* pagina PV-ului de retur, dupa modelul din Excel: antet, client / numar / aviz / data, articole, motiv, observatii, reprezentant, stampila */
+  function htmlPv(r, li, art, s) {
+    var a = (art && art.a) || {}, antet = pvAntet(s || {}), randuri = [];
+    if (r.ri) randuri.push(['', 'Retur integral', SC.esteNum(r.bx) ? SC.fmtNum(r.bx, 'int') : '', '']);
+    else li.forEach(function (x) { randuri.push([x.c, a[x.c] || x.d || '', SC.fmtNum(x.q, 'int'), x.l || '']); });
+    var goale = Math.max(0, 10 - randuri.length), i;
+    for (i = 0; i < goale; i++) randuri.push(['', '', '', '']);
+    return '<div class="pv-pag"><div class="pv-sus">' + (s && s.logo ? '<img src="' + esc(s.logo) + '" alt="">' : '') + (antet[0] ? '<div>' + esc(antet[0]) + '</div>' : '') + (antet[1] ? '<div>' + esc(antet[1]) + '</div>' : '') + '</div>' +
+      '<h1 class="pv-titlu">PROCES VERBAL DE RETUR MARFA</h1>' +
+      '<div class="pv-cap"><span>Client :</span><b>' + esc(r.de || '') + '</b><span>Numar :</span><b>' + esc(L.reclPvNumar(r)) + '</b>' +
+      '<span>Nr. Aviz :</span><b>' + esc(r.av || '') + '</b><span>Data :</span><b>' + esc(SC.fmtDataLunga(r.pvd || SC.azi())) + '</b></div>' +
+      '<table class="pv-t"><tr><th style="width:10mm">Nr</th><th style="width:26mm">Cod Sap</th><th>Denumire Articol</th><th style="width:24mm">U.M. BAX Cantitate</th><th style="width:28mm">Lot</th></tr>' +
+      randuri.map(function (x, k) { return '<tr><td class="c">' + (k + 1) + '</td><td class="c">' + esc(x[0]) + '</td><td>' + esc(x[1]) + '</td><td class="c">' + esc(x[2]) + '</td><td class="c">' + esc(x[3]) + '</td></tr>'; }).join('') + '</table>' +
+      '<div class="pv-rand"><b>Motiv :</b><b>' + esc(L.reclMotive(r.mo).join('; ')) + '</b></div>' +
+      '<div class="pv-rand"><b>Obs :</b><b>' + esc(r.ob || '') + '</b></div>' +
+      '<div class="pv-jos"><div><b>Reprezentant DSV:</b><br><br><b>' + esc(r.co || '') + '</b></div>' + (s && s.stampila ? '<img src="' + esc(s.stampila) + '" alt="">' : '<span></span>') + '</div></div>';
+  }
+  function tiparestePv(r, li) {
+    return Promise.all([reclArticole(), reclPvSetari()]).then(function (v) {
+      $('tiparire').innerHTML = htmlPv(r, li, v[0], v[1]);
+      document.body.classList.add('tip-pv');
+      var poze = Array.prototype.map.call($('tiparire').querySelectorAll('img'), function (im) { return im.decode ? im.decode().catch(function () {}) : null; });
+      return Promise.all(poze).then(function () { window.print(); });
+    });
+  }
   function reclAni() {
     var acum = new Date().getFullYear(), l = [];
     for (var a = acum; a >= L.RECL_AN_START; a--) l.push(a);
@@ -3717,15 +3746,18 @@
     recl.filtrate = l; recl.afisate = l.slice(0, 500);
     var nDesc = toate.filter(function (r) { return L.reclStatus(r) === 'Deschisa'; }).length;
     $('reclNumar').textContent = (l.length === 1 ? '1 reclamație' : l.length + ' reclamații') + (l.length !== toate.length ? ' din ' + toate.length : '') + ' · ' + (nDesc === 1 ? '1 deschisă' : nDesc + ' deschise') + ' în ' + recl.an + (l.length > 500 ? ' (afișate primele 500 — restrânge căutarea)' : '');
-    $('reclLista').innerHTML = toate.length ? '<table class="simplu"><tr><th class="nr">Nr crt</th><th>Data primire</th><th>Client</th><th>Denumire client</th><th>Nr aviz</th><th>Data livrare</th><th>Motiv reclamație</th><th class="nr">Nr baxuri</th><th>Status</th><th>Finalizare</th><th>Observații</th><th>Responsabil</th><th>Eroare depozit</th><th>Completat</th></tr>' +
+    $('reclLista').innerHTML = toate.length ? '<table class="simplu"><tr><th class="nr">Nr crt</th><th>Data primire</th><th>Client</th><th>Denumire client</th><th>Nr aviz</th><th>Data livrare</th><th>Motiv reclamație</th><th class="nr">Nr baxuri</th><th>Status</th><th>Finalizare</th><th>Observații</th><th>Responsabil</th><th>Eroare depozit</th><th>Completat</th><th class="nr">PV</th></tr>' +
       recl.afisate.map(function (r, i) {
         var inchisa = L.reclStatus(r) === 'Inchisa';
         return '<tr class="clic" data-i="' + i + '"><td class="nr">' + r.n + '</td><td>' + esc(SC.fmtDataLunga(r.dp)) + '</td><td>' + esc(r.cl || '') + '</td><td>' + esc(r.de || '') + '</td><td>' + esc(r.av) + '</td><td>' + esc(SC.fmtDataLunga(r.dl)) +
-          '</td><td>' + esc(r.mo || '') + '</td><td class="nr">' + (SC.esteNum(r.bx) ? SC.fmtNum(r.bx, 'int') : '') + '</td><td>' + (inchisa ? '<span title="Închisă ' + esc(tmsMoment(r.it)) + ' de ' + esc(r.iu || '?') + '">Închisă</span>' : '<b style="color:#b45309">Deschisă</b>') + '</td><td>' + esc(r.fi || '') + '</td><td>' + esc(r.ob || '') + '</td><td>' + esc(r.rs || '') + '</td><td>' + esc(r.ed || '') + '</td><td title="Înregistrată de ' + esc(r.u || '?') + '">' + esc(r.co || '') + '</td></tr>';
+          '</td><td>' + esc(r.mo || '') + '</td><td class="nr">' + (SC.esteNum(r.bx) ? SC.fmtNum(r.bx, 'int') : '') + '</td><td>' + (inchisa ? '<span title="Închisă ' + esc(tmsMoment(r.it)) + ' de ' + esc(r.iu || '?') + '">Închisă</span>' : '<b style="color:#b45309">Deschisă</b>') + '</td><td>' + esc(r.fi || '') + '</td><td>' + esc(r.ob || '') + '</td><td>' + esc(r.rs || '') + '</td><td>' + esc(r.ed || '') + '</td><td title="Înregistrată de ' + esc(r.u || '?') + '">' + esc(r.co || '') + '</td><td class="nr"' + (r.pvd ? ' title="PV din ' + esc(SC.fmtDataLunga(r.pvd)) + '">' + L.reclPvNumar(r) : '>') + '</td></tr>';
       }).join('') + '</table>' : '<div class="mic">Nicio reclamație înregistrată în ' + recl.an + '. Apasă „+ Reclamație nouă”.</div>';
   }
-  function formReclamatie(r) {
+  function formReclamatie(r, liniiCitite) {
+    /* articolele unei reclamatii stau in alt document: le citesc inainte de a deschide fereastra */
+    if (r && r.nl && !liniiCitite) return L.reclLiniiCiteste(r).then(function (li) { formReclamatie(r, li); }, arataEroare);
     var nou = !r; r = r || { dp: SC.azi() };
+    var linii = (liniiCitite || []).map(function (x) { return { c: x.c || '', q: x.q == null ? '' : x.q, l: x.l || '', d: x.d || '' }; }), art = null;
     var clienti = SC.config.clienti.concat(r.cl && SC.config.clienti.indexOf(r.cl) < 0 ? [r.cl] : []);
     var liste = L.reclListe();
     /* lista derulanta din numele puse la „Liste derulante…”; daca lista e goala, camp de scris liber */
@@ -3759,7 +3791,13 @@
       '<label class="camp"><span>Client</span><select data-r="cl">' + GOL + clienti.map(function (x) { return '<option' + (x === r.cl ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
       '<label class="camp lat2"><span>Denumire client (destinatar)</span><input type="text" data-r="de" value="' + esc(r.de || '') + '"></label>' +
       '<label class="camp"><span>Data livrare marfă</span><input type="date" data-r="dl" value="' + esc(String(r.dl || '').slice(0, 10)) + '"></label></div>' +
-      '<div id="reclAvertDl" class="ascuns" role="alert" style="margin-top:10px;padding:8px 10px;border-radius:8px;background:#fef3c7;color:#92400e"></div>';
+      '<div id="reclAvertDl" class="ascuns" role="alert" style="margin-top:10px;padding:8px 10px;border-radius:8px;background:#fef3c7;color:#92400e"></div>' +
+      '<div id="reclPv" class="recl-pv ascuns"><b>PV de retur</b> <span class="mic">— articolele returnate; numărul de baxuri devine suma lor</span>' +
+      '<label class="bifa"><input type="checkbox" id="reclRi"' + (r.ri ? ' checked' : '') + '> Retur integral — fără coduri SAP; pe PV apare „Retur integral” cu numărul de baxuri scris sus</label>' +
+      '<div id="reclLiniiZona"><div id="reclLinii"></div><div class="rand-form" style="margin-top:6px"><button type="button" class="btn mic" id="reclLinieNoua">+ Adaugă articol</button><span class="mic" id="reclLiniiInfo"></span></div></div>' +
+      '<div class="grila" style="margin-top:10px"><label class="camp"><span>Număr PV</span><input type="number" data-r="pv" min="1" step="1" value="' + (r.pv || r.n || '') + '" placeholder="numărul reclamației"></label>' +
+      '<label class="camp"><span>Data PV</span><input type="date" data-r="pvd" value="' + esc(r.pvd || '') + '"></label></div>' +
+      '<div class="mic" style="margin-top:4px">Numărul PV este numărul reclamației, dacă nu scrii altul. Data PV se pune singură la prima tipărire.</div></div>';
     var nrc = r.nrc || 0, gasite = [];
     function el(rad, k) { return rad.querySelector('[data-r="' + k + '"]'); }
     function avertLivrare(rad) {
@@ -3772,6 +3810,45 @@
       var s = el(rad, 'cl');
       if (o.cl && !Array.prototype.some.call(s.options, function (x) { return x.value === o.cl; })) s.insertAdjacentHTML('beforeend', '<option>' + esc(o.cl) + '</option>');
       s.value = o.cl || ''; el(rad, 'de').value = o.de || ''; el(rad, 'dl').value = String(o.dl || '').slice(0, 10);
+      pvArata(rad);
+    }
+    /* ----- PV: articole ----- */
+    function arePv(rad) { return L.reclArePv(el(rad, 'cl').value); }
+    function retInt(rad) { return rad.querySelector('#reclRi').checked; }
+    function denumire(x) { var cod = L.articolCheie(x.c); return art && art.a && cod && art.a[cod] != null ? art.a[cod] : null; }
+    function indiciu(x) { return L.articolCheie(x.c) ? (art && art.n ? 'cod negăsit în nomenclator — scrie denumirea' : 'nomenclatorul nu este importat — scrie denumirea') : ''; }
+    function celulaDen(x, i) {
+      var d = denumire(x);
+      if (d != null) return esc(d);
+      return '<input type="text" data-li="' + i + '" data-f="d" value="' + esc(x.d || '') + '" placeholder="' + indiciu(x) + '">';
+    }
+    function liniiArata(rad) {
+      rad.querySelector('#reclLinii').innerHTML = linii.length ? '<table class="simplu"><tr><th style="width:36px">Nr</th><th style="width:130px">Cod SAP</th><th>Denumire articol</th><th style="width:110px">Cantitate (bax)</th><th style="width:140px">Lot</th><th style="width:34px"></th></tr>' +
+        linii.map(function (x, i) {
+          return '<tr><td class="nr">' + (i + 1) + '</td><td><input type="text" data-li="' + i + '" data-f="c" value="' + esc(x.c) + '" autocomplete="off"></td><td data-den="' + i + '">' + celulaDen(x, i) + '</td>' +
+            '<td><input type="number" data-li="' + i + '" data-f="q" min="0" step="1" value="' + esc(x.q) + '"></td><td><input type="text" data-li="' + i + '" data-f="l" value="' + esc(x.l) + '" autocomplete="off"></td>' +
+            '<td><button type="button" class="btn mic" data-lx="' + i + '" title="Scoate articolul" aria-label="Scoate articolul ' + (i + 1) + '">×</button></td></tr>';
+        }).join('') + '</table>' : '';
+      rad.querySelector('#reclLinieNoua').disabled = linii.length >= L.RECL_PV_LINII;
+      totalBax(rad);
+    }
+    function liniiBune() { return linii.filter(function (x) { return String(x.c).trim() || String(x.q).trim() || String(x.l).trim() || String(x.d).trim(); }); }
+    /* cu articole, numarul de baxuri este suma lor si nu se mai scrie de mana */
+    function totalBax(rad) {
+      var bx = el(rad, 'bx'), cu = arePv(rad) && !retInt(rad) && liniiBune().length > 0;
+      bx.readOnly = cu; bx.title = cu ? 'Suma cantităților din articole' : '';
+      if (cu) bx.value = liniiBune().reduce(function (s, x) { return s + (+x.q || 0); }, 0);
+      rad.querySelector('#reclLiniiInfo').textContent = linii.length ? liniiBune().length + ' din cel mult ' + L.RECL_PV_LINII + ' articole pe un PV' : '';
+    }
+    function pvArata(rad) {
+      var da = arePv(rad), bt = rad.parentNode.querySelector('.pv-btn');
+      rad.querySelector('#reclPv').classList.toggle('ascuns', !da);
+      if (bt) bt.classList.toggle('ascuns', !da);
+      rad.querySelector('#reclLiniiZona').classList.toggle('ascuns', retInt(rad));
+      if (!da) { totalBax(rad); return; }
+      if (art) { liniiArata(rad); return; }
+      rad.querySelector('#reclLinii').innerHTML = '<div class="mic">Se citește nomenclatorul de articole…</div>';
+      reclArticole().then(function (a) { art = a; liniiArata(rad); }, function (e) { art = { n: 0, a: {} }; liniiArata(rad); arataEroare(e); });
     }
     function descr(o) { return 'Nr Crt ' + o.n + ' · ' + (o.cl || '?') + ' · ' + (o.de || '?') + (o.dl ? ' · livrare ' + SC.fmtDataLunga(o.dl) : '') + ' · ' + (o.st || ''); }
     function cauta(rad, completeaza) {
@@ -3795,7 +3872,43 @@
       /* avizul se pastreaza scris ca in comanda gasita („av 71350” -> „AV000071350”) */
       var o = L.reclComenzi(x.av).filter(function (c) { return c.n === nrc; })[0];
       if (o) x.av = String(o.nc); else x.nrc = 0;
+      /* PV: doar pentru clientul care are PV; la ceilalti articolele si numarul PV se golesc */
+      if (arePv(rad)) {
+        x.ri = retInt(rad);
+        x.li = x.ri ? [] : liniiBune().map(function (l) { var y = { c: L.articolCheie(l.c), q: +l.q }; if (String(l.l).trim()) y.l = String(l.l).trim(); if (denumire(l) == null && String(l.d).trim()) y.d = String(l.d).trim(); return y; });
+        var pv = el(rad, 'pv').value.trim(); x.pv = pv === '' ? 0 : +pv; x.pvd = el(rad, 'pvd').value;
+      } else { x.ri = false; x.li = []; x.pv = 0; x.pvd = ''; }
       return x;
+    }
+    /* verificarile de dinaintea salvarii; intoarce datele sau null (cu mesaj) */
+    function verifica(rad, pentruPv) {
+      var x = citeste(rad);
+      if (!x.av) { toast('Completează numărul de aviz.', 'rau'); return null; }
+      if (!x.dp) { toast('Completează data primirii reclamației.', 'rau'); return null; }
+      if (x.dp > SC.azi()) { toast('Data primirii reclamației nu poate fi în viitor.', 'rau'); return null; }
+      if (!x.mo) { toast('Alege cel puțin un motiv al reclamației.', 'rau'); return null; }
+      if (x.bx !== '' && (!isFinite(x.bx) || x.bx < 0)) { toast('Numărul de baxuri trebuie să fie un număr pozitiv.', 'rau'); return null; }
+      if (x.li.length > L.RECL_PV_LINII) { toast('Un PV are cel mult ' + L.RECL_PV_LINII + ' articole.', 'rau'); return null; }
+      for (var i = 0; i < x.li.length; i++) {
+        if (!x.li[i].c) { toast('Articolul ' + (i + 1) + ': lipsește codul SAP.', 'rau'); return null; }
+        if (!isFinite(x.li[i].q) || x.li[i].q <= 0) { toast('Articolul ' + (i + 1) + ' (' + x.li[i].c + '): completează cantitatea în baxuri.', 'rau'); return null; }
+      }
+      if (x.pv && (!isFinite(x.pv) || x.pv < 1 || x.pv !== Math.floor(x.pv))) { toast('Numărul PV trebuie să fie un număr întreg.', 'rau'); return null; }
+      if (pentruPv) {
+        if (!arePv(rad)) { toast('PV-ul de retur se face doar pentru ' + L.RECL_PV_CLIENT + '.', 'rau'); return null; }
+        if (!x.ri && !x.li.length) { toast('Pentru PV adaugă articolele returnate sau bifează „Retur integral”.', 'rau'); return null; }
+        if (x.ri && !(x.bx > 0)) { toast('La retur integral completează numărul de baxuri.', 'rau'); return null; }
+        if (!x.de) { toast('Pentru PV completează denumirea clientului (destinatarul).', 'rau'); return null; }
+        if (!x.co) { toast('Pentru PV alege la „Completat” reprezentantul DSV.', 'rau'); return null; }
+        if (!x.pvd) x.pvd = SC.azi();
+      }
+      return x;
+    }
+    function salveazaCu(x, apoi) {
+      function salveaza() { return L.reclSalveaza(x).then(function (rez) { dupa(rez, nou ? 'Reclamația a fost înregistrată cu nr. ' + rez.r.n + '.' : 'Reclamația nr. ' + rez.r.n + ' a fost salvată.'); return apoi ? apoi(rez) : undefined; }); }
+      /* marfa care inca nu a fost livrata nu prea are cum sa fie reclamata: intreb inainte de salvare */
+      if (x.dl && x.dl > SC.azi()) return confirma('Atenție: data de livrare (' + SC.fmtDataLunga(x.dl) + ') este după ziua de azi — marfa nu a fost încă livrată.\n\nVerifică numărul de aviz și data livrării. Salvezi reclamația așa?').then(function (ok) { return ok ? salveaza() : false; });
+      return salveaza();
     }
     function dupa(rez, mesaj) { recl.doc = rez.doc; reclArata(); toast(mesaj, 'bun'); if (L.reclLista(rez.doc).length > L.RECL_PRAG) toast('Atenție: sunt peste ' + L.RECL_PRAG + ' reclamații în ' + recl.an + ' — lista se apropie de mărimea maximă a unui document din baza de date. Anunță administratorul aplicației.', 'rau'); }
     var butoane = [{ t: 'Închide', v: null }];
@@ -3806,19 +3919,13 @@
         });
       }
     });
+    butoane.push({ t: 'Salvează', cls: 'pri', fn: function (rad) { if (!eAdmin()) return false; var x = verifica(rad, false); return x ? salveazaCu(x) : false; } });
+    /* PV-ul nu se tipareste singur: doar de la acest buton, care intai salveaza reclamatia */
     butoane.push({
-      t: 'Salvează', cls: 'pri', fn: function (rad) {
+      t: 'Salvează și tipărește PV', cls: 'pv-btn ascuns', fn: function (rad) {
         if (!eAdmin()) return false;
-        var x = citeste(rad);
-        if (!x.av) { toast('Completează numărul de aviz.', 'rau'); return false; }
-        if (!x.dp) { toast('Completează data primirii reclamației.', 'rau'); return false; }
-        if (x.dp > SC.azi()) { toast('Data primirii reclamației nu poate fi în viitor.', 'rau'); return false; }
-        if (!x.mo) { toast('Alege cel puțin un motiv al reclamației.', 'rau'); return false; }
-        if (x.bx !== '' && (!isFinite(x.bx) || x.bx < 0)) { toast('Numărul de baxuri trebuie să fie un număr pozitiv.', 'rau'); return false; }
-        function salveaza() { return L.reclSalveaza(x).then(function (rez) { dupa(rez, nou ? 'Reclamația a fost înregistrată cu nr. ' + rez.r.n + '.' : 'Reclamația nr. ' + rez.r.n + ' a fost salvată.'); }); }
-        /* marfa care inca nu a fost livrata nu prea are cum sa fie reclamata: intreb inainte de salvare */
-        if (x.dl && x.dl > SC.azi()) return confirma('Atenție: data de livrare (' + SC.fmtDataLunga(x.dl) + ') este după ziua de azi — marfa nu a fost încă livrată.\n\nVerifică numărul de aviz și data livrării. Salvezi reclamația așa?').then(function (ok) { return ok ? salveaza() : false; });
-        return salveaza();
+        var x = verifica(rad, true);
+        return x ? salveazaCu(x, function (rez) { return tiparestePv(rez.r, rez.li || []).catch(arataEroare); }) : false;
       }
     });
     modal({
@@ -3833,9 +3940,99 @@
         rad.querySelector('#reclMoAlese').addEventListener('click', function (e) { var b = e.target.closest('[data-mx]'); if (b) { motiveAlese.splice(+b.dataset.mx, 1); motiveArata(rad); } });
         el(rad, 'dl').addEventListener('input', function () { avertLivrare(rad); });
         avertLivrare(rad);
+        /* PV */
+        el(rad, 'cl').addEventListener('change', function () { pvArata(rad); });
+        rad.querySelector('#reclRi').onchange = function () { pvArata(rad); totalBax(rad); };
+        rad.querySelector('#reclLinieNoua').onclick = function () {
+          if (linii.length >= L.RECL_PV_LINII) return;
+          linii.push({ c: '', q: '', l: '', d: '' }); liniiArata(rad);
+          var camp = rad.querySelector('[data-li="' + (linii.length - 1) + '"][data-f="c"]'); if (camp) camp.focus();
+        };
+        rad.querySelector('#reclLinii').addEventListener('input', function (e) {
+          var t = e.target, i = +t.dataset.li, f = t.dataset.f; if (!f || !linii[i]) return;
+          linii[i][f] = t.value;
+          if (f === 'c') { var c = rad.querySelector('[data-den="' + i + '"]'), d = denumire(linii[i]); if (d != null || !c.querySelector('input')) c.innerHTML = celulaDen(linii[i], i); else c.querySelector('input').placeholder = indiciu(linii[i]); }
+          if (f === 'q') totalBax(rad);
+        });
+        rad.querySelector('#reclLinii').addEventListener('click', function (e) { var b = e.target.closest('[data-lx]'); if (b) { linii.splice(+b.dataset.lx, 1); liniiArata(rad); } });
+        pvArata(rad);
       }
     });
   }
+  /* setarile PV: antet, sigla, stampila (in baza de date, nu in codul public) si nomenclatorul de articole */
+  function alegeImagine(maxPx) {
+    return new Promise(function (ok, rau) {
+      var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp';
+      inp.onchange = function () {
+        var f = inp.files && inp.files[0]; if (!f) return;
+        var url = URL.createObjectURL(f), im = new Image();
+        im.onload = function () {
+          function fa(latura) {
+            var k = Math.min(1, latura / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement('canvas');
+            c.width = Math.max(1, Math.round(im.naturalWidth * k)); c.height = Math.max(1, Math.round(im.naturalHeight * k));
+            c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+            return c.toDataURL('image/png');
+          }
+          var d = fa(maxPx); if (d.length > 300000) d = fa(Math.round(maxPx / 2));
+          URL.revokeObjectURL(url);
+          if (d.length > 300000) rau(L.eroare('Imaginea este prea mare și după micșorare. Alege o imagine mai simplă (de preferat PNG, sub 300 KB).')); else ok(d);
+        };
+        im.onerror = function () { URL.revokeObjectURL(url); rau(L.eroare('Fișierul ales nu este o imagine care poate fi citită (PNG sau JPG).')); };
+        im.src = url;
+      };
+      inp.click();
+    });
+  }
+  $('btnReclPv').onclick = function () {
+    if (!eAdmin()) return;
+    recl.art = null; recl.pvSet = null;
+    Promise.all([reclArticole(), reclPvSetari()]).then(function (v) {
+      var art = v[0], s = JSON.parse(JSON.stringify(v[1] || {})), antet = pvAntet(s);
+      function poza(k, titlu, nota) {
+        return '<div class="camp"><span>' + titlu + '</span><div data-pvz="' + k + '"></div><div class="rand-form"><button type="button" class="btn mic" data-pva="' + k + '">Alege imaginea…</button><button type="button" class="btn mic" data-pvs="' + k + '">Scoate</button></div><div class="mic">' + nota + '</div></div>';
+      }
+      function arataPoza(rad, k) { rad.querySelector('[data-pvz="' + k + '"]').innerHTML = s[k] ? '<img class="pv-img" src="' + esc(s[k]) + '" alt="">' : '<div class="mic" style="margin:6px 0">— nicio imagine —</div>'; }
+      function arataArt(rad) { rad.querySelector('#pvArt').innerHTML = art.n ? '<b>' + art.n + ' coduri</b> în nomenclator' + (art.ts ? ', importat ' + esc(tmsMoment(art.ts)) + ' de ' + esc(art.u || '?') : '') + '.' : 'Nomenclatorul nu a fost importat încă — până atunci denumirea articolului se scrie de mână.'; }
+      modal({
+        titlu: 'Setări pentru PV-ul de retur', lat: true,
+        html: '<div class="grila"><label class="camp lat2"><span>Antet — rândul 1</span><input type="text" id="pvA1" value="' + esc(antet[0]) + '"></label><label class="camp lat2"><span>Antet — rândul 2</span><input type="text" id="pvA2" value="' + esc(antet[1]) + '"></label>' +
+          poza('logo', 'Sigla (sus, în stânga)', 'PNG sau JPG.') + poza('stampila', 'Ștampila (jos, lângă reprezentant)', 'De preferat PNG cu fundal transparent.') + '</div>' +
+          '<div class="mic" style="margin-top:6px">Imaginile se păstrează în baza de date a aplicației și le văd doar utilizatorii conectați; nu ajung în codul public de pe GitHub. Se salvează cu butonul „Salvează”.</div>' +
+          '<div class="recl-pv"><b>Nomenclatorul de articole</b><div id="pvArt" style="margin:6px 0"></div><button type="button" class="btn" id="pvArtImport">Importă din Excel…</button>' +
+          '<div class="mic" style="margin-top:4px">Fișierul trebuie să aibă o foaie cu coloanele „Cod SAP” și „Descriere material” una lângă alta (foaia „Date” din modelul de PV). Importul înlocuiește tot nomenclatorul și se salvează pe loc.</div></div>',
+        butoane: [{ t: 'Închide', v: null }, {
+          t: 'Salvează', cls: 'pri', fn: function (rad) {
+            if (!eAdmin()) return false;
+            s.antet1 = rad.querySelector('#pvA1').value.trim(); s.antet2 = rad.querySelector('#pvA2').value.trim();
+            if (!s.logo) delete s.logo;
+            if (!s.stampila) delete s.stampila;
+            return L.pvSetariSalveaza(s).then(function (x) { recl.pvSet = Promise.resolve(x); toast('Setările PV au fost salvate.', 'bun'); });
+          }
+        }],
+        laDeschidere: function (rad) {
+          arataPoza(rad, 'logo'); arataPoza(rad, 'stampila'); arataArt(rad);
+          rad.addEventListener('click', function (e) {
+            var a = e.target.closest('[data-pva]'), x = e.target.closest('[data-pvs]');
+            if (a) alegeImagine(a.dataset.pva === 'logo' ? 500 : 600).then(function (d) { s[a.dataset.pva] = d; arataPoza(rad, a.dataset.pva); }, arataEroare);
+            if (x) { delete s[x.dataset.pvs]; arataPoza(rad, x.dataset.pvs); }
+          });
+          rad.querySelector('#pvArtImport').onclick = function () {
+            var citit;
+            alegeFisier().then(citesteFisier).then(function (wb) {
+              citit = L.articoleDinExcel(wb);
+              if (!citit) throw L.eroare('Nu am găsit în fișier o foaie care să aibă în prima linie coloanele „Cod SAP” și „Descriere material”, una lângă alta.');
+              if (!citit.n) throw L.eroare('Foaia „' + citit.foaie + '” nu conține niciun articol.');
+              return confirma('Foaia „' + citit.foaie + '”: ' + citit.n + ' coduri de articol' + (citit.repetate ? ' (' + citit.repetate + ' rânduri cu coduri repetate — a rămas prima denumire)' : '') + '.\n\n' +
+                (art.n ? 'Nomenclatorul de acum (' + art.n + ' coduri) va fi înlocuit.' : 'Nomenclatorul este gol acum.') + ' Import?');
+            }).then(function (ok) {
+              if (!ok) return;
+              return L.articoleSalveaza(citit.a, citit.n).then(function (d) { art = d; recl.art = Promise.resolve(d); arataArt(rad); toast('Nomenclatorul a fost importat: ' + d.n + ' coduri.', 'bun'); });
+            }).catch(arataEroare);
+          };
+        }
+      });
+    }, arataEroare);
+  };
   /* numele din listele derulante: se tin in configurare (baza de date), nu in codul aplicatiei, care este public */
   $('btnReclListe').onclick = function () {
     if (!eAdmin()) return;

@@ -82,12 +82,22 @@ administrează. Limitarea *pe câmp* (Transport doar Nr AUTO, Încărcări doar 
 - Toate listele se schimbă doar de Administrator, la butonul „Liste derulante…”, și se păstrează în baza de date. Motivele,
   finalizările și observațiile pornesc cu valorile din fișierul „Lista derulanta”; numele de persoane nu sunt în codul aplicației
   (care este public), se scriu o singură dată acolo.
+- **PV de retur (doar pentru KANDIA).** În fereastra reclamației apare secțiunea „PV de retur”: articolele returnate (cod SAP,
+  cantitate în baxuri, lot — denumirea vine din nomenclator; numărul de baxuri devine suma lor) sau bifa „Retur integral” (fără
+  coduri; pe PV apare „Retur integral” cu numărul de baxuri). PV-ul se tipărește doar de la butonul „Salvează și tipărește PV”
+  (A4, pe înalt; din fereastra de tipărire se poate salva ca PDF) și rămâne salvat pe reclamație, deci se poate retipări oricând.
+  Pe PV: clientul (destinatarul), numărul PV (numărul reclamației, dacă nu se scrie altul), avizul, data PV (ziua primei
+  tipăriri), articolele, motivele, observațiile și reprezentantul DSV (câmpul „Completat”).
+- „Setări PV…” (Administrator): antetul, sigla, ștampila și importul nomenclatorului de articole din Excel (foaia cu coloanele
+  „Cod SAP” și „Descriere material”). Toate se păstrează în baza de date, nu în codul aplicației.
+- Articolele stau în documente separate (`meta/reclpv_AAAA_K`, câte 200 de reclamații), nomenclatorul în `meta/articole`,
+  setările PV în `meta/pv`; regulile Firestore nu se schimbă.
 - Dacă data de livrare este după ziua curentă, fereastra avertizează și cere confirmare la salvare.
 - Nr crt se dă automat și nu se refolosește după o ștergere. Dacă pentru același aviz mai există o reclamație, fereastra avertizează.
 - Lista se poate căuta, filtra pe client și exporta în Excel. Click pe un rând deschide reclamația pentru modificare sau ștergere;
   toate acestea rămân în jurnal.
 - Reclamațiile stau într-un singur document pe an (`meta/recl_AAAA`), deci regulile Firestore nu se schimbă. Un document are cel
-  mult 1 MB: încap în jur de 4.000 de reclamații pe an; aplicația avertizează de la 3.000.
+  mult 1 MB: încap în jur de 2.500 de reclamații pe an; aplicația avertizează de la 2.000.
 - Urmează: mod de finalizare, comentarii și responsabil pick (cu liste derulante).
 
 ## Regulile preluate din Excel

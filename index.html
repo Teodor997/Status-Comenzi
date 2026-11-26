@@ -250,6 +250,12 @@
   .fereastra > .jos { padding: 12px 16px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
   .grila { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
   .grila .lat2 { grid-column: span 2; }
+  .recl-pv { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .recl-pv table.simplu input { width: 100%; font-size: 14px; }
+  .recl-pv table.simplu td { padding: 3px 4px; vertical-align: middle; }
+  .recl-pv .bifa { display: flex; gap: 8px; align-items: center; margin: 8px 0; font-size: 14px; }
+  .pv-img { max-width: 180px; max-height: 110px; border: 1px dashed var(--line); border-radius: 6px; padding: 4px; background: #fff; display: block; margin: 4px 0; }
+  @page pv { size: A4 portrait; margin: 14mm 14mm 12mm; }
   .recl-alese { display: flex; flex-wrap: wrap; gap: 6px; }
   .recl-alese:not(:empty) { margin-bottom: 6px; }
   .recl-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 999px; background: #e0e7ff; color: #1e3a8a; font-size: 13px; font-weight: 600; }
@@ -328,6 +334,20 @@
     #tiparire td.nr, #tiparire th.nr { text-align: right; }
     #tiparire .fp { font-size: 11px; font-weight: 600; white-space: nowrap; margin-top: 2px; }
     #tiparire .semnaturi { display: flex; justify-content: space-between; margin-top: 34px; }
+    body.tip-pv #tiparire { page: pv; font-size: 13px; color: #000; }
+    .pv-pag { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .pv-sus { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-weight: 700; font-size: 13px; }
+    .pv-sus img { max-height: 13mm; max-width: 60mm; }
+    #tiparire h1.pv-titlu { text-align: center; font-size: 18px; letter-spacing: .5px; margin: 9mm 0 7mm; }
+    .pv-cap { display: grid; grid-template-columns: 26mm 1fr 20mm 34mm; gap: 2.5mm 3mm; align-items: baseline; }
+    .pv-cap b { font-size: 14px; }
+    #tiparire table.pv-t { margin-top: 7mm; }
+    #tiparire table.pv-t th { background: #eee; text-align: center; }
+    #tiparire table.pv-t td { height: 6.4mm; }
+    #tiparire table.pv-t td.c { text-align: center; }
+    .pv-rand { margin-top: 6mm; display: grid; grid-template-columns: 20mm 1fr; gap: 3mm; }
+    .pv-jos { margin-top: 12mm; display: flex; justify-content: space-between; align-items: flex-start; break-inside: avoid; }
+    .pv-jos img { max-height: 36mm; max-width: 42mm; margin-right: 30mm; }
   }
   @media (max-width: 700px) {
     .unelte input[type=search] { width: 100%; }
@@ -542,6 +562,7 @@
           <span class="mic" id="reclNumar"></span>
           <span style="flex:1"></span>
           <button class="btn" id="btnReclListe" title="Ce se poate alege la Motiv, Finalizare, Observații, Completat și Responsabil">Liste derulante…</button>
+          <button class="btn" id="btnReclPv" title="Antetul, sigla, ștampila și nomenclatorul de articole pentru PV-ul de retur">Setări PV…</button>
           <button class="btn" id="btnReclReincarca" title="Citește din nou lista din baza de date">Reîncarcă</button>
           <button class="btn" id="btnReclExport">Export (Excel)</button>
         </div>
@@ -559,12 +580,12 @@
 <div id="cmrPrint"></div>
 <input type="file" id="fisier" class="ascuns" accept=".xlsx,.xlsm,.xls">
 
-<script src="config.js?v=2.63"></script>
-<script src="js/xlsx.full.min.js?v=2.63"></script>
-<script src="js/util.js?v=2.63"></script>
-<script src="js/store.js?v=2.63"></script>
-<script src="js/logic.js?v=2.63"></script>
-<script src="js/cmr-sablon.js?v=2.63"></script>
-<script src="js/ui.js?v=2.63"></script>
+<script src="config.js?v=2.64"></script>
+<script src="js/xlsx.full.min.js?v=2.64"></script>
+<script src="js/util.js?v=2.64"></script>
+<script src="js/store.js?v=2.64"></script>
+<script src="js/logic.js?v=2.64"></script>
+<script src="js/cmr-sablon.js?v=2.64"></script>
+<script src="js/ui.js?v=2.64"></script>
 </body>
 </html>

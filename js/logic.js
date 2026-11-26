@@ -514,7 +514,7 @@
   L.RECL_STATUSURI = ['Deschisa', 'Inchisa'];
   /* statusul unei reclamatii: s = 'Inchisa' (cu it/iu = cand si cine a inchis-o); altfel este deschisa */
   L.reclStatus = function (r) { return r && r.s === 'Inchisa' ? 'Inchisa' : 'Deschisa'; };
-  L.RECL_PRAG = 3000;   /* peste atatea reclamatii intr-un an documentul se apropie de limita de 1 MB a unui document Firestore */
+  L.RECL_PRAG = 2000;   /* peste atatea reclamatii intr-un an documentul se apropie de limita de 1 MB a unui document Firestore */
   L.reclDoc = function (an) { return 'recl_' + an; };
   /* „AV 71350”, „av000071350” si „AV000071350” sunt acelasi aviz: fara spatii/semne si fara zerourile dintre litere si cifre */
   L.reclCheie = function (v) {
@@ -527,6 +527,50 @@
     if (!k) return [];
     return SC.comenzi.filter(function (o) { return o.nc != null && o.nc !== '' && L.reclCheie(o.nc) === k; }).sort(function (a, b) { return b.n - a.n; });
   };
+  /* ---------- PV de retur (deocamdata doar pentru un client) ----------
+     Articolele returnate NU stau in documentul anului (ar ajunge la limita de 1 MB), ci in documente separate, cate 200 de
+     reclamatii: meta/reclpv_AAAA_K = { l: { numar: [ { c: cod SAP, q: baxuri, l: lot, d: denumire scrisa de mana } ] } }.
+     Pe reclamatie raman doar: ri (retur integral), nl (cate articole are), pv (numarul PV, daca difera de Nr crt), pvd (data PV).
+     Nomenclatorul de articole: meta/articole = { n, ts, u, a: { cod: denumire } }. Setarile PV (antet, sigla, stampila): meta/pv. */
+  L.RECL_PV_CLIENT = 'KANDIA';
+  L.RECL_PV_LINII = 21;
+  L.RECL_PV_ANTET = ['Contract Logistics', 'Depozit : DSV Km 23 Bolintin Deal'];
+  L.reclArePv = function (client) { return SC.normText(client) === SC.normText(L.RECL_PV_CLIENT); };
+  L.reclPvDoc = function (an, n) { return 'reclpv_' + an + '_' + Math.floor((n - 1) / 200); };
+  L.reclPvNumar = function (r) { return r.pv || r.n; };
+  L.reclLiniiCiteste = function (r) {
+    if (!r || !r.n || !r.nl) return Promise.resolve([]);
+    return SC.store.citesteDoc('meta', L.reclPvDoc(r.an, r.n)).then(function (d) { return (d && d.l && d.l[r.n]) || []; });
+  };
+  L.articoleCiteste = function () { return SC.store.citesteDoc('meta', 'articole').then(function (d) { return d || { n: 0, a: {} }; }); };
+  /* cheia unui cod de articol: fara spatii; „1901843.0” (numar citit din Excel) = „1901843” */
+  L.articolCheie = function (v) { var s = String(v == null ? '' : v).trim().replace(/\s+/g, ''); return /^\d+\.0+$/.test(s) ? s.replace(/\.0+$/, '') : s; };
+  /* citeste nomenclatorul dintr-un Excel: foaia care are in prima linie „Cod SAP” si „Descriere material” (la coduri repetate ramane prima denumire) */
+  L.articoleDinExcel = function (wb) {
+    var bun = null;
+    wb.SheetNames.forEach(function (nume) {
+      var aoa = XLSX.utils.sheet_to_json(wb.Sheets[nume], { header: 1, raw: true, defval: null });
+      var antet = (aoa[0] || []).map(function (x) { return SC.normText(x); }), cc = -1;
+      antet.forEach(function (x, k) { if (cc < 0 && x === 'cod sap' && antet[k + 1] === 'descriere material') cc = k; });
+      if (cc < 0) return;
+      var a = {}, n = 0, repetate = 0;
+      for (var j = 1; j < aoa.length; j++) {
+        var cod = L.articolCheie(aoa[j][cc]), den = String(aoa[j][cc + 1] == null ? '' : aoa[j][cc + 1]).replace(/\s+/g, ' ').trim();
+        if (!cod || !den || den === '-' || /[.\/\[\]*`~]/.test(cod)) continue;
+        if (a[cod] != null) { repetate++; continue; }
+        a[cod] = den; n++;
+      }
+      /* daca mai multe foi au aceste coloane, ramane cea cu cele mai multe coduri */
+      if (!bun || n > bun.n) bun = { foaie: nume, a: a, n: n, repetate: repetate };
+    });
+    return bun;
+  };
+  L.articoleSalveaza = function (a, n) {
+    var cine = SC.store.user ? SC.store.user.nume : '?', d = { n: n, ts: Date.now(), u: cine, a: a };
+    return SC.store.tx(function (t) { t.set('meta', 'articole', d); t.log('Reclamații: nomenclatorul de articole pentru PV a fost importat (' + n + ' coduri)'); return d; });
+  };
+  L.pvSetariCiteste = function () { return SC.store.citesteDoc('meta', 'pv').then(function (d) { return d || {}; }); };
+  L.pvSetariSalveaza = function (s) { return SC.store.tx(function (t) { t.set('meta', 'pv', s); t.log('Reclamații: setările PV modificate (antet' + (s.logo ? ', siglă' : '') + (s.stampila ? ', ștampilă' : '') + ')'); return s; }); };
   L.reclLista = function (doc) {
     var r = (doc && doc.r) || {};
     return Object.keys(r).map(function (k) { return r[k]; }).sort(function (a, b) { return b.n - a.n; });
@@ -551,6 +595,13 @@
           if (!r) throw eroare('Reclamația nr. ' + date.n + ' nu mai există (a fost ștearsă între timp). Apasă „Reîncarcă”.');
           if (sterge) {
             delete d.r[date.n];
+            /* intr-o tranzactie toate citirile se fac inaintea scrierilor */
+            if (r.nl) return t.get('meta', L.reclPvDoc(an, r.n)).then(function (c) {
+              t.set('meta', L.reclDoc(an), d);
+              if (c && c.l && c.l[r.n]) { delete c.l[r.n]; t.set('meta', L.reclPvDoc(an, r.n), c); }
+              t.log('Reclamații: ștearsă nr. ' + r.n + ' — aviz ' + r.av + ', ' + (r.cl || '?') + ' / ' + (r.de || '?') + ', ' + r.mo);
+              return { doc: d, r: null };
+            });
             t.set('meta', L.reclDoc(an), d);
             t.log('Reclamații: ștearsă nr. ' + r.n + ' — aviz ' + r.av + ', ' + (r.cl || '?') + ' / ' + (r.de || '?') + ', ' + r.mo);
             return { doc: d, r: null };
@@ -569,14 +620,30 @@
           if (!nou) p.push('Status: ' + sv + ' → ' + sn);
           if (sn === 'Inchisa') { r.s = 'Inchisa'; r.it = Date.now(); r.iu = cine; } else { delete r.s; delete r.it; delete r.iu; }
         }
+        /* campurile PV */
+        if (date.ri !== undefined) { if (!!date.ri !== !!r.ri && !nou) p.push('Retur integral: ' + (date.ri ? 'Da' : 'Nu')); if (date.ri) r.ri = true; else delete r.ri; }
+        if (date.pv !== undefined) { var pvNou = date.pv && +date.pv !== r.n ? +date.pv : 0; if (!nou && (r.pv || 0) !== pvNou) p.push('Număr PV: ' + (r.pv || r.n) + ' → ' + (pvNou || r.n)); if (pvNou) r.pv = pvNou; else delete r.pv; }
+        if (date.pvd !== undefined) { if (!nou && (r.pvd || '') !== (date.pvd || '')) p.push('Data PV: ' + (r.pvd || '(gol)') + ' → ' + (date.pvd || '(gol)')); if (date.pvd) r.pvd = date.pvd; else delete r.pvd; }
+        var aveaLinii = r.nl || 0, li = date.li;
+        if (li !== undefined) { if (li.length) r.nl = li.length; else delete r.nl; if (!nou && (aveaLinii || li.length)) p.push('Articole: ' + li.length + (li.length === 1 ? ' linie' : ' linii')); }
         d.r[r.n] = r;
+        var gata = function () { return { doc: d, r: r, li: li }; };
+        /* intr-o tranzactie toate citirile se fac inaintea scrierilor: intai documentul cu articole, apoi scrierile */
+        var cuLinii = li !== undefined && (li.length || aveaLinii) ? t.get('meta', L.reclPvDoc(an, r.n)) : Promise.resolve(undefined);
+        return cuLinii.then(function (c) {
         t.set('meta', L.reclDoc(an), d);
-        t.log('Reclamații: ' + (nou ? 'înregistrată nr. ' + r.n + ' — aviz ' + r.av + ', ' + (r.cl || '?') + ' / ' + (r.de || '?') + ', ' + r.mo + (r.bx != null ? ', ' + r.bx + ' baxuri' : '') + (r.s ? ', închisă' : '') : 'modificată nr. ' + r.n + (p.length ? ' — ' + p.join('; ') : '')));
-        return { doc: d, r: r };
+        if (c !== undefined) {
+          c = c || { l: {} }; c.l = c.l || {};
+          if (li.length) c.l[r.n] = li; else delete c.l[r.n];
+          t.set('meta', L.reclPvDoc(an, r.n), c);
+        }
+        t.log('Reclamații: ' + (nou ? 'înregistrată nr. ' + r.n + ' — aviz ' + r.av + ', ' + (r.cl || '?') + ' / ' + (r.de || '?') + ', ' + r.mo + (r.bx != null ? ', ' + r.bx + ' baxuri' : '') + (r.s ? ', închisă' : '') + (r.nl ? ', ' + r.nl + ' articole' : '') + (r.ri ? ', retur integral' : '') : 'modificată nr. ' + r.n + (p.length ? ' — ' + p.join('; ') : '')));
+        return gata();
+        });
       });
     });
   };
-  L.RECL_ANTET = ['Nr crt', 'Data primire reclamatie', 'Client', 'Denumire client', 'Nr aviz', 'Data livrare marfa', 'Motiv reclamatie', 'Nr baxuri reclamate', 'Status', 'Mod finalizare reclamatie', 'Observatii', 'Responsabil', 'Eroare depozit', 'Completat', 'Inregistrat de'];
+  L.RECL_ANTET = ['Nr crt', 'Data primire reclamatie', 'Client', 'Denumire client', 'Nr aviz', 'Data livrare marfa', 'Motiv reclamatie', 'Nr baxuri reclamate', 'Status', 'Mod finalizare reclamatie', 'Observatii', 'Responsabil', 'Eroare depozit', 'Completat', 'Retur integral', 'Numar PV', 'Data PV', 'Inregistrat de'];
   /* numele din listele derulante se tin in configurare (meta/config), nu in codul aplicatiei */
   L.reclListe = function () {
     function l(v) { return (Array.isArray(v) ? v : []).map(function (x) { return String(x).trim(); }).filter(Boolean); }
@@ -602,13 +669,13 @@
   L.reclExcel = function (lista) {
     var aoa = [L.RECL_ANTET.slice()], l = lista.slice().sort(function (a, b) { return a.n - b.n; });
     function zi(v) { return /^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? serialZi(String(v)) : null; }
-    l.forEach(function (r) { aoa.push([r.n, zi(r.dp), r.cl || null, r.de || null, r.av != null ? String(r.av) : null, zi(r.dl), r.mo || null, SC.esteNum(r.bx) ? r.bx : null, L.reclStatus(r), r.fi || null, r.ob || null, r.rs || null, r.ed || null, r.co || null, r.u || null]); });
+    l.forEach(function (r) { aoa.push([r.n, zi(r.dp), r.cl || null, r.de || null, r.av != null ? String(r.av) : null, zi(r.dl), r.mo || null, SC.esteNum(r.bx) ? r.bx : null, L.reclStatus(r), r.fi || null, r.ob || null, r.rs || null, r.ed || null, r.co || null, r.ri ? 'Da' : null, r.pvd || r.nl || r.ri ? L.reclPvNumar(r) : null, zi(r.pvd), r.u || null]); });
     var ws = XLSX.utils.aoa_to_sheet(aoa);
     for (var i = 1; i < aoa.length; i++) {
-      [1, 5].forEach(function (c) { var x = ws[XLSX.utils.encode_cell({ r: i, c: c })]; if (x && x.t === 'n') x.z = FMT_REGISTRU.date; });
+      [1, 5, 16].forEach(function (c) { var x = ws[XLSX.utils.encode_cell({ r: i, c: c })]; if (x && x.t === 'n') x.z = FMT_REGISTRU.date; });
       var a = ws[XLSX.utils.encode_cell({ r: i, c: 4 })]; if (a) { a.t = 's'; a.z = '@'; }
     }
-    ws['!cols'] = [{ wch: 7 }, { wch: 13 }, { wch: 12 }, { wch: 40 }, { wch: 16 }, { wch: 13 }, { wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 34 }, { wch: 34 }, { wch: 20 }, { wch: 9 }, { wch: 20 }, { wch: 16 }];
+    ws['!cols'] = [{ wch: 7 }, { wch: 13 }, { wch: 12 }, { wch: 40 }, { wch: 16 }, { wch: 13 }, { wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 34 }, { wch: 34 }, { wch: 20 }, { wch: 9 }, { wch: 20 }, { wch: 9 }, { wch: 10 }, { wch: 12 }, { wch: 16 }];
     if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
     var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Reclamatii');
     return wb;
